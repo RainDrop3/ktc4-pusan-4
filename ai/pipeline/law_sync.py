@@ -14,6 +14,8 @@ import argparse
 import contextlib
 import sys
 from collections.abc import Iterator
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.types.json import Json
@@ -55,6 +57,13 @@ KEYWORDS = [
 PREC_CASE_TYPES = {"세무", "일반행정"}
 
 COMMIT_EVERY = 500
+
+# 한 런에서 이만큼 넘게 사라지면 파서 회귀를 의심하고 멈춘다.
+# 개정 한 번에 조문 몇 개가 지워지는 건 정상이라 절대 하한을 같이 둔다.
+SWEEP_MAX_RATIO = 0.1
+SWEEP_MIN_GONE = 20
+
+KST = ZoneInfo("Asia/Seoul")
 
 TARGETS = ["law", "admrul", "expc", "decc", "prec"]
 DOC_TYPES = {
@@ -125,6 +134,43 @@ def upsert(conn: psycopg.Connection, u: Unit) -> bool:
     )
     conn.execute(_INSERT, _row(u))
     return True
+
+
+def _stale(current: set[str], seen: set[str]) -> set[str]:
+    """이번 런에 안 나온 현행 조문. 파서가 회귀해도 같은 모양이라 비율로 막는다."""
+    gone = current - seen
+    if len(gone) > max(SWEEP_MIN_GONE, len(current) * SWEEP_MAX_RATIO):
+        raise SystemExit(
+            f"sweep 중단: 현행 {len(current)}건 중 {len(gone)}건이 사라졌다."
+            " 파서 회귀나 API 부분 응답이 의심된다"
+        )
+    return gone
+
+
+def sweep(conn: psycopg.Connection, doc_ids: list[str], seen: set[str], on: date) -> int:
+    """삭제·이동·폐지된 조문의 effective_to를 닫는다.
+
+    법령은 매 런마다 전문을 통째로 다시 받으므로, 이번 런에 안 나온 조문은 없어진 것이다.
+    삭제 시점은 본문에서만 캐낼 수 있고 표기가 제각각이라 확인 시점으로 근사한다.
+    """
+    current = {
+        r[0]
+        for r in conn.execute(
+            "SELECT statute_id FROM statute_version"
+            " WHERE doc_type = '법령' AND doc_id = ANY(%s)"
+            # effective_from >= on 인 시행예정 조문을 닫으면 CHECK 제약에 걸린다
+            "   AND effective_to IS NULL AND effective_from < %s",
+            (doc_ids, on),
+        ).fetchall()
+    }
+    gone = _stale(current, seen)
+    if gone:
+        conn.execute(
+            "UPDATE statute_version SET effective_to = %s, is_superseded = true"
+            " WHERE statute_id = ANY(%s) AND effective_to IS NULL",
+            (on, list(gone)),
+        )
+    return len(gone)
 
 
 def _rows(oc: str, target: str, key: str, limit: int | None, **params) -> Iterator[dict]:
@@ -255,6 +301,12 @@ def main() -> int:
             except NotApproved:
                 print(f"{target:<8} 건너뜀 — OC에 미신청된 API. open.law.go.kr 에서 신청 필요")
                 continue
+            # 일부만 받아온 런은 "사라졌다"와 "안 받았다"를 구분할 수 없다
+            if target == "law" and not args.limit:
+                n_gone = sweep(conn, args.law or LAWS, set(hashes), datetime.now(KST).date())
+                if n_gone:
+                    print(f"{target:<8} 사라진 조문 {n_gone:6d}건 닫음")
+
             total += n_changed
             print(f"{target:<8} {len(hashes):6d}행  변경 {n_changed:6d}")
             if clashes:
