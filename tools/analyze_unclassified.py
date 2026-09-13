@@ -3,7 +3,7 @@
 """
 미분류 상호 빈도 측정.
 
-되묻기 상한과 T4 시드사전 대상 목록을 추정이 아니라 데이터로 정하기 위한
+되묻기 세션 배치 크기와 T4 시드사전 대상 목록을 추정이 아니라 데이터로 정하기 위한
 분석 스크립트다. 기존 파이프라인은 건드리지 않고 import 만 해서 실제 분류
 순서(PG 블록 -> 키워드룰)를 그대로 태운다.
 
@@ -100,6 +100,17 @@ def diagnose_norm_key(unc_rows: list, norm) -> tuple:
     return split, merged, len(by_key)
 
 
+def safe_key(key: str, anon) -> str:
+    """norm_key 를 콘솔에 찍기 전에 익명화한다.
+
+    bizno 트랙 키는 사업자번호 10자리, string 트랙 키는 정규화된 상호명이라
+    둘 다 그대로 찍으면 안 된다.
+    """
+    if nz.BIZNO_PAT.fullmatch(key):
+        return nz.mask_bizno(key)
+    return anon.label(key)
+
+
 def print_cohort(label: str, m: dict) -> None:
     print("[%s]" % label)
     print("  행 %d / 미분류 %d건 (%.1f%%) / unique 상호 %d개"
@@ -143,10 +154,10 @@ def main() -> int:
     print("  같은 상호가 여러 키로 갈림: %d개" % len(split))
     anon = nz.Anon()
     for m, keys in sorted(split.items()):
-        print("    %s -> %s" % (anon.label(m), keys))
+        print("    %s -> %s" % (anon.label(m), [safe_key(k, anon) for k in keys]))
     print("  다른 상호가 한 키로 묶임: %d개" % len(merged))
     for k, ms in sorted(merged.items()):
-        print("    %s <- %s" % (k, ", ".join(anon.label(x) for x in ms)))
+        print("    %s <- %s" % (safe_key(k, anon), ", ".join(anon.label(x) for x in ms)))
     print()
 
     out = Path(args.csv)
