@@ -12,8 +12,9 @@ import java.util.stream.Stream;
 /**
  * 판정 한 건을 기대값과 비교한다.
  *
- * <p>치명(머지 차단)은 사용자에게 틀린 확정 답이 나간 경우로 한정한다. 확인필요는 판정을
- * 넘긴 것이지 틀린 답을 준 게 아니라서 치명이 아니다 — 카드가 없어도 CI 가 통과하는 이유다.
+ * <p>치명(머지 차단)은 사용자에게 틀린 확정 답이 나간 경우로 한정한다. 인정 안 되는 지출을
+ * {@code 가능} 으로 내보내는 오탐과, 인정되는 지출을 {@code 불가} 로 내보내는 미탐이 같은 등급이다.
+ * 확인필요는 판정을 넘긴 것이지 틀린 답을 준 게 아니라서 치명이 아니다 — 카드가 없어도 CI 가 통과하는 이유다.
  */
 final class EvalGrader {
 
@@ -43,6 +44,9 @@ final class EvalGrader {
             .forEach(statute -> critical.add("인용하면 안 되는 조문 인용: " + statute));
         if (judgment.verdict() == Verdict.AVAILABLE && expected.verdict() != Verdict.AVAILABLE) {
             critical.add("오탐: 기대 " + label(expected.verdict()) + ", 실제 가능");
+        }
+        if (judgment.verdict() == Verdict.UNAVAILABLE && expected.verdict() == Verdict.AVAILABLE) {
+            critical.add("미탐: 기대 가능, 실제 불가");
         }
 
         if (judgment.verdict() != expected.verdict()) {

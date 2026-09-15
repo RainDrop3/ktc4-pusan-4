@@ -68,6 +68,20 @@ class EvalGraderTest {
     }
 
     @Test
+    void unavailable_when_expected_available_is_critical() {
+        EvalCase base = parkingFine(false, "미검수");
+        EvalCase expectedAvailable = new EvalCase(base.id(), base.group(), base.reviewStatus(), base.critical(),
+            base.transaction(), base.context(), base.facts(),
+            new EvalCase.Expectation(Verdict.AVAILABLE, false, null, List.of(), List.of(), false, Map.of()));
+
+        EvalGrader.Grade grade = EvalGrader.grade(expectedAvailable,
+            judgment(Verdict.UNAVAILABLE, Gate.G1, false, "소득세법-33-1-2"));
+
+        assertThat(grade.outcome()).isEqualTo(Outcome.CRITICAL);
+        assertThat(grade.problems()).anyMatch(problem -> problem.startsWith("미탐"));
+    }
+
+    @Test
     void citing_excluded_statute_is_critical_even_with_right_verdict() {
         EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, "미검수"),
             judgment(Verdict.UNAVAILABLE, Gate.G1, false, "소득세법-33-1-12"));
