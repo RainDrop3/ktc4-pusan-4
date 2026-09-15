@@ -105,6 +105,43 @@ class RuleCardLoaderRealCardsTest {
             .doesNotContain("업무용승용차운행기록방법에관한고시#52390-3");
     }
 
+    /**
+     * 리뷰어 지적의 본질. 범위 밖 핸드오프와 되묻기 대기는 둘 다 확인필요라 출력이 같은데
+     * 할 말은 정반대다 — 전자는 "세무사에게 넘겼습니다", 후자는 "답해주세요". out_of_scope
+     * 가 그 구분을 싣는다. 이게 깨지면 화면이 다시 둘을 한 문구로 뭉갠다.
+     */
+    @Test
+    void 범위밖_핸드오프는_되묻기_대기와_구분된다() throws IOException {
+        RuleSet rules = load();
+
+        Judgment 차량 = JudgmentEngine.judge(
+            거래("GS칼텍스 역삼주유소", "차량", 80_000), 인적용역, List.of(), rules);
+        Judgment 용역비 = JudgmentEngine.judge(
+            거래("용역비 이체", "PG_미상", 500_000), 인적용역, List.of(), rules);
+        Judgment 되묻기 = JudgmentEngine.judge(
+            거래("NETFLIX", "구독서비스", 17_000), 인적용역, List.of(), rules);
+
+        assertThat(차량.verdict()).isEqualTo(Verdict.NEEDS_REVIEW);
+        assertThat(차량.outOfScope()).isTrue();
+        assertThat(용역비.appliedRuleIds()).contains("R-071");
+        assertThat(용역비.outOfScope()).isTrue();
+
+        // 판정이 같아도 사유가 다르다. 이 거래는 답을 받으면 확정된다.
+        assertThat(되묻기.verdict()).isEqualTo(Verdict.NEEDS_REVIEW);
+        assertThat(되묻기.outOfScope()).isFalse();
+        assertThat(되묻기.questions()).isNotEmpty();
+    }
+
+    /** 범위 밖은 판정과 축이 다르다. 불가로 확정된 건이 동시에 핸드오프일 수는 없다. */
+    @Test
+    void 불가_확정에는_범위밖이_붙지_않는다() throws IOException {
+        Judgment judgment = JudgmentEngine.judge(
+            거래("서울시 주정차위반 과태료", "지자체_과태료", 40_000), 인적용역, List.of(), load());
+
+        assertThat(judgment.verdict()).isEqualTo(Verdict.UNAVAILABLE);
+        assertThat(judgment.outOfScope()).isFalse();
+    }
+
     @Test
     void 해외SaaS는_가능이고_지급수수료로_배정된다() throws IOException {
         Judgment judgment = JudgmentEngine.judge(
