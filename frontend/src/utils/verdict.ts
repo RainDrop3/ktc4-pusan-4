@@ -1,46 +1,19 @@
 import type { Verdict } from '../types/domain';
+import type { BadgeTone } from '../components/ui/Badge';
 
-interface VerdictMeta {
-  label: string;
-  /** 색각이상 대응: 색 + 기호 + 테두리를 함께 쓴다 */
-  symbol: string;
-  text: string;
-  bg: string;
-  border: string;
-  dot: string;
-}
-
-export const VERDICT_META: Record<Verdict, VerdictMeta> = {
-  AVAILABLE: {
-    label: '가능',
-    symbol: '✓',
-    text: 'text-ok',
-    bg: 'bg-ok-bg',
-    border: 'border-ok-line',
-    dot: 'bg-ok'
-  },
-  NEEDS_REVIEW: {
-    label: '확인 필요',
-    symbol: '?',
-    text: 'text-warn',
-    bg: 'bg-warn-bg',
-    border: 'border-warn-line',
-    dot: 'bg-warn'
-  },
-  UNAVAILABLE: {
-    label: '불가',
-    symbol: '✕',
-    text: 'text-deny',
-    bg: 'bg-deny-bg',
-    border: 'border-deny-line',
-    dot: 'bg-deny'
-  }
+/**
+ * 판정 3분류의 시각 표현. 라벨은 API가 {code,label}로 내려주므로 여기 두지 않는다.
+ * 색각이상 대응: 색 + 기호를 항상 함께 쓴다.
+ */
+export const VERDICT_META: Record<Verdict, { symbol: string; tone: BadgeTone }> = {
+  AVAILABLE: { symbol: '✓', tone: 'ok' },
+  NEEDS_REVIEW: { symbol: '?', tone: 'warn' },
+  UNAVAILABLE: { symbol: '✕', tone: 'deny' }
 };
 
-export const REASON_LABEL: Record<string, string> = {
-  PURPOSE_UNKNOWN: '용도 불명',
-  RATIO_MISSING: '안분율 없음',
-  PERIOD_UNKNOWN: '기간 불명',
-  EXCLUSIVE_USE_UNKNOWN: '전용 여부 불명',
-  MERCHANT_UNRESOLVED: '가맹점 미해결'
+/** 사용자 조작(Override)처럼 프론트가 code만 아는 경우의 라벨. 서버 응답이 있으면 그것을 쓴다. */
+export const VERDICT_LABEL: Record<Verdict, string> = {
+  AVAILABLE: '가능',
+  NEEDS_REVIEW: '확인 필요',
+  UNAVAILABLE: '불가'
 };

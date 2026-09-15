@@ -9,7 +9,7 @@ import {
 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { useSession } from '../contexts/SessionContext';
-import { BATCH_SUMMARY } from '../mock/judgments';
+import { JUDGMENT_RUN } from '../mock/judgments';
 import { formatNumber } from '../utils/format';
 
 const GATES = [
@@ -57,7 +57,7 @@ export function Run() {
     if (progress >= 100) setRunStatus('DONE');
   }, [progress, setRunStatus]);
 
-  const processed = Math.round(progress / 100 * BATCH_SUMMARY.total);
+  const processed = Math.round(progress / 100 * JUDGMENT_RUN.totalCount);
   const done = progress >= 100;
   const activeGate = Math.min(
     GATES.length - 1,
@@ -87,7 +87,7 @@ export function Run() {
               {formatNumber(processed)}
               <span className="text-[16px] font-medium text-muted">
                 {' '}
-                / {formatNumber(BATCH_SUMMARY.total)}건
+                / {formatNumber(JUDGMENT_RUN.totalCount)}건
               </span>
             </p>
             <p className="text-[13px] tabular-nums text-muted">
@@ -201,13 +201,13 @@ export function Run() {
           
             <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-line bg-line">
               {[
-            { term: '가능', value: counts.possible, tone: 'text-ok' },
+            { term: '가능', value: counts.available, tone: 'text-ok' },
             {
               term: '확인 필요',
               value: counts.needsReview,
               tone: 'text-warn'
             },
-            { term: '불가', value: counts.impossible, tone: 'text-deny' }].
+            { term: '불가', value: counts.unavailable, tone: 'text-deny' }].
             map((item) =>
             <div key={item.term} className="bg-surface px-4 py-3">
                   <dt className="text-[12px] text-muted">{item.term}</dt>

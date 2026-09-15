@@ -39,17 +39,15 @@ export function Confirm() {
     value: `${formatNumber(resolved.prevYearRevenue)}원`
   },
   { term: '개업일', value: formatFullDate(resolved.businessOpenDate) },
-  { term: '직원', value: resolved.hasEmployees ? '있음' : '없음 (1인)' },
+  { term: '기장의무', value: resolved.bookkeepingDuty },
+  { term: '직원', value: resolved.hasEmployee ? '있음' : '없음 (1인)' },
   {
-    term: '작업 공간',
+    term: '자택 작업 비율',
     value:
-    resolved.workplaceType === 'HOME' ?
-    `자택 겸용 · 면적 ${resolved.homeOfficeRatio}%` :
-    resolved.workplaceType === 'OFFICE' ?
-    '별도 사무실' :
-    '고정 작업장 없음'
-  },
-  { term: '사업용 차량', value: resolved.hasVehicle ? '있음' : '없음' }];
+    resolved.homeOfficeRatio !== undefined ?
+    `${resolved.homeOfficeRatio}%` :
+    '해당 없음'
+  }];
 
 
   return (

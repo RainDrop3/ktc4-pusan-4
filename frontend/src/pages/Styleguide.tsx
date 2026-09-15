@@ -136,7 +136,7 @@ export function Styleguide() {
           </div>
         </Block>
 
-        <Block title="Badge" note="색만으로 상태를 말하지 않는다. 판정 배지는 VerdictBadge를 쓰면 기호가 자동으로 붙는다.">
+        <Block title="Badge" note="색만으로 상태를 말하지 않는다. 판정 배지는 VerdictBadge에 API의 {code,label}을 넘기면 기호·색이 붙는다.">
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               {BADGE_TONES.map((tone) =>
@@ -149,12 +149,12 @@ export function Styleguide() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <VerdictBadge verdict="AVAILABLE" />
-              <VerdictBadge verdict="NEEDS_REVIEW" />
-              <VerdictBadge verdict="UNAVAILABLE" />
-              <VerdictBadge verdict="AVAILABLE" size="md" />
-              <VerdictBadge verdict="NEEDS_REVIEW" size="md" />
-              <VerdictBadge verdict="UNAVAILABLE" size="md" />
+              <VerdictBadge verdict={{ code: 'AVAILABLE', label: '가능' }} />
+              <VerdictBadge verdict={{ code: 'NEEDS_REVIEW', label: '확인 필요' }} />
+              <VerdictBadge verdict={{ code: 'UNAVAILABLE', label: '불가' }} />
+              <VerdictBadge verdict={{ code: 'AVAILABLE', label: '가능' }} size="md" />
+              <VerdictBadge verdict={{ code: 'NEEDS_REVIEW', label: '확인 필요' }} size="md" />
+              <VerdictBadge verdict={{ code: 'UNAVAILABLE', label: '불가' }} size="md" />
             </div>
           </div>
         </Block>
@@ -210,10 +210,10 @@ export function Styleguide() {
           </div>
         </Block>
 
-        <Block title="StatuteCitation" note="근거(실선)와 참고 해석기준(점선)을 시각적으로 구분한다.">
+        <Block title="StatuteCitation" note="GET /statutes/{id} 응답 그대로. 시행일·버전·원문 링크가 항상 붙는다.">
           <div className="grid max-w-2xl gap-3">
-            <StatuteCitation statuteId="소득세법-33-1-5" />
-            <StatuteCitation statuteId="기본통칙-27-1" />
+            <StatuteCitation statuteVersionId={1435} />
+            <StatuteCitation statuteVersionId={2071} />
           </div>
         </Block>
       </Container>

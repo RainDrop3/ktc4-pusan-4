@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRightIcon, CopyIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { useSession } from '../contexts/SessionContext';
-import { BATCH_SUMMARY } from '../mock/judgments';
+import { JUDGMENT_SUMMARY } from '../mock/judgments';
 import { formatNumber, formatWon } from '../utils/format';
 
 const LIMIT_BUCKETS = [
@@ -33,12 +33,12 @@ const DEPRECIATION = [
 
 export function Summary() {
   const { counts, recognizedAmount, pendingQuestionCount } = useSession();
-  const total = counts.possible + counts.needsReview + counts.impossible;
+  const total = counts.available + counts.needsReview + counts.unavailable;
 
   const distribution = [
-  { label: '가능', value: counts.possible, bar: 'bg-ok' },
+  { label: '가능', value: counts.available, bar: 'bg-ok' },
   { label: '확인 필요', value: counts.needsReview, bar: 'bg-warn' },
-  { label: '불가', value: counts.impossible, bar: 'bg-deny' }];
+  { label: '불가', value: counts.unavailable, bar: 'bg-deny' }];
 
 
   return (
@@ -57,9 +57,8 @@ export function Summary() {
             {formatWon(recognizedAmount)}
           </p>
           <p className="mt-2 text-[13px] tabular-nums text-muted">
-            확인 필요 {formatNumber(counts.needsReview)}건(
-            {formatWon(BATCH_SUMMARY.needsReviewAmount)})은 아직 합계에 넣지
-            않았습니다.
+            확인 필요 {formatNumber(counts.needsReview)}건은 아직 합계에 넣지
+            않았습니다. (전체 {formatNumber(JUDGMENT_SUMMARY.totalCount)}건)
           </p>
 
           <div className="mt-6" aria-hidden="true">

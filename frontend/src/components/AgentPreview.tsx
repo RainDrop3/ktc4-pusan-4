@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
-import { JUDGMENTS } from '../mock/judgments';
+import { SHOWCASE_TRACES } from '../mock/trace';
 import { statuteOf } from '../mock/statutes';
 import { formatDate, formatWon } from '../utils/format';
 import { VerdictBadge } from './VerdictBadge';
 
-/** 히어로에서 순환 재생할 실제 판정 3건 — 가능 · 확인 필요 · 불가 하나씩 */
-const SHOWCASE_IDS = ['J-1001', 'J-1005', 'J-1020'];
-const SHOWCASE = SHOWCASE_IDS.map(
-  (id) => JUDGMENTS.find((judgment) => judgment.id === id)!
-);
+/** 히어로에서 순환 재생할 판정 3건 — 가능 · 확인 필요 · 불가 하나씩 */
+const SHOWCASE = SHOWCASE_TRACES;
 
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
@@ -49,7 +46,7 @@ export function AgentPreview() {
     return () => window.clearTimeout(timer);
   }, [revealed, done, reduceMotion, steps.length]);
 
-  const citation = statuteOf(judgment.citations[0]);
+  const citation = judgment.citation ? statuteOf(judgment.citation.statuteVersionId) : undefined;
 
   return (
     <div
@@ -70,19 +67,18 @@ export function AgentPreview() {
       </div>
 
       <div
-        key={judgment.id}
+        key={judgment.judgmentId}
         className={`mt-5 flex flex-1 flex-col ${reduceMotion ? '' : 'animate-rise'}`}>
           <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
             <p className="text-caption text-white/45">
-              {formatDate(judgment.transaction.transactedAt)} ·{' '}
-              {judgment.transaction.merchantRaw}
+              {formatDate(judgment.approvedAt)} · {judgment.merchantRaw}
             </p>
             <div className="mt-1 flex items-baseline justify-between gap-3">
               <p className="text-body-lg font-semibold">
-                {judgment.transaction.merchantNorm}
+                {judgment.merchantNorm}
               </p>
               <p className="text-body-lg font-semibold tabular-nums">
-                {formatWon(judgment.transaction.amount)}
+                {formatWon(judgment.amount)}
               </p>
             </div>
           </div>
@@ -113,7 +109,7 @@ export function AgentPreview() {
               className={`mt-3 text-caption text-white/40 transition-opacity duration-300 ${
                 done ? 'opacity-100' : 'opacity-0'
               }`}>
-              {judgment.blockedAtGate.split('_')[0]}에서 멈춤 · 뒤 게이트는 실행하지
+              {judgment.blockedAtGate}에서 멈춤 · 뒤 게이트는 실행하지
               않습니다
             </p>
           )}
@@ -126,7 +122,7 @@ export function AgentPreview() {
               <VerdictBadge verdict={judgment.verdict} size="md" />
               {citation && (
                 <span className="truncate text-caption text-white/55">
-                  {citation.label} · v{citation.statuteVersionId}
+                  {citation.title} · v{citation.statuteVersionId}
                 </span>
               )}
             </div>

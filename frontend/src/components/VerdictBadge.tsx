@@ -1,25 +1,18 @@
-import React from 'react';
-import type { Verdict } from '../types/domain';
+import type { Coded, Verdict } from '../types/domain';
 import { VERDICT_META } from '../utils/verdict';
-import { Badge, type BadgeTone } from './ui/Badge';
-
-const TONE: Record<Verdict, BadgeTone> = {
-  AVAILABLE: 'ok',
-  NEEDS_REVIEW: 'warn',
-  UNAVAILABLE: 'deny'
-};
+import { Badge } from './ui/Badge';
 
 interface VerdictBadgeProps {
-  verdict: Verdict;
+  verdict: Coded<Verdict>;
   size?: 'sm' | 'md';
 }
 
-/** 판정 3분류 배지. 색·기호·라벨은 VERDICT_META 한 곳에서 온다. */
+/** 판정 3분류 배지. 라벨은 API 값, 기호·색은 VERDICT_META. */
 export function VerdictBadge({ verdict, size = 'sm' }: VerdictBadgeProps) {
-  const meta = VERDICT_META[verdict];
+  const meta = VERDICT_META[verdict.code];
   return (
-    <Badge tone={TONE[verdict]} size={size} symbol={meta.symbol}>
-      {meta.label}
+    <Badge tone={meta.tone} size={size} symbol={meta.symbol}>
+      {verdict.label}
     </Badge>);
 
 }

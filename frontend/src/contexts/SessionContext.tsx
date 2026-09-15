@@ -5,31 +5,35 @@ import React, {
   useMemo,
   useState } from
 'react';
-import type {
-  BusinessContext,
-  Judgment,
-  ParsedBatch,
-  Verdict } from
-'../types/domain';
-import { BATCH_SUMMARY, JUDGMENTS, QUESTION_GROUPS } from '../mock/judgments';
+import type { BusinessContext, Judgment, Transaction, Verdict } from '../types/domain';
+import {
+  JUDGMENTS,
+  JUDGMENT_SUMMARY,
+  QUESTION_ANSWER_VERDICT,
+  QUESTION_GROUPS,
+  QUESTION_TRANSACTIONS,
+  TRANSACTIONS } from
+'../mock/judgments';
+import type { ParsedBatch } from '../mock/sampleFiles';
+import { VERDICT_LABEL } from '../utils/verdict';
 
+/** 업종은 IT(62010) 고정 */
 export const DEFAULT_CONTEXT: BusinessContext = {
   industryCode: '62010',
   prevYearRevenue: 83_000_000,
   businessOpenDate: '2024-03-01',
-  hasEmployees: false,
-  workplaceType: 'HOME',
-  homeOfficeRatio: 20,
-  hasVehicle: false,
-  hasPhysicalFacility: false
+  bookkeepingDuty: '복식부기',
+  hasEmployee: false,
+  homeOfficeRatio: 20
 };
 
-export type RunStatus = 'IDLE' | 'RUNNING' | 'DONE';
+/** 목업 화면의 진행 단계. API의 RunStatus와 다르다. */
+export type DemoRunStatus = 'IDLE' | 'RUNNING' | 'DONE';
 
 interface VerdictCounts {
-  possible: number;
+  available: number;
   needsReview: number;
-  impossible: number;
+  unavailable: number;
 }
 
 interface SessionValue {
@@ -41,13 +45,15 @@ interface SessionValue {
   setBatch: (batch: ParsedBatch | null) => void;
   context: BusinessContext | null;
   setContext: (context: BusinessContext) => void;
-  runStatus: RunStatus;
-  setRunStatus: (status: RunStatus) => void;
+  runStatus: DemoRunStatus;
+  setRunStatus: (status: DemoRunStatus) => void;
+  /** 그룹 키 → 선택한 답변 라벨 */
   answers: Record<string, string>;
   answerGroup: (groupKey: string, value: string) => void;
   overrides: Record<string, Verdict>;
   overrideJudgment: (judgmentId: string, verdict: Verdict) => void;
   judgments: Judgment[];
+  transactionOf: (transactionId: string) => Transaction | undefined;
   counts: VerdictCounts;
   pendingQuestionCount: number;
   recognizedAmount: number;
@@ -55,17 +61,23 @@ interface SessionValue {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
-const answerToVerdict = (value: string): Verdict => {
-  if (value === 'PERSONAL') return 'UNAVAILABLE';
-  if (value === 'MIXED' || value === 'UNKNOWN') return 'NEEDS_REVIEW';
-  return 'AVAILABLE';
-};
+const ratioOf = (answer: string): number | null =>
+/^\d+%$/.test(answer) ? Number(answer.replace('%', '')) : null;
+
+const coded = (code: Verdict) => ({ code, label: VERDICT_LABEL[code] });
+
+/** 거래 → 소속 질문 그룹. 목업 전용 역매핑 */
+const GROUP_OF_TRANSACTION: Record<string, string> = Object.fromEntries(
+  Object.entries(QUESTION_TRANSACTIONS).flatMap(([groupKey, ids]) =>
+  ids.map((id) => [id, groupKey])
+  )
+);
 
 export function SessionProvider({ children }: {children: React.ReactNode;}) {
   const [email, setEmail] = useState<string | null>(null);
   const [batch, setBatch] = useState<ParsedBatch | null>(null);
   const [context, setContext] = useState<BusinessContext | null>(null);
-  const [runStatus, setRunStatus] = useState<RunStatus>('IDLE');
+  const [runStatus, setRunStatus] = useState<DemoRunStatus>('IDLE');
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [overrides, setOverrides] = useState<Record<string, Verdict>>({});
 
@@ -93,59 +105,47 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
     []
   );
 
-  /** 응답 → 사실 저장 → 재판정 → 새 Revision 을 클라이언트에서 재현한다. */
+  const transactionOf = useCallback(
+    (transactionId: string) =>
+    TRANSACTIONS.find((transaction) => transaction.id === transactionId),
+    []
+  );
+
+  /** 응답 → 재판정 → 새 Revision 을 클라이언트에서 흉내 낸다. 서버에서는 룰엔진이 한다. */
   const judgments = useMemo<Judgment[]>(
     () =>
     JUDGMENTS.map((judgment) => {
-      const answer = judgment.groupKey ? answers[judgment.groupKey] : undefined;
+      const groupKey = GROUP_OF_TRANSACTION[judgment.transactionId];
+      const answer = groupKey ? answers[groupKey] : undefined;
       let next = judgment;
 
-      if (answer) {
-        const isRatio = /^\d+$/.test(answer);
-        const verdict = isRatio ? 'AVAILABLE' : answerToVerdict(answer);
-        const ratio = isRatio ? Number(answer) : null;
-        const amount = judgment.transaction.amount;
+      if (groupKey && answer) {
+        const verdict = QUESTION_ANSWER_VERDICT[groupKey]?.[answer] ?? 'NEEDS_REVIEW';
+        const ratio = ratioOf(answer);
+        const amount = transactionOf(judgment.transactionId)?.amount ?? 0;
         next = {
           ...judgment,
-          verdict,
-          ratio,
+          revision: judgment.revision + 1,
+          verdict: coded(verdict),
           blockedAtGate: verdict === 'NEEDS_REVIEW' ? judgment.blockedAtGate : null,
-          reasonCode: verdict === 'NEEDS_REVIEW' ? judgment.reasonCode : null,
+          isInference: false,
+          unmatchedReason: null,
+          attributes: ratio !== null ? { 안분율: ratio } : judgment.attributes,
           finalAmount:
           verdict !== 'AVAILABLE' ?
-          0 :
+          null :
           ratio !== null ?
           Math.floor(amount * ratio / 100) :
           amount,
-          reason:
+          explanation:
           verdict === 'AVAILABLE' ?
-          `사용자 응답이 사실 저장소에 저장되어 재판정했습니다.${
           ratio !== null ?
-          ` 업무 사용 비율 ${ratio}%를 적용해 구분되는 금액만 산입합니다.` :
-          ' 용도가 업무로 확인되어 통상성 게이트를 통과했습니다.'}` :
-
+          `사용자 응답으로 업무 사용 비율 ${ratio}%를 적용해 구분되는 금액만 산입합니다.` :
+          '사용자 응답으로 용도가 업무로 확인되어 통상성 게이트를 통과했습니다.' :
           verdict === 'UNAVAILABLE' ?
           '사용자 응답에 따라 개인 목적 지출로 확정되어 필요경비에 산입하지 않습니다.' :
-          judgment.reason,
-          gateTrace: [
-          ...judgment.gateTrace.slice(0, 2),
-          {
-            gate: 'G2' as const,
-            result: `사실 저장소 적용: ${answer}`
-          },
-          ...(verdict === 'AVAILABLE' ?
-          [
-          {
-            gate: 'G4' as const,
-            result:
-            ratio !== null ?
-            `안분율 ${ratio}% 적용 후 절사` :
-            '전액 산입'
-          },
-          { gate: 'G6' as const, result: '근거 조문 유지' }] :
-
-          [])]
-
+          judgment.explanation,
+          computedAt: new Date().toISOString()
         };
       }
 
@@ -153,41 +153,44 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
       if (override) {
         next = {
           ...next,
-          verdict: override,
-          finalAmount: override === 'AVAILABLE' ? next.finalAmount : 0
+          revision: next.revision + 1,
+          verdict: coded(override),
+          finalAmount:
+          override === 'AVAILABLE' ?
+          next.finalAmount ?? transactionOf(judgment.transactionId)?.amount ?? null :
+          null
         };
       }
 
       return next;
     }),
-    [answers, overrides]
+    [answers, overrides, transactionOf]
   );
 
   const counts = useMemo<VerdictCounts>(() => {
-    let { possible, needsReview, impossible } = {
-      possible: BATCH_SUMMARY.possible,
-      needsReview: BATCH_SUMMARY.needsReview,
-      impossible: BATCH_SUMMARY.impossible
+    let { available, needsReview, unavailable } = {
+      available: JUDGMENT_SUMMARY.byVerdict.AVAILABLE.count,
+      needsReview: JUDGMENT_SUMMARY.byVerdict.NEEDS_REVIEW.count,
+      unavailable: JUDGMENT_SUMMARY.byVerdict.UNAVAILABLE.count
     };
     QUESTION_GROUPS.forEach((group) => {
       const answer = answers[group.groupKey];
       if (!answer) return;
-      const verdict = /^\d+$/.test(answer) ?
-      'AVAILABLE' :
-      answerToVerdict(answer);
-      if (verdict === 'NEEDS_REVIEW') return;
+      const verdict = QUESTION_ANSWER_VERDICT[group.groupKey]?.[answer];
+      if (!verdict || verdict === 'NEEDS_REVIEW') return;
       needsReview -= group.count;
-      if (verdict === 'AVAILABLE') possible += group.count;else
-      impossible += group.count;
+      if (verdict === 'AVAILABLE') available += group.count;else
+      unavailable += group.count;
     });
-    return { possible, needsReview, impossible };
+    return { available, needsReview, unavailable };
   }, [answers]);
 
   const pendingQuestionCount = useMemo(
     () =>
     QUESTION_GROUPS.filter((group) => {
       const answer = answers[group.groupKey];
-      return !answer || answer === 'MIXED' || answer === 'UNKNOWN';
+      if (!answer) return true;
+      return QUESTION_ANSWER_VERDICT[group.groupKey]?.[answer] === 'NEEDS_REVIEW';
     }).length,
     [answers]
   );
@@ -196,14 +199,15 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
     const extra = QUESTION_GROUPS.reduce((sum, group) => {
       const answer = answers[group.groupKey];
       if (!answer) return sum;
-      if (/^\d+$/.test(answer)) {
-        return sum + Math.floor(group.amount * Number(answer) / 100);
+      const ratio = ratioOf(answer);
+      if (ratio !== null) {
+        return sum + Math.floor(group.totalAmount * ratio / 100);
       }
-      return answer === 'BUSINESS' || answer === 'SOFTWARE' || answer === 'WITHIN_YEAR' ?
-      sum + group.amount :
+      return QUESTION_ANSWER_VERDICT[group.groupKey]?.[answer] === 'AVAILABLE' ?
+      sum + group.totalAmount :
       sum;
     }, 0);
-    return BATCH_SUMMARY.possibleAmount + extra;
+    return JUDGMENT_SUMMARY.byVerdict.AVAILABLE.finalAmount + extra;
   }, [answers]);
 
   const value = useMemo<SessionValue>(
@@ -223,6 +227,7 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
       overrides,
       overrideJudgment,
       judgments,
+      transactionOf,
       counts,
       pendingQuestionCount,
       recognizedAmount
@@ -239,6 +244,7 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
     overrides,
     overrideJudgment,
     judgments,
+    transactionOf,
     counts,
     pendingQuestionCount,
     recognizedAmount]

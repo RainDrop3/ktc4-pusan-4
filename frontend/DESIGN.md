@@ -12,6 +12,7 @@
 | 토큰 | `tailwind.config.js` | 색·타이포·폭·그림자·이징. 화면에서는 이름으로만 쓴다 |
 | 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field |
 | 도메인 부품 | `src/components/` | VerdictBadge, StatuteCitation, AgentPreview — ui 부품 위에 도메인 의미를 얹은 것 |
+| 타입 | `src/types/domain.ts` | API 명세와 1:1. 화면 편의 필드를 여기 추가하지 않는다 |
 | 규칙 | 이 문서 | 코드로 강제 못 하는 것 |
 
 ## 토큰
@@ -84,8 +85,13 @@
 목록 항목이면 `as="li"`, 독립된 내용이면 `as="article"`.
 
 ### Badge / VerdictBadge
-- 판정 3분류는 항상 `VerdictBadge verdict=...`. 기호·색·라벨이 `utils/verdict.ts`의 `VERDICT_META` 한 곳에서 온다.
+- 판정 3분류는 항상 `VerdictBadge verdict={judgment.verdict}` — API의 `{code, label}`을 그대로 넘긴다. 라벨은 API 값, 기호·색은 `utils/verdict.ts`의 `VERDICT_META`.
+- 상태값(`verdict`·`status`·`state`)의 표시 문자열을 프론트에 하드코딩하지 않는다. 분기는 `code`, 표시는 `label`.
 - 그 외 상태 표시는 `Badge tone=...`. 다크 배경 위에서는 `tone="inverse"`.
+
+### StatuteCitation
+- `statuteVersionId`로 조문 1건. `GET /statutes/{id}` 응답(제목·시행일·버전·원문 링크)을 그대로 보여준다.
+- 법률/시행령(근거)과 기본통칙·판례(참고)의 구분은 API에 `hierarchy`가 생기면 붙인다 (명세 4.3 #8).
 
 ### SectionHeading
 `eyebrow → title → description` 순서 고정. `size` lg(h1)·md(h2, 기본)·sm(h3). 다크 배경은 `inverse`.

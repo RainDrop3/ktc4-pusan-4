@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRightIcon, CheckIcon, LayersIcon } from 'lucide-react';
@@ -9,8 +9,6 @@ import { formatNumber, formatWon } from '../utils/format';
 
 export function Questions() {
   const { answers, answerGroup, counts } = useSession();
-  const [customRatio, setCustomRatio] = useState<Record<string, string>>({});
-
   const remaining = QUESTION_GROUPS.filter(
     (group) => !answers[group.groupKey]
   ).length;
@@ -54,9 +52,7 @@ export function Questions() {
           {QUESTION_GROUPS.map((group, index) => {
             const answer = answers[group.groupKey];
             const answered = Boolean(answer);
-            const selectedLabel = group.options.find(
-              (option) => option.value === answer
-            )?.label;
+            const merchantLabel = group.groupKey.replace(/^merchant:/, '');
 
             return (
               <li key={group.groupKey}>
@@ -80,21 +76,19 @@ export function Questions() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-md bg-warn-bg px-1.5 py-0.5 text-[11px] font-semibold text-warn">
-                          {group.reasonLabel}
+                          {merchantLabel}
                         </span>
                         <span className="flex items-center gap-1 text-[12px] tabular-nums text-muted">
                           <LayersIcon className="h-3 w-3" aria-hidden="true" />
-                          {group.count}건 · {formatWon(group.amount)}
+                          {group.count}건 · {formatWon(group.totalAmount)}
                         </span>
                       </div>
                       <h2 className="mt-2 text-[16px] font-semibold text-ink">
-                        {group.question}
+                        {group.questionText}
                       </h2>
                       <p className="mt-1 text-[13px] leading-6 text-muted">
-                        {group.helper}
-                      </p>
-                      <p className="mt-2 text-[12px] text-muted">
-                        묶인 가맹점: {group.sampleMerchants.join(' · ')}
+                        한 번 답하면 묶인 {group.count}건에 함께 적용되고, 다음 판정에서는
+                        묻지 않습니다.
                       </p>
                     </div>
                   </header>
@@ -102,14 +96,12 @@ export function Questions() {
                   <div className="px-5 py-4">
                     <div className="flex flex-wrap gap-2">
                       {group.options.map((option) => {
-                        const active = answer === option.value;
+                        const active = answer === option;
                         return (
                           <button
-                            key={option.value}
+                            key={option}
                             type="button"
-                            onClick={() =>
-                            answerGroup(group.groupKey, option.value)
-                            }
+                            onClick={() => answerGroup(group.groupKey, option)}
                             className={`rounded-xl border px-3.5 py-2.5 text-left transition-colors duration-150 ease-snap ${
                             active ?
                             'border-accent bg-accent-soft' :
@@ -121,46 +113,11 @@ export function Questions() {
                               active ? 'text-accent' : 'text-ink'}`
                               }>
                               
-                              {option.label}
+                              {option}
                             </span>
-                            {option.hint &&
-                            <span className="mt-0.5 block text-[12px] text-muted">
-                                {option.hint}
-                              </span>
-                            }
                           </button>);
 
                       })}
-
-                      {group.answerType === 'RATIO' &&
-                      <div className="flex items-center gap-2 rounded-xl border border-line px-3 py-2">
-                          <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          placeholder="직접 입력"
-                          value={customRatio[group.groupKey] ?? ''}
-                          onChange={(event) =>
-                          setCustomRatio((prev) => ({
-                            ...prev,
-                            [group.groupKey]: event.target.value
-                          }))
-                          }
-                          aria-label="업무 사용 비율 직접 입력"
-                          className="w-24 text-[13px] tabular-nums text-ink outline-none" />
-                        
-                          <button
-                          type="button"
-                          onClick={() => {
-                            const value = customRatio[group.groupKey];
-                            if (value) answerGroup(group.groupKey, value);
-                          }}
-                          className="text-[13px] font-semibold text-accent">
-                          
-                            적용
-                          </button>
-                        </div>
-                      }
                     </div>
 
                     <AnimatePresence initial={false}>
@@ -175,7 +132,7 @@ export function Questions() {
                         }}
                         className="mt-3 text-[13px] leading-6 text-ok">
                         
-                          {selectedLabel ?? `${answer}%`}로 저장하고 {group.count}건을
+                          「{answer}」로 저장하고 {group.count}건을
                           재판정했습니다. 새 판정 이력이 추가되고 이전 판정도 그대로
                           남습니다.
                         </motion.p>

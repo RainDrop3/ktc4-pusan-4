@@ -18,7 +18,7 @@ import {
   SAMPLE_FILES,
   TARGET_FIELDS } from
 '../mock/sampleFiles';
-import type { SampleFile } from '../types/domain';
+import type { SampleFile } from '../mock/sampleFiles';
 import { formatNumber, formatPeriod } from '../utils/format';
 
 type Phase = 'IDLE' | 'PARSING' | 'BLOCKED' | 'MAPPING' | 'READY';

@@ -5,13 +5,14 @@ import { AppShell } from '../components/AppShell';
 import { JudgmentRow } from '../components/results/JudgmentRow';
 import { JudgmentDetailPanel } from '../components/results/JudgmentDetailPanel';
 import { useSession } from '../contexts/SessionContext';
-import { BATCH_SUMMARY } from '../mock/judgments';
+import { JUDGMENT_SUMMARY } from '../mock/judgments';
 import type { Verdict } from '../types/domain';
 import { formatNumber, formatWon } from '../utils/format';
 type Tab = 'ALL' | Verdict;
 export function Results() {
   const {
     judgments,
+    transactionOf,
     counts,
     overrides,
     overrideJudgment,
@@ -29,12 +30,12 @@ export function Results() {
   }[] = [{
     key: 'ALL',
     label: '전체',
-    count: counts.possible + counts.needsReview + counts.impossible,
+    count: counts.available + counts.needsReview + counts.unavailable,
     tone: 'text-ink'
   }, {
     key: 'AVAILABLE',
     label: '가능',
-    count: counts.possible,
+    count: counts.available,
     tone: 'text-ok'
   }, {
     key: 'NEEDS_REVIEW',
@@ -44,10 +45,10 @@ export function Results() {
   }, {
     key: 'UNAVAILABLE',
     label: '불가',
-    count: counts.impossible,
+    count: counts.unavailable,
     tone: 'text-deny'
   }];
-  const visible = useMemo(() => tab === 'ALL' ? judgments : judgments.filter((judgment) => judgment.verdict === tab), [judgments, tab]);
+  const visible = useMemo(() => tab === 'ALL' ? judgments : judgments.filter((judgment) => judgment.verdict.code === tab), [judgments, tab]);
   const selected = judgments.find((judgment) => judgment.id === selectedId) ?? judgments[0];
   return <AppShell>
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -57,7 +58,7 @@ export function Results() {
             판정 결과
           </h1>
           <p className="mt-2 text-[14px] tabular-nums text-muted">
-            2026년 1월 · {formatNumber(BATCH_SUMMARY.total)}건 · 인정 경비{' '}
+            2026년 1월 · {formatNumber(JUDGMENT_SUMMARY.totalCount)}건 · 인정 경비{' '}
             <strong className="font-semibold text-ink">
               {formatWon(recognizedAmount)}
             </strong>
@@ -99,7 +100,7 @@ export function Results() {
           </div>
 
           {visible.length > 0 ? <ul className="divide-y divide-line2">
-              {visible.map((judgment) => <JudgmentRow key={judgment.id} judgment={judgment} selected={judgment.id === selected?.id} expanded={expandedId === judgment.id} onSelect={() => setSelectedId(judgment.id)} onToggle={() => setExpandedId((prev) => prev === judgment.id ? null : judgment.id)} />)}
+              {visible.map((judgment) => <JudgmentRow key={judgment.id} judgment={judgment} transaction={transactionOf(judgment.transactionId)} selected={judgment.id === selected?.id} expanded={expandedId === judgment.id} onSelect={() => setSelectedId(judgment.id)} onToggle={() => setExpandedId((prev) => prev === judgment.id ? null : judgment.id)} />)}
             </ul> : <div className="px-6 py-16 text-center">
               <p className="text-[14px] font-semibold text-ink">
                 이 분류에 남은 건이 없습니다
@@ -111,7 +112,7 @@ export function Results() {
 
           <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-[12px] tabular-nums text-muted">
             <span>
-              1–{visible.length} / {formatNumber(BATCH_SUMMARY.total)}건
+              1–{visible.length} / {formatNumber(JUDGMENT_SUMMARY.totalCount)}건
             </span>
             <div className="flex gap-1">
               <button type="button" disabled className="rounded-lg border border-line px-2.5 py-1 text-muted disabled:opacity-50">
@@ -125,7 +126,7 @@ export function Results() {
         </section>
 
         {selected && <aside className="lg:sticky lg:top-32 lg:self-start">
-            <JudgmentDetailPanel judgment={selected} overridden={Boolean(overrides[selected.id])} onOverride={(verdict) => overrideJudgment(selected.id, verdict)} />
+            <JudgmentDetailPanel judgment={selected} transaction={transactionOf(selected.transactionId)} overridden={Boolean(overrides[selected.id])} onOverride={(verdict) => overrideJudgment(selected.id, verdict)} />
           </aside>}
       </div>
     </AppShell>;

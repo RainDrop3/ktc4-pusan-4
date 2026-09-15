@@ -3,20 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowRightIcon, InfoIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { DEFAULT_CONTEXT, useSession } from '../contexts/SessionContext';
-import type { BusinessContext, WorkplaceType } from '../types/domain';
+import type { BookkeepingDuty, BusinessContext } from '../types/domain';
 import { formatNumber } from '../utils/format';
 
-const INDUSTRIES = [
-{ code: '62010', label: '62010 · 컴퓨터 프로그래밍 서비스업' },
-{ code: '62021', label: '62021 · 시스템 통합 자문·구축 서비스업' },
-{ code: '73909', label: '73909 · 그 외 기타 전문·과학·기술 서비스업' },
-{ code: '85699', label: '85699 · 그 외 기타 교육 지원 서비스업' }];
+/** 업종은 IT(62010)로 고정. 서비스 대상이 1인 IT 개발 사업자뿐이다. */
+const INDUSTRY_LABEL = '62010 · 컴퓨터 프로그래밍 서비스업';
 
-
-const WORKPLACES: {value: WorkplaceType;label: string;hint: string;}[] = [
-{ value: 'HOME', label: '자택 겸용', hint: '가사 관련 경비 안분이 필요합니다' },
-{ value: 'OFFICE', label: '별도 사무실', hint: '임차료 전액 검토 대상' },
-{ value: 'NONE', label: '고정 작업장 없음', hint: '공간 관련 경비 판정 제외' }];
+const BOOKKEEPING: {value: BookkeepingDuty;label: string;hint: string;}[] = [
+{ value: '복식부기', label: '복식부기', hint: '직전연도 수입 7,500만 원 이상' },
+{ value: '간편장부', label: '간편장부', hint: '서비스 대상 밖 (참고용)' },
+{ value: '추계', label: '추계', hint: '서비스 대상 밖 (참고용)' }];
 
 
 const cardClass = 'rounded-2xl border border-line bg-surface p-5';
@@ -82,19 +78,15 @@ export function Interview() {
 
   const bookkeeping =
   form.prevYearRevenue >= 75_000_000 ? '복식부기 의무자' : '간편장부 대상자';
+  const homeOffice = form.homeOfficeRatio !== undefined;
 
   const impacts = [
-  form.hasEmployees ?
+  form.hasEmployee ?
   '직원이 있어 복리후생비·급여 관련 판정 분기가 켜집니다.' :
   '직원이 없어 회식·복리후생 성격의 지출은 가사 관련 경비로 봅니다.',
-  form.workplaceType === 'HOME' ?
+  homeOffice ?
   `자택 겸용이라 공간 관련 경비를 ${form.homeOfficeRatio}% 기준으로 안분합니다.` :
-  form.workplaceType === 'OFFICE' ?
-  '별도 사무실 임차료는 전액 검토 대상입니다.' :
-  '고정 작업장이 없어 공간 관련 경비는 판정 대상에서 제외합니다.',
-  form.hasVehicle ?
-  '사업용 차량이 있어 유류비·수리비를 업무용승용차 규정으로 검토합니다.' :
-  '사업용 차량이 없어 유류비는 근거 조문에 따라 불가로 판정합니다.'];
+  '자택 작업 비율이 없어 통신비·관리비 안분 판정을 하지 않습니다.'];
 
 
   const submit = (event: React.FormEvent) => {
@@ -110,7 +102,7 @@ export function Interview() {
           <header>
             <p className="text-[13px] font-semibold text-accent">1단계 · 인식</p>
             <h1 className="mt-1.5 text-[28px] font-bold tracking-tight text-ink">
-              사업자 문진 7문항
+              사업자 문진
             </h1>
             <p className="mt-2 max-w-2xl text-[14px] leading-6 text-ink2">
               같은 지출도 사업자 상황에 따라 결과가 달라집니다. 답변은 버전으로
@@ -120,24 +112,13 @@ export function Interview() {
 
           <div className="mt-6 space-y-4">
             <section className={cardClass}>
-              <label htmlFor="industry" className={labelClass}>
-                1. 업종
-              </label>
+              <span className={labelClass}>1. 업종</span>
               <p className={hintClass}>
-                업종 프로파일과 경비율 조회의 기준이 됩니다.
+                이 서비스는 1인 IT 개발 사업자만 대상으로 해서 업종이 고정됩니다.
               </p>
-              <select
-                id="industry"
-                value={form.industryCode}
-                onChange={(event) => update('industryCode', event.target.value)}
-                className="mt-3 w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[14px] text-ink">
-                
-                {INDUSTRIES.map((industry) =>
-                <option key={industry.code} value={industry.code}>
-                    {industry.label}
-                  </option>
-                )}
-              </select>
+              <p className="mt-3 rounded-xl border border-line bg-canvas px-3.5 py-2.5 text-[14px] text-ink2">
+                {INDUSTRY_LABEL}
+              </p>
             </section>
 
             <section className={cardClass}>
@@ -182,15 +163,28 @@ export function Interview() {
             </section>
 
             <section className={cardClass}>
-              <span className={labelClass}>4. 직원이 있나요?</span>
+              <span className={labelClass}>4. 기장의무</span>
               <p className={hintClass}>
-                급여·원천세는 이 서비스의 범위 밖입니다. 복리후생비 판정에만
+                직전연도 수입금액으로 자동 판정된 값이 기본 선택됩니다.
+              </p>
+              <ChoiceRow
+                name="기장의무"
+                value={form.bookkeepingDuty}
+                onChange={(value) => update('bookkeepingDuty', value)}
+                options={BOOKKEEPING} />
+              
+            </section>
+
+            <section className={cardClass}>
+              <span className={labelClass}>5. 직원이 있나요?</span>
+              <p className={hintClass}>
+                직원 보유 사업자는 서비스 대상 밖입니다. 복리후생비 판정에만
                 사용합니다.
               </p>
               <ChoiceRow
                 name="직원 유무"
-                value={form.hasEmployees}
-                onChange={(value) => update('hasEmployees', value)}
+                value={form.hasEmployee}
+                onChange={(value) => update('hasEmployee', value)}
                 options={[
                 { value: false, label: '없음 (1인)' },
                 { value: true, label: '있음' }]
@@ -199,14 +193,22 @@ export function Interview() {
             </section>
 
             <section className={cardClass}>
-              <span className={labelClass}>5. 작업 공간은 어떤 형태인가요?</span>
+              <span className={labelClass}>6. 자택에서 작업하나요?</span>
+              <p className={hintClass}>
+                자택 겸용이면 통신비·관리비를 업무 사용 비율로 안분합니다.
+              </p>
               <ChoiceRow
-                name="작업장 형태"
-                value={form.workplaceType}
-                onChange={(value) => update('workplaceType', value)}
-                options={WORKPLACES} />
+                name="자택 작업 여부"
+                value={homeOffice}
+                onChange={(value) =>
+                update('homeOfficeRatio', value ? 20 : undefined)
+                }
+                options={[
+                { value: false, label: '아니오', hint: '별도 사무실 · 고정 작업장 없음' },
+                { value: true, label: '예', hint: '가사 관련 경비 안분이 필요합니다' }]
+                } />
               
-              {form.workplaceType === 'HOME' &&
+              {homeOffice &&
               <div className="mt-4 rounded-xl bg-canvas p-4">
                   <label
                   htmlFor="ratio"
@@ -221,7 +223,7 @@ export function Interview() {
                     min={0}
                     max={100}
                     step={5}
-                    value={form.homeOfficeRatio}
+                    value={form.homeOfficeRatio ?? 0}
                     onChange={(event) =>
                     update('homeOfficeRatio', Number(event.target.value))
                     }
@@ -233,34 +235,6 @@ export function Interview() {
                   </div>
                 </div>
               }
-            </section>
-
-            <section className={cardClass}>
-              <span className={labelClass}>6. 사업용 차량이 있나요?</span>
-              <ChoiceRow
-                name="차량 보유"
-                value={form.hasVehicle}
-                onChange={(value) => update('hasVehicle', value)}
-                options={[
-                { value: false, label: '없음' },
-                { value: true, label: '있음' }]
-                } />
-              
-            </section>
-
-            <section className={cardClass}>
-              <span className={labelClass}>
-                7. 별도의 사업장 시설(창고·스튜디오 등)이 있나요?
-              </span>
-              <ChoiceRow
-                name="시설 보유"
-                value={form.hasPhysicalFacility}
-                onChange={(value) => update('hasPhysicalFacility', value)}
-                options={[
-                { value: false, label: '없음' },
-                { value: true, label: '있음' }]
-                } />
-              
             </section>
           </div>
 

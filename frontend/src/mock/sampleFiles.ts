@@ -1,4 +1,26 @@
-import type { SampleFile } from '../types/domain';
+/** 업로드 목업 전용. 실제 파서 출력은 types/domain.ts 의 ParsedTransaction. */
+export interface SampleFile {
+  id: string;
+  fileName: string;
+  issuer: string;
+  format: 'XLSX' | 'CSV';
+  sourceType: 'APPROVAL' | 'BILLING' | 'UNKNOWN';
+  rowCount: number;
+  periodStart: string;
+  periodEnd: string;
+  encoding: string;
+  headerRow: number;
+}
+
+export interface ParsedBatch {
+  fileName: string;
+  issuer: string;
+  format: 'XLSX' | 'CSV';
+  rowCount: number;
+  periodStart: string;
+  periodEnd: string;
+  encoding: string;
+}
 
 export const SAMPLE_FILES: SampleFile[] = [
 {

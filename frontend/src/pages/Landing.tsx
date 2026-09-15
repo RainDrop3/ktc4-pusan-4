@@ -257,8 +257,8 @@ export function Landing() {
               <p className="text-small font-semibold text-muted">
                 실제 판정 화면에 붙는 근거
               </p>
-              <StatuteCitation statuteId="소득세법-33-1-5" />
-              <StatuteCitation statuteId="기본통칙-27-1" />
+              <StatuteCitation statuteVersionId={1435} />
+              <StatuteCitation statuteVersionId={2071} />
             </Card>
           </div>
         </Container>

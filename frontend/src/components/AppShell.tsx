@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { CheckIcon } from 'lucide-react';
 import { DisclaimerBar } from './DisclaimerBar';
-import { BATCH_SUMMARY } from '../mock/judgments';
+
 import { useSession } from '../contexts/SessionContext';
 
 const STEPS = [
@@ -91,7 +91,7 @@ export function AppShell({ children, showSteps = true }: AppShellProps) {
 
           <div className="flex items-center gap-3 text-[13px] text-muted">
             <span className="hidden tabular-nums sm:inline">
-              귀속 {BATCH_SUMMARY.taxYear}년
+              귀속 2026년
             </span>
             <span className="hidden h-4 w-px bg-line sm:inline" />
             <span className="hidden max-w-[160px] truncate sm:inline">
@@ -124,8 +124,7 @@ export function AppShell({ children, showSteps = true }: AppShellProps) {
             파싱 단계에서 폐기됩니다.
           </p>
           <p className="tabular-nums">
-            규칙 커밋 {BATCH_SUMMARY.rulesCommitSha} · 문진 v
-            {BATCH_SUMMARY.contextVersion}
+            문진 v4 · 잠정 집계
           </p>
         </div>
       </footer>
