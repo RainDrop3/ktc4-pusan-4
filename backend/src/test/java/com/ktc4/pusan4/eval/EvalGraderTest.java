@@ -19,9 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class EvalGraderTest {
 
-    private static EvalCase parkingFine(boolean critical, String status) {
+    private static EvalCase parkingFine(boolean critical, boolean onHold) {
         return new EvalCase(
-            "E-T01", "G1", status, critical,
+            "E-T01", "G1", critical, onHold,
             new TransactionInput(UUID.randomUUID(), LocalDate.of(2025, 3, 14),
                 "부산광역시청 주정차위반과태료", "지자체_과태료", 50_000),
             new UserContext("940909", false, null),
@@ -44,7 +44,7 @@ class EvalGraderTest {
 
     @Test
     void exact_match() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, false),
             judgment(Verdict.UNAVAILABLE, Gate.G1, false, "소득세법-33-1-2"));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.MATCH);
@@ -52,7 +52,7 @@ class EvalGraderTest {
 
     @Test
     void needs_review_on_critical_case_is_shortfall_so_ci_passes_without_cards() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, false),
             judgment(Verdict.NEEDS_REVIEW, Gate.G2, true));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.SHORTFALL);
@@ -60,7 +60,7 @@ class EvalGraderTest {
 
     @Test
     void available_when_expected_unavailable_is_critical() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, false),
             judgment(Verdict.AVAILABLE, null, false, "소득세법-27-1"));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.CRITICAL);
@@ -69,8 +69,8 @@ class EvalGraderTest {
 
     @Test
     void unavailable_when_expected_available_is_critical() {
-        EvalCase base = parkingFine(false, "미검수");
-        EvalCase expectedAvailable = new EvalCase(base.id(), base.group(), base.reviewStatus(), base.critical(),
+        EvalCase base = parkingFine(false, false);
+        EvalCase expectedAvailable = new EvalCase(base.id(), base.group(), base.critical(), base.onHold(),
             base.transaction(), base.context(), base.facts(),
             new EvalCase.Expectation(Verdict.AVAILABLE, false, null, List.of(), List.of(), false, Map.of()));
 
@@ -83,7 +83,7 @@ class EvalGraderTest {
 
     @Test
     void citing_excluded_statute_is_critical_even_with_right_verdict() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, false),
             judgment(Verdict.UNAVAILABLE, Gate.G1, false, "소득세법-33-1-12"));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.CRITICAL);
@@ -91,7 +91,7 @@ class EvalGraderTest {
 
     @Test
     void final_verdict_without_citation_is_critical() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, false),
             judgment(Verdict.UNAVAILABLE, Gate.G1, false));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.CRITICAL);
@@ -99,7 +99,7 @@ class EvalGraderTest {
 
     @Test
     void wrong_path_on_critical_case_with_final_verdict_is_critical() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, false),
             judgment(Verdict.UNAVAILABLE, Gate.G1, false, "소득세법-33-1-4"));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.CRITICAL);
@@ -108,7 +108,7 @@ class EvalGraderTest {
 
     @Test
     void wrong_path_on_non_critical_case_is_shortfall() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, "미검수"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(false, false),
             judgment(Verdict.UNAVAILABLE, Gate.G1, false, "소득세법-33-1-4"));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.SHORTFALL);
@@ -116,7 +116,7 @@ class EvalGraderTest {
 
     @Test
     void on_hold_case_is_not_graded() {
-        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, "보류"),
+        EvalGrader.Grade grade = EvalGrader.grade(parkingFine(true, true),
             judgment(Verdict.AVAILABLE, null, false));
 
         assertThat(grade.outcome()).isEqualTo(Outcome.ON_HOLD);

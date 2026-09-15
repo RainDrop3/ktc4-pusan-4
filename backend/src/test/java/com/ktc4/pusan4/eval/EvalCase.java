@@ -24,8 +24,8 @@ import java.util.UUID;
 record EvalCase(
     String id,
     String group,
-    String reviewStatus,
     boolean critical,
+    boolean onHold,
     TransactionInput transaction,
     UserContext context,
     List<UserFact> facts,
@@ -45,11 +45,6 @@ record EvalCase(
 
     private static final ObjectMapper MAPPER = new ObjectMapper(new YAMLFactory());
     private static final Set<String> GROUPS = Set.of("G1", "G2", "G3", "G4", "G5", "G6", "엣지");
-    private static final Set<String> STATUSES = Set.of("미검수", "검수완료", "보류");
-
-    boolean onHold() {
-        return "보류".equals(reviewStatus);
-    }
 
     static EvalCase read(Path file, Set<String> categories) throws IOException {
         JsonNode root = MAPPER.readTree(file.toFile());
@@ -58,7 +53,6 @@ record EvalCase(
         String id = p.text(root, "id");
         String group = p.oneOf(p.text(root, "관문"), GROUPS, "관문");
         p.text(root, "근거");
-        String status = p.oneOf(p.text(root.path("검수"), "상태"), STATUSES, "검수.상태");
 
         JsonNode ctx = p.node(root, "사업자컨텍스트");
         JsonNode industry = p.node(ctx, "업종코드");
@@ -110,7 +104,9 @@ record EvalCase(
                 : Map.of()
         );
 
-        return new EvalCase(id, group, status, root.path("채점").path("치명").asBoolean(false),
+        JsonNode scoring = root.path("채점");
+        return new EvalCase(id, group, scoring.path("치명").asBoolean(false),
+            scoring.path("보류").asBoolean(false),
             transaction, context, List.copyOf(facts), expected);
     }
 
