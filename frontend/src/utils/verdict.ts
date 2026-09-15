@@ -11,7 +11,7 @@ interface VerdictMeta {
 }
 
 export const VERDICT_META: Record<Verdict, VerdictMeta> = {
-  POSSIBLE: {
+  AVAILABLE: {
     label: '가능',
     symbol: '✓',
     text: 'text-ok',
@@ -27,7 +27,7 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
     border: 'border-warn-line',
     dot: 'bg-warn'
   },
-  IMPOSSIBLE: {
+  UNAVAILABLE: {
     label: '불가',
     symbol: '✕',
     text: 'text-deny',

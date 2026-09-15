@@ -32,7 +32,7 @@ export function Results() {
     count: counts.possible + counts.needsReview + counts.impossible,
     tone: 'text-ink'
   }, {
-    key: 'POSSIBLE',
+    key: 'AVAILABLE',
     label: '가능',
     count: counts.possible,
     tone: 'text-ok'
@@ -42,7 +42,7 @@ export function Results() {
     count: counts.needsReview,
     tone: 'text-warn'
   }, {
-    key: 'IMPOSSIBLE',
+    key: 'UNAVAILABLE',
     label: '불가',
     count: counts.impossible,
     tone: 'text-deny'

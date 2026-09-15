@@ -149,12 +149,12 @@ export function Styleguide() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <VerdictBadge verdict="POSSIBLE" />
+              <VerdictBadge verdict="AVAILABLE" />
               <VerdictBadge verdict="NEEDS_REVIEW" />
-              <VerdictBadge verdict="IMPOSSIBLE" />
-              <VerdictBadge verdict="POSSIBLE" size="md" />
+              <VerdictBadge verdict="UNAVAILABLE" />
+              <VerdictBadge verdict="AVAILABLE" size="md" />
               <VerdictBadge verdict="NEEDS_REVIEW" size="md" />
-              <VerdictBadge verdict="IMPOSSIBLE" size="md" />
+              <VerdictBadge verdict="UNAVAILABLE" size="md" />
             </div>
           </div>
         </Block>

@@ -147,14 +147,14 @@ export function JudgmentDetailPanel({
         <div className="mt-3 flex gap-2">
           <button
             type="button"
-            onClick={() => onOverride('POSSIBLE')}
+            onClick={() => onOverride('AVAILABLE')}
             className="flex-1 rounded-lg border border-line px-3 py-2 text-[13px] font-semibold text-ink transition-colors duration-150 ease-snap hover:bg-ok-bg hover:text-ok">
             
             가능으로 표시
           </button>
           <button
             type="button"
-            onClick={() => onOverride('IMPOSSIBLE')}
+            onClick={() => onOverride('UNAVAILABLE')}
             className="flex-1 rounded-lg border border-line px-3 py-2 text-[13px] font-semibold text-ink transition-colors duration-150 ease-snap hover:bg-deny-bg hover:text-deny">
             
             불가로 표시

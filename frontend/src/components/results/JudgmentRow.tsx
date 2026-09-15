@@ -24,7 +24,7 @@ export function JudgmentRow({
 }: JudgmentRowProps) {
   const { transaction } = judgment;
   const showFinal =
-  judgment.verdict === 'POSSIBLE' &&
+  judgment.verdict === 'AVAILABLE' &&
   judgment.finalAmount !== transaction.amount;
 
   return (

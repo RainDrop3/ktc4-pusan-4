@@ -25,7 +25,7 @@ export function MarketingFooter() {
             </div>
             <div className="flex gap-3">
               <dt className="text-muted">지원 파일</dt>
-              <dd className="text-ink2">홈택스 XLSX · 카드사 CSV</dd>
+              <dd className="text-ink2">국민카드 · 기업카드 이용내역</dd>
             </div>
             <div className="flex gap-3">
               <dt className="text-muted">문의</dt>

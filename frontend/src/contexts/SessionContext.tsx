@@ -56,9 +56,9 @@ interface SessionValue {
 const SessionContext = createContext<SessionValue | null>(null);
 
 const answerToVerdict = (value: string): Verdict => {
-  if (value === 'PERSONAL') return 'IMPOSSIBLE';
+  if (value === 'PERSONAL') return 'UNAVAILABLE';
   if (value === 'MIXED' || value === 'UNKNOWN') return 'NEEDS_REVIEW';
-  return 'POSSIBLE';
+  return 'AVAILABLE';
 };
 
 export function SessionProvider({ children }: {children: React.ReactNode;}) {
@@ -102,7 +102,7 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
 
       if (answer) {
         const isRatio = /^\d+$/.test(answer);
-        const verdict = isRatio ? 'POSSIBLE' : answerToVerdict(answer);
+        const verdict = isRatio ? 'AVAILABLE' : answerToVerdict(answer);
         const ratio = isRatio ? Number(answer) : null;
         const amount = judgment.transaction.amount;
         next = {
@@ -112,19 +112,19 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
           blockedAtGate: verdict === 'NEEDS_REVIEW' ? judgment.blockedAtGate : null,
           reasonCode: verdict === 'NEEDS_REVIEW' ? judgment.reasonCode : null,
           finalAmount:
-          verdict !== 'POSSIBLE' ?
+          verdict !== 'AVAILABLE' ?
           0 :
           ratio !== null ?
           Math.floor(amount * ratio / 100) :
           amount,
           reason:
-          verdict === 'POSSIBLE' ?
+          verdict === 'AVAILABLE' ?
           `사용자 응답이 사실 저장소에 저장되어 재판정했습니다.${
           ratio !== null ?
           ` 업무 사용 비율 ${ratio}%를 적용해 구분되는 금액만 산입합니다.` :
           ' 용도가 업무로 확인되어 통상성 게이트를 통과했습니다.'}` :
 
-          verdict === 'IMPOSSIBLE' ?
+          verdict === 'UNAVAILABLE' ?
           '사용자 응답에 따라 개인 목적 지출로 확정되어 필요경비에 산입하지 않습니다.' :
           judgment.reason,
           gateTrace: [
@@ -133,7 +133,7 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
             gate: 'G2' as const,
             result: `사실 저장소 적용: ${answer}`
           },
-          ...(verdict === 'POSSIBLE' ?
+          ...(verdict === 'AVAILABLE' ?
           [
           {
             gate: 'G4' as const,
@@ -154,7 +154,7 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
         next = {
           ...next,
           verdict: override,
-          finalAmount: override === 'POSSIBLE' ? next.finalAmount : 0
+          finalAmount: override === 'AVAILABLE' ? next.finalAmount : 0
         };
       }
 
@@ -173,11 +173,11 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
       const answer = answers[group.groupKey];
       if (!answer) return;
       const verdict = /^\d+$/.test(answer) ?
-      'POSSIBLE' :
+      'AVAILABLE' :
       answerToVerdict(answer);
       if (verdict === 'NEEDS_REVIEW') return;
       needsReview -= group.count;
-      if (verdict === 'POSSIBLE') possible += group.count;else
+      if (verdict === 'AVAILABLE') possible += group.count;else
       impossible += group.count;
     });
     return { possible, needsReview, impossible };

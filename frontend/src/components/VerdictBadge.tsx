@@ -4,9 +4,9 @@ import { VERDICT_META } from '../utils/verdict';
 import { Badge, type BadgeTone } from './ui/Badge';
 
 const TONE: Record<Verdict, BadgeTone> = {
-  POSSIBLE: 'ok',
+  AVAILABLE: 'ok',
   NEEDS_REVIEW: 'warn',
-  IMPOSSIBLE: 'deny'
+  UNAVAILABLE: 'deny'
 };
 
 interface VerdictBadgeProps {

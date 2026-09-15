@@ -26,7 +26,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 137_000,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -59,7 +59,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 27_500,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -92,7 +92,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 3_490_000,
     installmentMonths: 12
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -273,7 +273,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 96_300,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G1_불산입',
   reasonCode: null,
   isInference: false,
@@ -301,7 +301,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 240_000,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G1_불산입',
   reasonCode: null,
   isInference: false,
@@ -329,7 +329,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 62_000,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G1_불산입',
   reasonCode: null,
   isInference: false,
@@ -357,7 +357,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 1_240_000,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G1_불산입',
   reasonCode: null,
   isInference: false,
@@ -385,7 +385,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 14_300,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -418,7 +418,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 38_000,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -451,7 +451,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 330_000,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -484,7 +484,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 412_000,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -546,7 +546,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 119_600,
     installmentMonths: 0
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -579,7 +579,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 500_000,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G1_불산입',
   reasonCode: null,
   isInference: false,
@@ -607,7 +607,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 17_000,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G2_통상성',
   reasonCode: null,
   isInference: false,
@@ -636,7 +636,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 420_000,
     installmentMonths: 3
   },
-  verdict: 'POSSIBLE',
+  verdict: 'AVAILABLE',
   blockedAtGate: null,
   reasonCode: null,
   isInference: false,
@@ -730,7 +730,7 @@ export const JUDGMENTS: Judgment[] = [
     amount: 70_000,
     installmentMonths: 0
   },
-  verdict: 'IMPOSSIBLE',
+  verdict: 'UNAVAILABLE',
   blockedAtGate: 'G1_불산입',
   reasonCode: null,
   isInference: false,

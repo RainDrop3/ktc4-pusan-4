@@ -1,4 +1,4 @@
-export type Verdict = 'POSSIBLE' | 'NEEDS_REVIEW' | 'IMPOSSIBLE';
+export type Verdict = 'AVAILABLE' | 'NEEDS_REVIEW' | 'UNAVAILABLE';
 
 export type GateId = 'G0' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5' | 'G6';
 
