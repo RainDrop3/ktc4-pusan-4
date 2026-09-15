@@ -104,7 +104,20 @@ rules:
   - { priority: 720, match: "병원|의원|약국|한의원|치과|의료원|보건소", category: 의료 }
 
   # ── 금융 ──────────────────────────────────────────────────
-  - { priority: 720, match: "보험|은행|증권|카드사용료|연회비", category: 금융 }
+  # 공단 4대보험은 금융에 둔다. '보험' 룰보다 먼저 걸려야 한다 (평가셋 E-019·E-020 전제).
+  - { priority: 830, match: "국민건강보험공단|국민연금공단|건강보험공단|연금공단", category: 금융 }
+  - { priority: 720, match: "은행|증권|카드사용료|연회비", category: 금융, note: "'보험' 은 T4 에서 별도 카테고리로 분리했다" }
+
+  # ── 임차료 / 전자기기 / 전문가수수료 / 보험 / 수리비 (T4 추가) ──
+  - { priority: 800, match: "컴퓨터\\s*수리|노트북\\s*수리", category: 수리비, note: "전자기기 룰보다 먼저 걸려야 한다" }
+  - { priority: 780, match: "위워크|WEWORK|패스트파이브|FASTFIVE|스파크플러스|SPARKPLUS", category: 임차료 }
+  - { priority: 780, match: "애플스토어|APPLE\\s*STORE|삼성전자판매|베스트샵", category: 전자기기 }
+  - { priority: 760, match: "삼성화재|현대해상|DB손해보험|KB손해보험|메리츠화재|한화손해보험", category: 보험 }
+  - { priority: 750, match: "수리센터|AS센터|서비스센터|수리", category: 수리비 }
+  - { priority: 730, match: "손해보험|화재보험|보험료", category: 보험 }
+  - { priority: 700, match: "공유오피스|관리사무소|임대관리", category: 임차료 }
+  - { priority: 700, match: "하이마트|전자랜드|컴퓨존", category: 전자기기 }
+  - { priority: 700, match: "세무사|회계사|법무사|변호사|노무사|법률사무소|특허법인", category: 전문가수수료 }
 
   # ── 사무용품 / 생활용품 ───────────────────────────────────
   - { priority: 710, match: "오피스디포|모나미|문구|알파문고", category: 사무용품 }
