@@ -5,7 +5,8 @@
 > v2 = 팀 회의 결정 반영 (6관문 복원 · OpenAI 스택 · 룰카드 저장 구조 · 카드사 2종 · (b)안 폐기)
 > 팀: 부산대 4팀 (카카오테크 캠퍼스)
 >
-> 2026-09-15 · 규칙 카드 명세를 12개 필드로 확정. `type`·`reason` 삭제, `question` 도입, `attributes` 존치 (§6 필수 요소).
+> 2026-09-15 · 규칙 카드 명세를 13개 필드로 확정. `type`·`reason` 삭제, `question`·`out_of_scope` 도입, `attributes` 존치.
+> 필드 상세의 단일 원본은 [`docs/rule-card-fields.md`](docs/rule-card-fields.md) (§6 필수 요소).
 
 ---
 
@@ -778,6 +779,25 @@ review: { by: 외부자문, date: 2026-09-05 }
 > 도입하려면 명세에 12번째 필드를 추가하는 결정이 먼저다.
 
 ```yaml
+# rules/cards/R-070_업무용승용차.yaml — G2, 범위 밖 핸드오프
+id: R-070
+version: 1
+gate: G2
+priority: 700
+effective_period: { start: 2024-01-01, end: null }
+match:
+  category: [차량]
+verdict: 확인필요
+out_of_scope: true           # ← 판정하지 않고 넘긴다. 불가가 아니다
+citations:
+  - { id: 소득세법-33의2, verified: true }
+review: { by: 외부자문, date: 2026-09-05 }
+```
+
+> 차량은 운행기록부·연간 한도·상각 특례가 한꺼번에 걸려 규칙 카드 몇 장으로 끝나지 않는다.
+> `불가`로 쓰면 사용자가 실제 경비를 포기하고, `확인필요`만 쓰면 되묻기 대기와 구분되지 않는다.
+
+```yaml
 # rules/cards/R-027_카페.yaml — G3 + 되묻기
 id: R-027
 version: 1
@@ -838,13 +858,37 @@ review: { by: 외부자문, date: 2026-09-05 }
 | `effective_period` | {start, end} | ✅ | `end`는 null 가능 |
 | `match` | object | ✅ | `category`, `exclude_category`, `keyword`, `amount_min/max`, `industry` — 전부 **리스트만** |
 | `verdict` | enum | 조건부 | 가능→AVAILABLE, 불가→UNAVAILABLE, 확인필요→NEEDS_REVIEW. 차단형(G1·G2)은 필수 |
+| `out_of_scope` | bool | | 판정하지 않고 세무사에게 넘긴다. `verdict: 확인필요`일 때만 |
 | `account` | string | | 계정과목 (예: 소모품비) |
 | `citations` | list | 조건부 | 확정 verdict(가능·불가)면 필수 |
 | `attributes` | map | | `match`만으로 확정되는 속성. 속성 관문(G3~G6)에 누적된다 |
 | `question` | object | | `code`, `text`, `fact_type`, `group_by`, `options[]` |
 | `review` | {by, date} | ✅ | 검토자/검토일 |
 
-**이 12개가 전부다.** 카드에 다른 최상위 필드를 두지 않는다.
+**이 13개가 전부다.** 카드에 다른 최상위 필드를 두지 않는다. 필드별 상세는
+[`docs/rule-card-fields.md`](docs/rule-card-fields.md)가 단일 원본이다.
+
+> ⚠️ **`out_of_scope` — 확인필요 하나에 뭉개진 네 상태를 가른다.**
+> 판정하지 못하는 상태는 넷인데 출력이 전부 `NEEDS_REVIEW`라 할 말이 정반대인 건들이
+> 같은 화면으로 나갔다. 셋은 엔진이 알고, 카드가 선언할 건 ② 하나뿐이다.
+>
+> | | 상태 | 예 | 무엇으로 아는가 |
+> |---|---|---|---|
+> | ① | 되묻기 대기 | R-101 답변 전 | `questions`가 비어 있지 않다 |
+> | ② | **범위 밖 핸드오프** | R-070·R-071 | **`out_of_scope`** |
+> | ③ | 후속 관문 대기 | `업무·개인 혼용`, `자택 겸용`, `연간 일시불` | 답은 있는데 effect에 verdict가 없다 |
+> | ④ | 미매칭 안전망 | G2에서 카드 0장 | `unmatched_reason = RULE_NOT_FOUND` |
+>
+> **verdict의 네 번째 값으로 만들지 않는다.** 관문 간 병합은 제한 강도 순서
+> (가능 < 확인필요 < 불가)로 이긴 쪽을 고른다(`moreRestrictive`). 범위 밖은 불가보다
+> 더/덜 제한적인 게 아니라 축이 다르므로, 강도 한 줄에 끼우면 순서가 깨진다.
+>
+> **`unmatched_reason`도 재사용하지 않는다.** 그 값이 있으면 `unmatched_log`에 행이
+> 쌓이는데(`JudgmentService`), 범위 밖 카드는 매칭에 **성공한** 카드다. 미매칭을 모아
+> 규칙을 학습하는 루프에 섞으면 오염된다.
+>
+> ③이 ②보다 위험하다. ③은 이미 경비로 인정된 건인데 확인필요로 보이면 사용자가 포기한다.
+> 다만 엔진이 아는 상태라 카드가 선언할 게 없다 — 화면 문구를 나누는 건 FE 몫이다.
 
 > ⚠️ **`attributes`와 되묻기 effect의 경계.** 속성을 실을 자리가 둘이라 매번 헷갈린다.
 > 기준은 하나다 — **`match` 조건만으로 값이 정해지면 `attributes`, 답에 따라 갈리면 effect.**
