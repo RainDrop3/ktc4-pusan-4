@@ -4,6 +4,8 @@
 >
 > v2 = 팀 회의 결정 반영 (6관문 복원 · OpenAI 스택 · 룰카드 저장 구조 · 카드사 2종 · (b)안 폐기)
 > 팀: 부산대 4팀 (카카오테크 캠퍼스)
+>
+> 2026-09-15 · 규칙 카드 명세를 11개 필드로 확정. `type`·`reason`·`attributes` 삭제, `question` 도입 (§6 필수 요소).
 
 ---
 
@@ -741,88 +743,111 @@ id: R-004
 version: 1
 gate: G1
 priority: 900
-효력기간: { 시작: 2025-01-01, 종료: null }
+effective_period: { start: 2025-01-01, end: null }
 match:
   category: [지자체_과태료, 경찰청_범칙금]
-  keyword: ["과태료", "범칙금", "주정차위반"]
 verdict: 불가
-reason: "업무 중 발생했더라도 법령 위반으로 납부한 금액은 필요경비에서 제외됩니다."
 citations:
-  - { id: 소득세법-33-1-2, 위계: 법률 }
-evidence: []
+  - { id: 소득세법-33-1-2, verified: true }
 review: { by: 외부자문, date: 2026-09-05 }
 ```
 
+> `match` 조건은 전부 AND 다. 위 카드에 `keyword: ["과태료"]` 를 같이 걸면
+> "지자체_과태료로 분류됐지만 상호 원문에 그 단어가 없는 건"이 빠져나간다.
+> 카테고리와 키워드로 동시에 잡으려면 카드를 둘로 나눈다(실물 R-004 / R-007).
+
 ```yaml
-# rules/cards/R-031_서버클라우드.yaml — G2, 프로파일 참조
+# rules/cards/R-031_서버클라우드.yaml — G2, 업종 고정
 id: R-031
 version: 1
 gate: G2
 priority: 500
+effective_period: { start: 2025-01-01, end: null }
 match:
   category: [서버_클라우드]
-verdict_by_profile:          # ← 업종별 답을 프로파일에서
-  통상:   가능
-  조건부: 확인필요
-  비통상: 확인필요
-  미기입: 확인필요           # ⭐ 필수. 프로파일 없는 업종의 안전 기본값
+  industry: ["940909"]
+verdict: 가능
 account: 지급수수료
-reason: "사업 운영에 직접 사용되는 서비스 이용료입니다."
 citations:
-  - { id: 소득세법-27-1, 위계: 법률 }
-evidence: [세금계산서 또는 카드매출전표]
+  - { id: 소득세법-27-1, verified: true }
 review: { by: 외부자문, date: 2026-09-05 }
 ```
 
+> 업종별로 답이 갈리는 카드는 지금 `match.industry` 로 업종을 고정해 카드를 나눈다.
+> 프로파일에서 판정을 끌어오는 `verdict_by_profile` 은 **명세에도 엔진에도 아직 없다.**
+> 도입하려면 명세에 12번째 필드를 추가하는 결정이 먼저다.
+
 ```yaml
-# rules/cards/R-027_카페.yaml — G3 속성형 + 되묻기
+# rules/cards/R-027_카페.yaml — G3 + 되묻기
 id: R-027
 version: 1
 gate: G3
 priority: 401
+effective_period: { start: 2025-01-01, end: null }
 match:
   category: [카페]
   amount_max: 30000
+citations:
+  - { id: 소득세법-33-1-5, verified: true }
+  - { id: 소득세법기본통칙-33-3, verified: true }
 question:
+  code: CAFE_PURPOSE
   text: "이 결제는 어떤 용도였나요?"
   fact_type: 용도
   group_by: merchant_norm      # 같은 카페 12건을 한 화면에
   options:
-    - { value: 업무미팅, verdict: 가능, account: 접대비,   limit_bucket: 접대비, evidence: [상대방·목적 메모] }
-    - { value: 혼자작업, verdict: 가능, account: 소모품비, evidence: [] }
+    - { value: 업무미팅, verdict: 가능, account: 접대비,   limit_bucket: 접대비 }
+    - { value: 혼자작업, verdict: 가능, account: 소모품비 }
     - { value: 개인,     verdict: 불가 }
-citations:
-  - { id: 소득세법-33-1-5,       위계: 법률 }
-  - { id: 소득세법기본통칙-33-3, 위계: 기본통칙 }
+review: { by: 외부자문, date: 2026-09-05 }
 ```
 
 ```yaml
-# rules/cards/R-051_자산일반.yaml — G4 속성형. verdict 없음
+# rules/cards/R-051_자산일반.yaml — G4. 카드 verdict 없이 되묻기 effect 로만 속성을 남긴다
 id: R-051
 version: 1
 gate: G4
 priority: 500
+effective_period: { start: 2025-01-01, end: null }
 match:
   amount_min: 1000001
   exclude_category: [소모품, 식음료, 카페]
-attributes:                   # ← 판정 대신 이걸 남김
-  자산: true
-  내용연수: 5
-  상각방법: 정액법
-  자산대장_등재: true
-reason: "취득가액이 100만원을 넘어 감가상각자산으로 처리됩니다."
 citations:
-  - { id: 소득세법시행령-62,   위계: 시행령 }
-  - { id: 소득세법시행령-67-4, 위계: 시행령 }
-evidence: [자산대장 등재]
+  - { id: 소득세법시행령-62, verified: true }
+  - { id: 소득세법시행령-67-4, verified: true }
+question:
+  code: ASSET_USEFUL_LIFE
+  text: "이 물품을 1년 넘게 사용하나요?"
+  fact_type: 자산여부
+  group_by: transaction
+  options:
+    # value·verdict·account 를 뺀 나머지 키가 그대로 판정 속성이 된다
+    - { value: 1년 넘게 사용, 자산: true, 내용연수: 5, 상각방법: 정액법, 자산대장_등재: true }
+    - { value: 1년 이내 소모, 자산: false }
+review: { by: 외부자문, date: 2026-09-05 }
 ```
 
 ### 필수 요소
 
-**공통:** `id` `version` `gate` `priority` `match` `효력기간` `review`
-**차단형(G1·G2):** `verdict` 또는 `verdict_by_profile`, `reason`, **`citations`(가능/불가면 필수)**, `account`
-**속성형(G3~G6):** `attributes` (`verdict` 없음)
-**되묻기 있으면:** `question` (`fact_type`, `group_by`, `options`)
+| 필드 | 타입 | 필수 | 비고 |
+|---|---|:---:|---|
+| `id` | string | ✅ | 유니크. 예 `R-051` |
+| `version` | int | ✅ | |
+| `gate` | enum G0~G6 | ✅ | 관문 |
+| `priority` | int | ✅ | **401 이상만** (400 이하는 학습룰 대역이라 로딩 거부) |
+| `effective_period` | {start, end} | ✅ | `end`는 null 가능 |
+| `match` | object | ✅ | `category`, `exclude_category`, `keyword`, `amount_min/max`, `industry` — 전부 **리스트만** |
+| `verdict` | enum | 조건부 | 가능→AVAILABLE, 불가→UNAVAILABLE, 확인필요→NEEDS_REVIEW. 차단형(G1·G2)은 필수 |
+| `account` | string | | 계정과목 (예: 소모품비) |
+| `citations` | list | 조건부 | 확정 verdict(가능·불가)면 필수 |
+| `question` | object | | `code`, `text`, `fact_type`, `group_by`, `options[]` |
+| `review` | {by, date} | ✅ | 검토자/검토일 |
+
+**이 11개가 전부다.** 카드에 다른 최상위 필드를 두지 않는다.
+
+> ⚠️ `attributes`를 뺐으므로 G3~G6 속성형 카드는 카드 자체로는 남길 값이 없다.
+> 되묻기 선택지의 effect(`options[]`에서 `value`·`verdict`·`account`를 뺀 나머지 키)로만
+> 속성이 판정에 실린다.
 
 > 같은 `priority`에서 어떤 카드가 이기는지(구체성 점수·정렬 규칙)는 위 **"승자 결정 — best-match"** 섹션 참고.
 
@@ -1521,7 +1546,7 @@ class RuleCardDraft(BaseModel):
 | 다단계·분기 | 충분하면 조기 종료, 없으면 다음 섹션, 끝까지 없으면 보류 |
 | 상태 변화 | 규칙이 늘어 다음 주 판정이 달라짐 |
 
-**절대 자동화하지 않을 것:** 승격은 사람을 거친다. **승인 시점에 `효력기간.시작`을 박고 기본값은 "소급 적용 안 함".**
+**절대 자동화하지 않을 것:** 승격은 사람을 거친다. **승인 시점에 `effective_period.start`를 박고 기본값은 "소급 적용 안 함".**
 
 ### 데이터 흐름
 
