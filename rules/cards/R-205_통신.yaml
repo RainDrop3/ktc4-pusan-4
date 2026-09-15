@@ -1,0 +1,18 @@
+# G2 · 통신 — 프로파일 940909 통상성[통신] = 조건부 (자택 겸 작업실)
+#
+# 전용/공용을 가르는 되묻기는 G3(R-230)에 있다. 이 카드는 G2 에서 '가능'을
+# 확정하지 않는 역할이다 — 확정해 버리면 뒤 관문이 판정을 못 낮춘다.
+# 평가셋 E-038(공용 휴대폰 회선)이 v1 에서 전액 경비로 나간 치명 오탐이 그 경로였다.
+id: R-205
+version: 1
+gate: G2
+priority: 500
+effective_period: { start: 2024-01-01, end: null }
+match:
+  category: [통신]
+  industry: ["940909"]
+verdict: 확인필요
+citations:
+  - { id: 소득세법-27-1, verified: true }
+  - { id: 소득세법-33-1-5, verified: true }
+review: { by: 미검수, date: 2026-09-15 }
