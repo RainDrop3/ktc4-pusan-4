@@ -148,7 +148,9 @@ class JudgmentEngineTest {
                 judgment -> judgment.questions().stream().map(QuestionSpec::code).toList(),
                 Judgment::appliedRuleIds, Judgment::appliedRuleVersions)
             .containsExactly(
-                Verdict.NEEDS_REVIEW,
+                // ASSET_TYPE 은 effect 가 없어 답해도 판정·계정과목을 못 바꾼다.
+                // 그런 질문은 확인필요로 강등하지 않는다 — 질문은 그대로 실려 나간다.
+                Verdict.AVAILABLE,
                 "접대비",
                 Map.of(
                     "businessRatio", 20,

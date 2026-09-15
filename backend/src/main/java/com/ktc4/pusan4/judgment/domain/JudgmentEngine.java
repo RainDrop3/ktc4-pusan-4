@@ -107,8 +107,12 @@ public final class JudgmentEngine {
         if (resolvedVerdict == Verdict.UNAVAILABLE) {
             questions.clear();
         }
-        // 미해소 질문 또는 답변 계정과목 충돌이 있으면 이 거래를 검토로 전환한다.
-        boolean review = !questions.isEmpty() || answeredAccountConflict;
+        // 미해소 질문이 결과를 바꿀 수 있을 때만 검토로 전환한다. 속성만 싣는 질문
+        // (예: G5 증빙 유무 -> 가산세 플래그)은 판정을 끌어내리지 않는다. 그 답은
+        // 가산세를 계산할 뿐이고, 경비 인정 여부는 이미 앞 관문이 확정했기 때문이다.
+        // 질문 자체는 그대로 실어 보내므로 화면은 여전히 되묻는다.
+        boolean review = questions.stream().anyMatch(JudgmentEngine::changesOutcome)
+            || answeredAccountConflict;
         Verdict verdict = review
             ? moreRestrictive(resolvedVerdict, Verdict.NEEDS_REVIEW)
             : resolvedVerdict;
@@ -173,6 +177,12 @@ public final class JudgmentEngine {
             case NEEDS_REVIEW -> 1;
             case UNAVAILABLE -> 2;
         };
+    }
+
+    /** 선택지 중 하나라도 판정이나 계정과목을 바꾸면 결과에 영향이 있는 질문이다. */
+    private static boolean changesOutcome(QuestionSpec question) {
+        return question.effects().values().stream()
+            .anyMatch(effect -> effect.verdict() != null || effect.account() != null);
     }
 
     private static QuestionEffect resolvedEffect(
