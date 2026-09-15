@@ -36,7 +36,7 @@ class EvalGraderTest {
 
     private static Judgment judgment(Verdict verdict, Gate gate, boolean inference, String... citations) {
         return new Judgment(
-            verdict, gate, inference, inference ? UnmatchedReason.RULE_NOT_FOUND : null, null,
+            verdict, gate, inference, inference ? UnmatchedReason.RULE_NOT_FOUND : null, false, null,
             List.of(), List.of(), List.of(citations).stream().map(Citation::new).toList(),
             Map.of(), List.of()
         );

@@ -1,10 +1,12 @@
 package com.ktc4.pusan4.judgment.domain;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class JudgmentEngine {
 
@@ -26,6 +28,7 @@ public final class JudgmentEngine {
                 Gate.G1,
                 false,
                 null,
+                false,
                 rule.account(),
                 List.of(rule.id()),
                 List.of(rule.version()),
@@ -45,7 +48,7 @@ public final class JudgmentEngine {
             .orElse(null);
         if (winner == null) {
             return new Judgment(
-                Verdict.NEEDS_REVIEW, Gate.G2, true, UnmatchedReason.RULE_NOT_FOUND, null,
+                Verdict.NEEDS_REVIEW, Gate.G2, true, UnmatchedReason.RULE_NOT_FOUND, false, null,
                 List.of(), List.of(), List.of(), java.util.Map.of(), List.of()
             );
         }
@@ -55,6 +58,7 @@ public final class JudgmentEngine {
         List<Integer> appliedRuleVersions = new ArrayList<>();
         LinkedHashSet<Citation> citations = new LinkedHashSet<>();
         Verdict resolvedVerdict = null;
+        boolean outOfScope = false;
         String defaultAccount = null;
         String answeredAccount = null;
         boolean answeredAccountConflict = false;
@@ -72,6 +76,7 @@ public final class JudgmentEngine {
 
         for (RuleCard rule : pipeline) {
             mergeAttributes(attributes, rule.attributes(), rule.id());
+            outOfScope |= rule.outOfScope();
             // 카드의 기본 판정을, 그 카드의 되묻기 응답(effect)이 있으면 대체한다.
             Verdict cardVerdict = rule.verdict();
             if (defaultAccount == null && rule.account() != null) {
@@ -107,8 +112,11 @@ public final class JudgmentEngine {
         if (resolvedVerdict == Verdict.UNAVAILABLE) {
             questions.clear();
         }
-        // 미해소 질문 또는 답변 계정과목 충돌이 있으면 이 거래를 검토로 전환한다.
-        boolean review = !questions.isEmpty() || answeredAccountConflict;
+        // 미해소 질문이 결과를 바꿀 수 있을 때만 검토로 전환한다. 가산세 플래그만 세우는
+        // G5 증빙 질문은 판정을 끌어내리지 않는다 — 경비 인정 여부는 앞 관문이 이미 확정했다.
+        // 질문 자체는 그대로 실어 보내므로 화면은 여전히 되묻는다.
+        boolean review = questions.stream().anyMatch(JudgmentEngine::changesOutcome)
+            || answeredAccountConflict;
         Verdict verdict = review
             ? moreRestrictive(resolvedVerdict, Verdict.NEEDS_REVIEW)
             : resolvedVerdict;
@@ -116,7 +124,7 @@ public final class JudgmentEngine {
             ? null
             : answeredAccount == null ? defaultAccount : answeredAccount;
         return new Judgment(
-            verdict, null, false, null, account, appliedRuleIds, appliedRuleVersions,
+            verdict, null, false, null, outOfScope, account, appliedRuleIds, appliedRuleVersions,
             List.copyOf(citations), attributes, questions
         );
     }
@@ -173,6 +181,19 @@ public final class JudgmentEngine {
             case NEEDS_REVIEW -> 1;
             case UNAVAILABLE -> 2;
         };
+    }
+
+    // 답이 당해 경비 '금액'을 바꾸는 속성. 자산화되면 당해 경비는 상각액뿐이라,
+    // 답을 듣기 전에 가능으로 확정하면 사용자가 전액 경비로 읽는다(금액 과대계상).
+    // 가산세_대상 같은 속성은 여기 없다 — 가산세를 계산할 뿐 경비 금액을 건드리지 않는다.
+    private static final Set<String> AMOUNT_BEARING_ATTRIBUTES = Set.of("자산", "즉시상각");
+
+    // 판정·계정과목·금액 중 하나라도 답에 따라 갈리면 확정하지 않는다.
+    private static boolean changesOutcome(QuestionSpec question) {
+        return question.effects().values().stream()
+            .anyMatch(effect -> effect.verdict() != null
+                || effect.account() != null
+                || !Collections.disjoint(effect.attributes().keySet(), AMOUNT_BEARING_ATTRIBUTES));
     }
 
     private static QuestionEffect resolvedEffect(

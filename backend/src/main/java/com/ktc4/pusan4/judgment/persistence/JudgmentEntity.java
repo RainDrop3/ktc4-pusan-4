@@ -53,6 +53,9 @@ class JudgmentEntity {
     @Column(name = "unmatched_reason")
     private String unmatchedReason;
 
+    @Column(name = "is_out_of_scope", nullable = false)
+    private boolean outOfScope;
+
     private String account;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -88,6 +91,7 @@ class JudgmentEntity {
         this.unmatchedReason = judgment.unmatchedReason() == null
             ? null
             : judgment.unmatchedReason().name();
+        this.outOfScope = judgment.outOfScope();
         this.account = judgment.account();
         this.attributes = judgment.attributes();
         this.appliedRuleIds = judgment.appliedRuleIds();

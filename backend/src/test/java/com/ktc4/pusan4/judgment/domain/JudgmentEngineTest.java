@@ -148,7 +148,9 @@ class JudgmentEngineTest {
                 judgment -> judgment.questions().stream().map(QuestionSpec::code).toList(),
                 Judgment::appliedRuleIds, Judgment::appliedRuleVersions)
             .containsExactly(
-                Verdict.NEEDS_REVIEW,
+                // ASSET_TYPE 은 effect 가 없어 답해도 판정·계정과목을 못 바꾼다.
+                // 그런 질문은 확인필요로 강등하지 않는다 — 질문은 그대로 실려 나간다.
+                Verdict.AVAILABLE,
                 "접대비",
                 Map.of(
                     "businessRatio", 20,
@@ -383,7 +385,7 @@ class JudgmentEngineTest {
     void ignores_rule_outside_transaction_effective_period() {
         RuleCard expired = new RuleCard(
             "R-004", 1, Gate.G1, 900,
-            RuleMatch.categories("지자체_과태료"), Verdict.UNAVAILABLE, null,
+            RuleMatch.categories("지자체_과태료"), Verdict.UNAVAILABLE, false, null,
             List.of(new Citation("소득세법-33-1-2")), Map.of(), List.of(),
             LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31),
             "외부자문", LocalDate.of(2024, 1, 1)

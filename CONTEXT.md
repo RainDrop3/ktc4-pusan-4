@@ -4,6 +4,9 @@
 >
 > v2 = 팀 회의 결정 반영 (6관문 복원 · OpenAI 스택 · 룰카드 저장 구조 · 카드사 2종 · (b)안 폐기)
 > 팀: 부산대 4팀 (카카오테크 캠퍼스)
+>
+> 2026-09-15 · 규칙 카드 명세를 13개 필드로 확정. `type`·`reason` 삭제, `question`·`out_of_scope` 도입, `attributes` 존치.
+> 필드 상세의 단일 원본은 [`docs/rule-card-fields.md`](docs/rule-card-fields.md) (§6 필수 요소).
 
 ---
 
@@ -741,88 +744,164 @@ id: R-004
 version: 1
 gate: G1
 priority: 900
-효력기간: { 시작: 2025-01-01, 종료: null }
+effective_period: { start: 2025-01-01, end: null }
 match:
   category: [지자체_과태료, 경찰청_범칙금]
-  keyword: ["과태료", "범칙금", "주정차위반"]
 verdict: 불가
-reason: "업무 중 발생했더라도 법령 위반으로 납부한 금액은 필요경비에서 제외됩니다."
 citations:
-  - { id: 소득세법-33-1-2, 위계: 법률 }
-evidence: []
+  - { id: 소득세법-33-1-2, verified: true }
 review: { by: 외부자문, date: 2026-09-05 }
 ```
 
+> `match` 조건은 전부 AND 다. 위 카드에 `keyword: ["과태료"]` 를 같이 걸면
+> "지자체_과태료로 분류됐지만 상호 원문에 그 단어가 없는 건"이 빠져나간다.
+> 카테고리와 키워드로 동시에 잡으려면 카드를 둘로 나눈다(실물 R-004 / R-007).
+
 ```yaml
-# rules/cards/R-031_서버클라우드.yaml — G2, 프로파일 참조
+# rules/cards/R-031_서버클라우드.yaml — G2, 업종 고정
 id: R-031
 version: 1
 gate: G2
 priority: 500
+effective_period: { start: 2025-01-01, end: null }
 match:
   category: [서버_클라우드]
-verdict_by_profile:          # ← 업종별 답을 프로파일에서
-  통상:   가능
-  조건부: 확인필요
-  비통상: 확인필요
-  미기입: 확인필요           # ⭐ 필수. 프로파일 없는 업종의 안전 기본값
+  industry: ["940909"]
+verdict: 가능
 account: 지급수수료
-reason: "사업 운영에 직접 사용되는 서비스 이용료입니다."
 citations:
-  - { id: 소득세법-27-1, 위계: 법률 }
-evidence: [세금계산서 또는 카드매출전표]
+  - { id: 소득세법-27-1, verified: true }
 review: { by: 외부자문, date: 2026-09-05 }
 ```
 
+> 업종별로 답이 갈리는 카드는 지금 `match.industry` 로 업종을 고정해 카드를 나눈다.
+> 프로파일에서 판정을 끌어오는 `verdict_by_profile` 은 **명세에도 엔진에도 아직 없다.**
+> 도입하려면 명세에 12번째 필드를 추가하는 결정이 먼저다.
+
 ```yaml
-# rules/cards/R-027_카페.yaml — G3 속성형 + 되묻기
+# rules/cards/R-070_업무용승용차.yaml — G2, 범위 밖 핸드오프
+id: R-070
+version: 1
+gate: G2
+priority: 700
+effective_period: { start: 2024-01-01, end: null }
+match:
+  category: [차량]
+verdict: 확인필요
+out_of_scope: true           # ← 판정하지 않고 넘긴다. 불가가 아니다
+citations:
+  - { id: 소득세법-33의2, verified: true }
+review: { by: 외부자문, date: 2026-09-05 }
+```
+
+> 차량은 운행기록부·연간 한도·상각 특례가 한꺼번에 걸려 규칙 카드 몇 장으로 끝나지 않는다.
+> `불가`로 쓰면 사용자가 실제 경비를 포기하고, `확인필요`만 쓰면 되묻기 대기와 구분되지 않는다.
+
+```yaml
+# rules/cards/R-027_카페.yaml — G3 + 되묻기
 id: R-027
 version: 1
 gate: G3
 priority: 401
+effective_period: { start: 2025-01-01, end: null }
 match:
   category: [카페]
   amount_max: 30000
+citations:
+  - { id: 소득세법-33-1-5, verified: true }
+  - { id: 소득세법기본통칙-33-3, verified: true }
 question:
+  code: CAFE_PURPOSE
   text: "이 결제는 어떤 용도였나요?"
   fact_type: 용도
   group_by: merchant_norm      # 같은 카페 12건을 한 화면에
   options:
-    - { value: 업무미팅, verdict: 가능, account: 접대비,   limit_bucket: 접대비, evidence: [상대방·목적 메모] }
-    - { value: 혼자작업, verdict: 가능, account: 소모품비, evidence: [] }
+    - { value: 업무미팅, verdict: 가능, account: 접대비,   limit_bucket: 접대비 }
+    - { value: 혼자작업, verdict: 가능, account: 소모품비 }
     - { value: 개인,     verdict: 불가 }
-citations:
-  - { id: 소득세법-33-1-5,       위계: 법률 }
-  - { id: 소득세법기본통칙-33-3, 위계: 기본통칙 }
+review: { by: 외부자문, date: 2026-09-05 }
 ```
 
 ```yaml
-# rules/cards/R-051_자산일반.yaml — G4 속성형. verdict 없음
+# rules/cards/R-051_자산일반.yaml — G4. 카드 verdict 없이 되묻기 effect 로만 속성을 남긴다
 id: R-051
 version: 1
 gate: G4
 priority: 500
+effective_period: { start: 2025-01-01, end: null }
 match:
   amount_min: 1000001
   exclude_category: [소모품, 식음료, 카페]
-attributes:                   # ← 판정 대신 이걸 남김
-  자산: true
-  내용연수: 5
-  상각방법: 정액법
-  자산대장_등재: true
-reason: "취득가액이 100만원을 넘어 감가상각자산으로 처리됩니다."
 citations:
-  - { id: 소득세법시행령-62,   위계: 시행령 }
-  - { id: 소득세법시행령-67-4, 위계: 시행령 }
-evidence: [자산대장 등재]
+  - { id: 소득세법시행령-62, verified: true }
+  - { id: 소득세법시행령-67-4, verified: true }
+question:
+  code: ASSET_USEFUL_LIFE
+  text: "이 물품을 1년 넘게 사용하나요?"
+  fact_type: 자산여부
+  group_by: transaction
+  options:
+    # value·verdict·account 를 뺀 나머지 키가 그대로 판정 속성이 된다
+    - { value: 1년 넘게 사용, 자산: true, 내용연수: 5, 상각방법: 정액법, 자산대장_등재: true }
+    - { value: 1년 이내 소모, 자산: false }
+review: { by: 외부자문, date: 2026-09-05 }
 ```
 
 ### 필수 요소
 
-**공통:** `id` `version` `gate` `priority` `match` `효력기간` `review`
-**차단형(G1·G2):** `verdict` 또는 `verdict_by_profile`, `reason`, **`citations`(가능/불가면 필수)**, `account`
-**속성형(G3~G6):** `attributes` (`verdict` 없음)
-**되묻기 있으면:** `question` (`fact_type`, `group_by`, `options`)
+| 필드 | 타입 | 필수 | 비고 |
+|---|---|:---:|---|
+| `id` | string | ✅ | 유니크. 예 `R-051` |
+| `version` | int | ✅ | |
+| `gate` | enum G0~G6 | ✅ | 관문 |
+| `priority` | int | ✅ | **401 이상만** (400 이하는 학습룰 대역이라 로딩 거부) |
+| `effective_period` | {start, end} | ✅ | `end`는 null 가능 |
+| `match` | object | ✅ | `category`, `exclude_category`, `keyword`, `amount_min/max`, `industry` — 전부 **리스트만** |
+| `verdict` | enum | 조건부 | 가능→AVAILABLE, 불가→UNAVAILABLE, 확인필요→NEEDS_REVIEW. 차단형(G1·G2)은 필수 |
+| `out_of_scope` | bool | | 판정하지 않고 세무사에게 넘긴다. `verdict: 확인필요`일 때만 |
+| `account` | string | | 계정과목 (예: 소모품비) |
+| `citations` | list | 조건부 | 확정 verdict(가능·불가)면 필수 |
+| `attributes` | map | | `match`만으로 확정되는 속성. 속성 관문(G3~G6)에 누적된다 |
+| `question` | object | | `code`, `text`, `fact_type`, `group_by`, `options[]` |
+| `review` | {by, date} | ✅ | 검토자/검토일 |
+
+**이 13개가 전부다.** 카드에 다른 최상위 필드를 두지 않는다. 필드별 상세는
+[`docs/rule-card-fields.md`](docs/rule-card-fields.md)가 단일 원본이다.
+
+> ⚠️ **`out_of_scope` — 확인필요 하나에 뭉개진 네 상태를 가른다.**
+> 판정하지 못하는 상태는 넷인데 출력이 전부 `NEEDS_REVIEW`라 할 말이 정반대인 건들이
+> 같은 화면으로 나갔다. 셋은 엔진이 알고, 카드가 선언할 건 ② 하나뿐이다.
+>
+> | | 상태 | 예 | 무엇으로 아는가 |
+> |---|---|---|---|
+> | ① | 되묻기 대기 | R-101 답변 전 | `questions`가 비어 있지 않다 |
+> | ② | **범위 밖 핸드오프** | R-070·R-071 | **`out_of_scope`** |
+> | ③ | 후속 관문 대기 | `업무·개인 혼용`, `자택 겸용`, `연간 일시불` | 답은 있는데 effect에 verdict가 없다 |
+> | ④ | 미매칭 안전망 | G2에서 카드 0장 | `unmatched_reason = RULE_NOT_FOUND` |
+>
+> **verdict의 네 번째 값으로 만들지 않는다.** 관문 간 병합은 제한 강도 순서
+> (가능 < 확인필요 < 불가)로 이긴 쪽을 고른다(`moreRestrictive`). 범위 밖은 불가보다
+> 더/덜 제한적인 게 아니라 축이 다르므로, 강도 한 줄에 끼우면 순서가 깨진다.
+>
+> **`unmatched_reason`도 재사용하지 않는다.** 그 값이 있으면 `unmatched_log`에 행이
+> 쌓이는데(`JudgmentService`), 범위 밖 카드는 매칭에 **성공한** 카드다. 미매칭을 모아
+> 규칙을 학습하는 루프에 섞으면 오염된다.
+>
+> ③이 ②보다 위험하다. ③은 이미 경비로 인정된 건인데 확인필요로 보이면 사용자가 포기한다.
+> 다만 엔진이 아는 상태라 카드가 선언할 게 없다 — 화면 문구를 나누는 건 FE 몫이다.
+
+> ⚠️ **`attributes`와 되묻기 effect의 경계.** 속성을 실을 자리가 둘이라 매번 헷갈린다.
+> 기준은 하나다 — **`match` 조건만으로 값이 정해지면 `attributes`, 답에 따라 갈리면 effect.**
+>
+> - `attributes` — R-060의 `증빙필요: true`. 3만원 초과면 답을 듣기 전에 이미 참이다.
+> - effect — R-051의 `내용연수: 5`. 100만원을 넘어도 1년 이내 소모품이면 자산이 아니다.
+>   금액만 보고 `attributes`에 박으면 소모품에도 감가상각이 붙는다.
+>
+> 되묻기가 귀찮다고 갈리는 값을 `attributes`로 내리면 조용히 틀린 속성이 실린다.
+> 반대로 확정된 값을 effect에만 두면 사용자가 답해야 비로소 화면에 뜨는 과잉 질문이 된다.
+>
+> 두 자리는 같은 맵으로 병합된다(`JudgmentEngine.mergeAttributes`). 같은 키에 다른 값이
+> 들어오면 예외이므로, 한 카드에서 같은 키를 양쪽에 두지 않는다.
 
 > 같은 `priority`에서 어떤 카드가 이기는지(구체성 점수·정렬 규칙)는 위 **"승자 결정 — best-match"** 섹션 참고.
 
@@ -1521,7 +1600,7 @@ class RuleCardDraft(BaseModel):
 | 다단계·분기 | 충분하면 조기 종료, 없으면 다음 섹션, 끝까지 없으면 보류 |
 | 상태 변화 | 규칙이 늘어 다음 주 판정이 달라짐 |
 
-**절대 자동화하지 않을 것:** 승격은 사람을 거친다. **승인 시점에 `효력기간.시작`을 박고 기본값은 "소급 적용 안 함".**
+**절대 자동화하지 않을 것:** 승격은 사람을 거친다. **승인 시점에 `effective_period.start`를 박고 기본값은 "소급 적용 안 함".**
 
 ### 데이터 흐름
 

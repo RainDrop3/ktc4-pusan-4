@@ -163,6 +163,51 @@ class RuleCardLoaderTest {
     }
 
     @Test
+    void rejects_out_of_scope_card_that_already_decided() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-080.yaml"), """
+            id: R-080
+            version: 1
+            gate: G2
+            priority: 500
+            effective_period: { start: 2025-01-01, end: null }
+            match:
+              category: [카페]
+            verdict: 불가
+            out_of_scope: true
+            citations:
+              - { id: 소득세법-33-1-5, verified: true }
+            review: { by: 외부자문, date: 2026-09-05 }
+            """);
+
+        assertThatThrownBy(() -> new RuleCardLoader().load(root))
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("out_of_scope");
+    }
+
+    // 오타가 false 로 조용히 떨어지면 핸드오프가 사라지고 확인필요로만 보인다.
+    @Test
+    void rejects_non_boolean_out_of_scope() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-081.yaml"), """
+            id: R-081
+            version: 1
+            gate: G2
+            priority: 500
+            effective_period: { start: 2025-01-01, end: null }
+            match:
+              category: [카페]
+            verdict: 확인필요
+            out_of_scope: "ture"
+            review: { by: 외부자문, date: 2026-09-05 }
+            """);
+
+        assertThatThrownBy(() -> new RuleCardLoader().load(root))
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("boolean");
+    }
+
+    @Test
     void rejects_conflicting_attribute_cards() throws IOException {
         Files.createDirectories(root.resolve("cards"));
         Files.writeString(root.resolve("cards/R-030.yaml"), """
