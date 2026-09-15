@@ -117,6 +117,19 @@ class RuleCardLoaderRealCardsTest {
     }
 
     /**
+     * `증빙필요` 는 amount_min 만으로 정해지므로 R-060 의 카드 attributes 에 있다.
+     * 되묻기 effect 로 내리면 답변 전까지 화면에 뜨지 않는다.
+     */
+    @Test
+    void 증빙필요는_답변_전에도_속성으로_실린다() throws IOException {
+        Judgment judgment = JudgmentEngine.judge(
+            거래("AMAZON WEB SERVICES", "해외SaaS", 50_000), 인적용역, List.of(), load());
+
+        assertThat(judgment.attributes()).containsEntry("증빙필요", true);
+        assertThat(judgment.attributes()).doesNotContainKey("가산세_대상");
+    }
+
+    /**
      * 답변 전에는 확정하지 않는다. 근거는 비우지 않고 양쪽(§27① 가능 / §33①5 불가)을
      * 함께 싣는다 — 로더가 확정 verdict 선택지에 근거를 요구하는데, 엔진이 답변 전에도
      * 카드 citations 를 그대로 싣기 때문이다. 한쪽만 실으면 판정하지 않은 결론으로 읽힌다.
