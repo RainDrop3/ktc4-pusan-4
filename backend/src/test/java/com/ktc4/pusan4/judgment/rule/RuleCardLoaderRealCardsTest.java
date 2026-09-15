@@ -132,6 +132,29 @@ class RuleCardLoaderRealCardsTest {
         assertThat(되묻기.questions()).isNotEmpty();
     }
 
+    /**
+     * 자산 되묻기는 판정이 아니라 당해 경비 '금액'을 바꾼다. 답을 듣기 전에 가능으로
+     * 확정하면 사용자가 전액 경비로 읽는데, 실제로는 상각액뿐이라 금액 과대계상이 된다.
+     * 증빙 되묻기와 갈리는 지점이다 — 그쪽은 가산세만 세우므로 강등하지 않는다.
+     * 평가셋 E-055 가 이 경계를 치명으로 잡는다.
+     */
+    @Test
+    void 금액을_바꾸는_자산_되묻기는_판정을_확정하지_않는다() throws IOException {
+        RuleSet rules = load();
+
+        Judgment 비품 = JudgmentEngine.judge(
+            거래("오피스디포 문서세단기", "사무용품", 1_000_001), 인적용역, List.of(), rules);
+        Judgment 증빙만 = JudgmentEngine.judge(
+            거래("AMAZON WEB SERVICES", "해외SaaS", 50_000), 인적용역, List.of(), rules);
+
+        assertThat(비품.verdict()).isEqualTo(Verdict.NEEDS_REVIEW);
+        assertThat(비품.questions()).isNotEmpty();
+
+        // 가산세 플래그만 세우는 질문은 앞 관문의 확정을 끌어내리지 않는다.
+        assertThat(증빙만.verdict()).isEqualTo(Verdict.AVAILABLE);
+        assertThat(증빙만.questions()).isNotEmpty();
+    }
+
     /** 범위 밖은 판정과 축이 다르다. 불가로 확정된 건이 동시에 핸드오프일 수는 없다. */
     @Test
     void 불가_확정에는_범위밖이_붙지_않는다() throws IOException {
