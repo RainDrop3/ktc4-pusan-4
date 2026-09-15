@@ -5,7 +5,7 @@
 > v2 = 팀 회의 결정 반영 (6관문 복원 · OpenAI 스택 · 룰카드 저장 구조 · 카드사 2종 · (b)안 폐기)
 > 팀: 부산대 4팀 (카카오테크 캠퍼스)
 >
-> 2026-09-15 · 규칙 카드 명세를 11개 필드로 확정. `type`·`reason`·`attributes` 삭제, `question` 도입 (§6 필수 요소).
+> 2026-09-15 · 규칙 카드 명세를 12개 필드로 확정. `type`·`reason` 삭제, `question` 도입, `attributes` 존치 (§6 필수 요소).
 
 ---
 
@@ -840,14 +840,24 @@ review: { by: 외부자문, date: 2026-09-05 }
 | `verdict` | enum | 조건부 | 가능→AVAILABLE, 불가→UNAVAILABLE, 확인필요→NEEDS_REVIEW. 차단형(G1·G2)은 필수 |
 | `account` | string | | 계정과목 (예: 소모품비) |
 | `citations` | list | 조건부 | 확정 verdict(가능·불가)면 필수 |
+| `attributes` | map | | `match`만으로 확정되는 속성. 속성 관문(G3~G6)에 누적된다 |
 | `question` | object | | `code`, `text`, `fact_type`, `group_by`, `options[]` |
 | `review` | {by, date} | ✅ | 검토자/검토일 |
 
-**이 11개가 전부다.** 카드에 다른 최상위 필드를 두지 않는다.
+**이 12개가 전부다.** 카드에 다른 최상위 필드를 두지 않는다.
 
-> ⚠️ `attributes`를 뺐으므로 G3~G6 속성형 카드는 카드 자체로는 남길 값이 없다.
-> 되묻기 선택지의 effect(`options[]`에서 `value`·`verdict`·`account`를 뺀 나머지 키)로만
-> 속성이 판정에 실린다.
+> ⚠️ **`attributes`와 되묻기 effect의 경계.** 속성을 실을 자리가 둘이라 매번 헷갈린다.
+> 기준은 하나다 — **`match` 조건만으로 값이 정해지면 `attributes`, 답에 따라 갈리면 effect.**
+>
+> - `attributes` — R-060의 `증빙필요: true`. 3만원 초과면 답을 듣기 전에 이미 참이다.
+> - effect — R-051의 `내용연수: 5`. 100만원을 넘어도 1년 이내 소모품이면 자산이 아니다.
+>   금액만 보고 `attributes`에 박으면 소모품에도 감가상각이 붙는다.
+>
+> 되묻기가 귀찮다고 갈리는 값을 `attributes`로 내리면 조용히 틀린 속성이 실린다.
+> 반대로 확정된 값을 effect에만 두면 사용자가 답해야 비로소 화면에 뜨는 과잉 질문이 된다.
+>
+> 두 자리는 같은 맵으로 병합된다(`JudgmentEngine.mergeAttributes`). 같은 키에 다른 값이
+> 들어오면 예외이므로, 한 카드에서 같은 키를 양쪽에 두지 않는다.
 
 > 같은 `priority`에서 어떤 카드가 이기는지(구체성 점수·정렬 규칙)는 위 **"승자 결정 — best-match"** 섹션 참고.
 
