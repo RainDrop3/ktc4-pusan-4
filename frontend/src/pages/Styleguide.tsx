@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowRightIcon } from 'lucide-react';
 import { StatuteCitation } from '../components/StatuteCitation';
 import { VerdictBadge } from '../components/VerdictBadge';
@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  ChoiceGroup,
   Container,
   Field,
   Input,
@@ -72,6 +73,7 @@ function Block({
 }
 
 export function Styleguide() {
+  const [industry, setIndustry] = useState('62010');
   return (
     <div className="min-h-full bg-surface">
       <Container className="py-16">
@@ -207,6 +209,22 @@ export function Styleguide() {
             <Field label="이메일" htmlFor="sg-email" error="이메일 형식을 확인해 주세요.">
               <Input id="sg-email" type="email" defaultValue="dev@example" />
             </Field>
+          </div>
+        </Block>
+
+        <Block title="ChoiceGroup" note="단일 선택 3~6개. 있지만 안 되는 선택지는 disabled로 — 흐리게 + '준비 중'. 눌리는데 아무 일 없는 버튼은 만들지 않는다.">
+          <div className="max-w-xl">
+            <ChoiceGroup
+              name="업종"
+              value={industry}
+              onChange={setIndustry}
+              options={[
+              { value: '62010', label: 'IT 개발 · 프리랜서', hint: '62010 컴퓨터 프로그래밍' },
+              { value: '73203', label: '디자이너', disabled: true },
+              { value: '85699', label: '온라인 강사', disabled: true },
+              { value: 'ETC', label: '그 외', disabled: true, disabledLabel: '문의' }]
+              } />
+            
           </div>
         </Block>
 

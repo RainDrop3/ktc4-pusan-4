@@ -4,12 +4,23 @@ import { ArrowRightIcon, InfoIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { DEFAULT_CONTEXT, useSession } from '../contexts/SessionContext';
 import type { BookkeepingDuty, BusinessContext } from '../types/domain';
+import { ChoiceGroup, type ChoiceOption } from '../components/ui';
 import { formatNumber } from '../utils/format';
 
-/** 업종은 IT(62010)로 고정. 서비스 대상이 1인 IT 개발 사업자뿐이다. */
-const INDUSTRY_LABEL = '62010 · 컴퓨터 프로그래밍 서비스업';
+/**
+ * 서비스는 IT 개발·프리랜서만 동작한다. 다른 직종은 보이되 선택되지 않는다 —
+ * 있지만 안 되는 선택지는 '준비 중'으로 표기한다 (DESIGN.md).
+ */
+const INDUSTRIES: ChoiceOption<string>[] = [
+{ value: '62010', label: 'IT 개발 · 프리랜서', hint: '62010 컴퓨터 프로그래밍' },
+{ value: '73203', label: '디자이너', disabled: true },
+{ value: '85699', label: '온라인 강사', disabled: true },
+{ value: '59120', label: '영상 편집', disabled: true },
+{ value: '47912', label: '온라인 판매', disabled: true },
+{ value: 'ETC', label: '그 외', disabled: true }];
 
-const BOOKKEEPING: {value: BookkeepingDuty;label: string;hint: string;}[] = [
+
+const BOOKKEEPING: ChoiceOption<BookkeepingDuty>[] = [
 { value: '복식부기', label: '복식부기', hint: '직전연도 수입 7,500만 원 이상' },
 { value: '간편장부', label: '간편장부', hint: '서비스 대상 밖 (참고용)' },
 { value: '추계', label: '추계', hint: '서비스 대상 밖 (참고용)' }];
@@ -18,53 +29,6 @@ const BOOKKEEPING: {value: BookkeepingDuty;label: string;hint: string;}[] = [
 const cardClass = 'rounded-2xl border border-line bg-surface p-5';
 const labelClass = 'text-[14px] font-semibold text-ink';
 const hintClass = 'mt-1 text-[13px] leading-6 text-muted';
-
-function ChoiceRow<T extends string | boolean>({
-  options,
-  value,
-  onChange,
-  name
-
-
-
-
-
-}: {options: {value: T;label: string;hint?: string;}[];value: T;onChange: (value: T) => void;name: string;}) {
-  return (
-    <div role="radiogroup" aria-label={name} className="mt-3 grid gap-2 sm:grid-cols-3">
-      {options.map((option) => {
-        const selected = option.value === value;
-        return (
-          <button
-            key={String(option.value)}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onChange(option.value)}
-            className={`rounded-xl border px-3.5 py-3 text-left transition-colors duration-150 ease-snap ${
-            selected ?
-            'border-accent bg-accent-soft' :
-            'border-line bg-surface hover:bg-canvas'}`
-            }>
-            
-            <span
-              className={`block text-[13px] font-semibold ${
-              selected ? 'text-accent' : 'text-ink'}`
-              }>
-              
-              {option.label}
-            </span>
-            {option.hint &&
-            <span className="mt-0.5 block text-[12px] leading-5 text-muted">
-                {option.hint}
-              </span>
-            }
-          </button>);
-
-      })}
-    </div>);
-
-}
 
 export function Interview() {
   const navigate = useNavigate();
@@ -114,11 +78,15 @@ export function Interview() {
             <section className={cardClass}>
               <span className={labelClass}>1. 업종</span>
               <p className={hintClass}>
-                이 서비스는 1인 IT 개발 사업자만 대상으로 해서 업종이 고정됩니다.
+                지금은 IT 개발·프리랜서만 판정합니다. 다른 직종은 규칙 카드가 준비되면
+                열립니다.
               </p>
-              <p className="mt-3 rounded-xl border border-line bg-canvas px-3.5 py-2.5 text-[14px] text-ink2">
-                {INDUSTRY_LABEL}
-              </p>
+              <ChoiceGroup
+                name="업종"
+                className="mt-3"
+                value={form.industryCode}
+                onChange={(value) => update('industryCode', value)}
+                options={INDUSTRIES} />
             </section>
 
             <section className={cardClass}>
@@ -167,7 +135,8 @@ export function Interview() {
               <p className={hintClass}>
                 직전연도 수입금액으로 자동 판정된 값이 기본 선택됩니다.
               </p>
-              <ChoiceRow
+              <ChoiceGroup
+                className="mt-3"
                 name="기장의무"
                 value={form.bookkeepingDuty}
                 onChange={(value) => update('bookkeepingDuty', value)}
@@ -181,7 +150,8 @@ export function Interview() {
                 직원 보유 사업자는 서비스 대상 밖입니다. 복리후생비 판정에만
                 사용합니다.
               </p>
-              <ChoiceRow
+              <ChoiceGroup
+                className="mt-3"
                 name="직원 유무"
                 value={form.hasEmployee}
                 onChange={(value) => update('hasEmployee', value)}
@@ -197,7 +167,8 @@ export function Interview() {
               <p className={hintClass}>
                 자택 겸용이면 통신비·관리비를 업무 사용 비율로 안분합니다.
               </p>
-              <ChoiceRow
+              <ChoiceGroup
+                className="mt-3"
                 name="자택 작업 여부"
                 value={homeOffice}
                 onChange={(value) =>

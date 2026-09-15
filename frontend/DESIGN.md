@@ -10,7 +10,7 @@
 | 층 | 어디에 | 무엇 |
 |---|---|---|
 | 토큰 | `tailwind.config.js` | 색·타이포·폭·그림자·이징. 화면에서는 이름으로만 쓴다 |
-| 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field |
+| 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field, ChoiceGroup |
 | 도메인 부품 | `src/components/` | VerdictBadge, StatuteCitation, AgentPreview — ui 부품 위에 도메인 의미를 얹은 것 |
 | 타입 | `src/types/domain.ts` | API 명세와 1:1. 화면 편의 필드를 여기 추가하지 않는다 |
 | 규칙 | 이 문서 | 코드로 강제 못 하는 것 |
@@ -99,6 +99,11 @@
 ### Container
 모든 섹션 내용은 이 안에 둔다. 배경색이 있는 띠 섹션은 `<section class="bg-canvas"><Container>…` 구조.
 
+### ChoiceGroup
+- 단일 선택지 3~6개 (문진, 질문 응답). `value`는 문자열 또는 불리언.
+- **있지만 아직 동작하지 않는 선택지는 `disabled: true`** — 흐리게 보이고 눌리지 않으며 '준비 중'이 붙는다. 다른 직종처럼 "보여는 주되 IT만 동작"할 때 쓴다.
+- 눌리는데 아무 일도 일어나지 않는 버튼은 만들지 않는다. 사용자는 그걸 고장으로 읽는다.
+
 ### Field · Input · Select
 - 라벨 `body-lg semibold`, 힌트 `small muted`, 오류 `small deny` + `role="alert"`.
 - 입력은 기본 `w-full`. 폭을 줄이려면 `className`이 아니라 감싸는 div에 폭을 준다 (클래스 충돌 회피).
@@ -119,5 +124,5 @@
 
 ## 아직 없는 것 (앱 화면 명세 뒤 추가 예정)
 
-Table, Tabs, Toast/알림, Modal, 진행 표시(Stepper), 빈 상태(Empty), 파일 드롭존.
+Table, Tabs, Toast/알림, Modal, 진행 표시(Stepper·Progress), 빈 상태(Empty), 파일 드롭존, FilterBar, Drawer, StatTile, Timeline.
 지금 앱 페이지(`Upload`, `Interview`, `Results` 등)는 아직 옛 클래스 그대로이며, 명세 확정 후 치오님과 나눠 교체한다.
