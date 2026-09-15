@@ -12,6 +12,7 @@ public record RuleCard(
     int priority,
     RuleMatch match,
     Verdict verdict,
+    boolean outOfScope,
     String account,
     List<Citation> citations,
     Map<String, Object> attributes,
@@ -43,8 +44,8 @@ public record RuleCard(
         List<QuestionSpec> questions
     ) {
         this(
-            id, version, gate, priority, match, verdict, account, citations, attributes, questions,
-            LocalDate.MIN, null, "test", LocalDate.MIN
+            id, version, gate, priority, match, verdict, false, account, citations, attributes,
+            questions, LocalDate.MIN, null, "test", LocalDate.MIN
         );
     }
 

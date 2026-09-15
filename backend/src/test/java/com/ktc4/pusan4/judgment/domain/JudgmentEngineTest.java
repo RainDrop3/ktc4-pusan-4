@@ -385,7 +385,7 @@ class JudgmentEngineTest {
     void ignores_rule_outside_transaction_effective_period() {
         RuleCard expired = new RuleCard(
             "R-004", 1, Gate.G1, 900,
-            RuleMatch.categories("지자체_과태료"), Verdict.UNAVAILABLE, null,
+            RuleMatch.categories("지자체_과태료"), Verdict.UNAVAILABLE, false, null,
             List.of(new Citation("소득세법-33-1-2")), Map.of(), List.of(),
             LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31),
             "외부자문", LocalDate.of(2024, 1, 1)

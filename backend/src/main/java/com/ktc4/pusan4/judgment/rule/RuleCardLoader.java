@@ -113,6 +113,18 @@ public final class RuleCardLoader {
             throw new RuleCardValidationException(id + ": blocking gate requires verdict");
         }
 
+        // 오타가 조용히 false 로 떨어지면 핸드오프가 사라지고 확인필요로만 보인다. 타입을 못박는다.
+        JsonNode outOfScopeNode = root.path("out_of_scope");
+        if (!outOfScopeNode.isMissingNode() && !outOfScopeNode.isBoolean()) {
+            throw new RuleCardValidationException(id + ": out_of_scope must be a boolean");
+        }
+        // 범위 밖은 판정이 아니라 사유다. 가능·불가로 이미 답한 카드가 동시에 넘길 수는 없다.
+        boolean outOfScope = outOfScopeNode.booleanValue();
+        if (outOfScope && verdict != Verdict.NEEDS_REVIEW) {
+            throw new RuleCardValidationException(
+                id + ": out_of_scope requires verdict 확인필요");
+        }
+
         List<Citation> citations = citations(root.path("citations"));
         if ((verdict == Verdict.AVAILABLE || verdict == Verdict.UNAVAILABLE) && citations.isEmpty()) {
             throw new RuleCardValidationException(id + ": final verdict requires citation");
@@ -133,7 +145,8 @@ public final class RuleCardLoader {
         LocalDate reviewedAt = LocalDate.parse(requiredText(review, "date"));
 
         return new RuleCard(
-            id, version, gate, priority, ruleMatch, verdict, optionalText(root, "account"), citations,
+            id, version, gate, priority, ruleMatch, verdict, outOfScope,
+            optionalText(root, "account"), citations,
             objectMap(root.path("attributes")), questions,
             effectiveFrom, effectiveTo, reviewedBy, reviewedAt
         );

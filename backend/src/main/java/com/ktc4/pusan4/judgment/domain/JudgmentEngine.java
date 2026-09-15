@@ -26,6 +26,7 @@ public final class JudgmentEngine {
                 Gate.G1,
                 false,
                 null,
+                false,
                 rule.account(),
                 List.of(rule.id()),
                 List.of(rule.version()),
@@ -45,7 +46,7 @@ public final class JudgmentEngine {
             .orElse(null);
         if (winner == null) {
             return new Judgment(
-                Verdict.NEEDS_REVIEW, Gate.G2, true, UnmatchedReason.RULE_NOT_FOUND, null,
+                Verdict.NEEDS_REVIEW, Gate.G2, true, UnmatchedReason.RULE_NOT_FOUND, false, null,
                 List.of(), List.of(), List.of(), java.util.Map.of(), List.of()
             );
         }
@@ -55,6 +56,7 @@ public final class JudgmentEngine {
         List<Integer> appliedRuleVersions = new ArrayList<>();
         LinkedHashSet<Citation> citations = new LinkedHashSet<>();
         Verdict resolvedVerdict = null;
+        boolean outOfScope = false;
         String defaultAccount = null;
         String answeredAccount = null;
         boolean answeredAccountConflict = false;
@@ -72,6 +74,7 @@ public final class JudgmentEngine {
 
         for (RuleCard rule : pipeline) {
             mergeAttributes(attributes, rule.attributes(), rule.id());
+            outOfScope |= rule.outOfScope();
             // 카드의 기본 판정을, 그 카드의 되묻기 응답(effect)이 있으면 대체한다.
             Verdict cardVerdict = rule.verdict();
             if (defaultAccount == null && rule.account() != null) {
@@ -120,7 +123,7 @@ public final class JudgmentEngine {
             ? null
             : answeredAccount == null ? defaultAccount : answeredAccount;
         return new Judgment(
-            verdict, null, false, null, account, appliedRuleIds, appliedRuleVersions,
+            verdict, null, false, null, outOfScope, account, appliedRuleIds, appliedRuleVersions,
             List.copyOf(citations), attributes, questions
         );
     }

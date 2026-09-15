@@ -8,6 +8,7 @@ public record Judgment(
     Gate blockedAtGate,
     boolean inference,
     UnmatchedReason unmatchedReason,
+    boolean outOfScope,
     String account,
     List<String> appliedRuleIds,
     List<Integer> appliedRuleVersions,
@@ -35,7 +36,7 @@ public record Judgment(
         List<QuestionSpec> questions
     ) {
         this(
-            verdict, blockedAtGate, inference, unmatchedReason, account,
+            verdict, blockedAtGate, inference, unmatchedReason, false, account,
             appliedRuleIds, appliedRuleIds.stream().map(ignored -> 0).toList(),
             citations, attributes, questions
         );

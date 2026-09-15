@@ -266,7 +266,7 @@ class JudgmentSchemaIntegrationTest {
         insertBatch(batchId, userId, "unmatched-file-hash");
         insertTransaction(transactionId, batchId, "unmatched-natural-key");
         Judgment result = new Judgment(
-            Verdict.NEEDS_REVIEW, Gate.G2, true, UnmatchedReason.RULE_NOT_FOUND, null,
+            Verdict.NEEDS_REVIEW, Gate.G2, true, UnmatchedReason.RULE_NOT_FOUND, false, null,
             List.of("U-001"), List.of(7), List.of(), Map.of("source", "inference"),
             List.of(new QuestionSpec(
                 "merchant-purpose", "사용 목적은 무엇인가요?", "purpose", "merchant", List.of("업무", "개인")
@@ -321,7 +321,7 @@ class JudgmentSchemaIntegrationTest {
                 'DOC-3', '조', '롤백 테스트', 'https://law.go.kr/test')
             """);
         Judgment judgment = new Judgment(
-            Verdict.NEEDS_REVIEW, Gate.G2, false, UnmatchedReason.RULE_NOT_FOUND, null,
+            Verdict.NEEDS_REVIEW, Gate.G2, false, UnmatchedReason.RULE_NOT_FOUND, false, null,
             List.of(), List.of(), List.of(new Citation("rollback-statute")), Map.of(), List.of()
         );
 
