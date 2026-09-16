@@ -42,7 +42,7 @@ export function Interview() {
 
   const bookkeeping =
   form.prevYearRevenue >= 75_000_000 ? '복식부기 의무자' : '간편장부 대상자';
-  const homeOffice = form.homeOfficeRatio !== undefined;
+  const homeOffice = form.homeOfficeRatio > 0;
 
   const impacts = [
   form.hasEmployee ?
@@ -172,7 +172,7 @@ export function Interview() {
                 name="자택 작업 여부"
                 value={homeOffice}
                 onChange={(value) =>
-                update('homeOfficeRatio', value ? 20 : undefined)
+                update('homeOfficeRatio', value ? 20 : 0)
                 }
                 options={[
                 { value: false, label: '아니오', hint: '별도 사무실 · 고정 작업장 없음' },
@@ -194,7 +194,7 @@ export function Interview() {
                     min={0}
                     max={100}
                     step={5}
-                    value={form.homeOfficeRatio ?? 0}
+                    value={form.homeOfficeRatio}
                     onChange={(event) =>
                     update('homeOfficeRatio', Number(event.target.value))
                     }

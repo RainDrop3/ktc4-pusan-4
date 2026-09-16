@@ -59,7 +59,8 @@ export interface BusinessContext {
   businessOpenDate: string;
   bookkeepingDuty: BookkeepingDuty;
   hasEmployee: boolean;
-  homeOfficeRatio?: number;
+  /** 자택 작업공간 면적 비율(%). 0이면 해당 없음 (DB user_context와 동일 의미) */
+  homeOfficeRatio: number;
 }
 
 export interface BusinessContextRef {

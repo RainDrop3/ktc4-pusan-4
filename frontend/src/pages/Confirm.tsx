@@ -44,7 +44,7 @@ export function Confirm() {
   {
     term: '자택 작업 비율',
     value:
-    resolved.homeOfficeRatio !== undefined ?
+    resolved.homeOfficeRatio > 0 ?
     `${resolved.homeOfficeRatio}%` :
     '해당 없음'
   }];
