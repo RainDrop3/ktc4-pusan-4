@@ -70,6 +70,18 @@ java -Dfile.encoding=UTF-8 -cp out kr.taxmate.preprocess.t1.T1Cli \
 `GS25-역삼점` 이 `GS25-` 가 되고 있었는데(`GS25` 와 다른 키), 그런 상호가
 실데이터에 없어서 43상호 대조는 전건 통과했다. 합성 케이스를 넣고서야 드러났다.
 
+**실물 사례가 하나 더 있다 — 이미 갈라져 있는데 대조가 통과한 경우다.**
+
+```
+구글플레이-구글페이먼트코리아 유한회사
+  파이썬 -> 구글플레이|구글페이먼트   (cond_split=true)
+  자바   -> 구글플레이-구글페이먼트   (cond_kept=true)
+```
+
+`split_delimiters` 의 `pg_hints` 값 출처가 양쪽이 달라서 생긴다(아래 표).
+이 상호가 43상호 목록에 없어서 16필드 대조는 **diff 0 으로 통과했다.**
+대조를 통과했다는 것이 갈라지지 않았다는 뜻이 아니다.
+
 반대로 `test_cases` 만으로는 실데이터 회귀를 못 잡는다. 20바이트 절단처럼
 **실제 파일에서만 나오는 형태**가 있기 때문이다. 둘 다 필요하다.
 
@@ -96,6 +108,11 @@ java -Dfile.encoding=UTF-8 -cp out kr.taxmate.preprocess.t1.T1Cli \
 | `branch` / `branch_raw` | 파이썬만 반환한다 (`T1Result` 에 필드 없음) |
 | `key_strategy` | 양쪽 다 읽지 않는다. 파이썬은 `normalize()` 에 하드코딩 (이슈 #22) |
 | `test_cases` 의 `expect` 블록 | 미도입. `norm_key`·`track`·`is_truncated`·`branch_blocked` 를 단언하도록 확장 예정 |
+| `split_delimiters.pg_hints` | **성격이 다르다 — 아래 참고.** 양쪽 다 읽지만 값 출처가 다르다. 파이썬은 실행 시 `rules/pg_blocklist.yaml`(15개)로 덮어쓰고, 자바는 `normalize.yaml` 에 박힌 목록(10개)을 쓴다 |
+
+위 네 항목은 **한쪽에 없거나 아무도 안 읽는** 키다. `pg_hints` 는 다르다 —
+**양쪽 다 읽는데 값이 다르다.** 읽히지 않는 키는 동작을 바꾸지 않지만, 값이
+다른 키는 조용히 다른 결과를 낸다. 위의 구글플레이 건이 그것이다.
 
 ## 파이썬과 갈라지기 쉬운 지점 — 손대지 말 것
 
