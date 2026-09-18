@@ -77,6 +77,7 @@ def test_build_metrics_combines_reports_and_deduplicates_complex_methods(tmp_pat
     assert metrics["duplicated_lines"] == 13
     assert metrics["duplication_percent"] == pytest.approx(13.0)
     assert metrics["high_complexity_methods"] == 2
+    assert metrics["pmd_issue_count"] == 4
     assert len(metrics["complexity_issues"]) == 3
     assert len(metrics["duplication_blocks"]) == 2
 
@@ -132,6 +133,74 @@ def test_render_report_compares_base_and_highlights_attention_items():
     assert "Duplicated block (12 lines): `backend/src/main/java/Foo.java:10` ↔ `backend/src/main/java/Bar.java:20`" in report
 
 
+def test_render_report_shows_pmd_issue_count_and_non_complexity_issues():
+    current = {
+        "commit": "abc1234",
+        "pmd_issue_count": 2,
+        "complexity_issues": [],
+        "pmd_issues": [
+            {
+                "path": "backend/src/main/java/Foo.java",
+                "line": 31,
+                "rule": "BrokenNullCheck",
+                "message": "Avoid null checks that can never succeed.",
+            },
+            {
+                "path": "backend/src/main/java/Bar.java",
+                "line": 82,
+                "rule": "EmptyCatchBlock",
+                "message": "Avoid empty catch blocks.",
+            },
+        ],
+        "duplication_blocks": [],
+        "warnings": [],
+    }
+    baseline = {"pmd_issue_count": 1}
+
+    report = render_report(current, baseline)
+
+    assert "| PMD Issues | 2 | 1 | +1 ⚠️ |" in report
+    assert "### Code Issues" in report
+    assert (
+        "`backend/src/main/java/Foo.java:31` — Broken Null Check: "
+        "Avoid null checks that can never succeed."
+    ) in report
+    assert (
+        "`backend/src/main/java/Bar.java:82` — Empty Catch Block: "
+        "Avoid empty catch blocks."
+    ) in report
+
+
+def test_render_report_groups_complexity_rules_for_the_same_method():
+    current = {
+        "commit": "abc1234",
+        "complexity_issues": [
+            {
+                "path": "backend/src/main/java/Foo.java",
+                "line": 10,
+                "method": "run",
+                "rule": "CognitiveComplexity",
+                "value": 30,
+            },
+            {
+                "path": "backend/src/main/java/Foo.java",
+                "line": 10,
+                "method": "run",
+                "rule": "CyclomaticComplexity",
+                "value": 21,
+            },
+        ],
+        "pmd_issues": [],
+        "duplication_blocks": [],
+        "warnings": [],
+    }
+
+    report = render_report(current)
+
+    assert report.count("`backend/src/main/java/Foo.java:10`") == 1
+    assert "Cognitive Complexity 30 / Cyclomatic Complexity 21" in report
+
+
 def test_build_metrics_marks_missing_reports_as_unavailable(tmp_path):
     missing = tmp_path / "missing"
 
@@ -142,6 +211,7 @@ def test_build_metrics_marks_missing_reports_as_unavailable(tmp_path):
     assert metrics["health_score"] is None
     assert metrics["duplication_percent"] is None
     assert metrics["high_complexity_methods"] is None
+    assert metrics["pmd_issue_count"] is None
     assert len(metrics["warnings"]) == 4
 
 

@@ -20,6 +20,10 @@ def _display_path(raw_path: str) -> str:
         return raw_path.replace("\\", "/")
 
 
+def _rule_label(rule: str) -> str:
+    return re.sub(r"(?<!^)(?=[A-Z])", " ", rule)
+
+
 def _coverage(root: ET.Element, counter_type: str) -> float | None:
     for counter in root:
         if _local_name(counter.tag) == "counter" and counter.get("type") == counter_type:
@@ -107,6 +111,7 @@ def build_metrics(
     health_score = health_grade = cognitive_complexity = total_lines = None
     duplicated_lines = None
     issues = []
+    pmd_issue_count = None
     duplication_blocks = []
     high_complexity_methods = None
 
@@ -130,6 +135,7 @@ def build_metrics(
 
     try:
         issues = _pmd_issues(ET.parse(pmd_path).getroot())
+        pmd_issue_count = len(issues)
         complex_methods = {
             (issue["path"], issue["line"])
             for issue in issues
@@ -159,6 +165,7 @@ def build_metrics(
             else None
         ),
         "high_complexity_methods": high_complexity_methods,
+        "pmd_issue_count": pmd_issue_count,
         "complexity_issues": [
             issue
             for issue in issues
@@ -235,6 +242,12 @@ def render_report(current: dict, baseline: dict | None = None) -> str:
             integer(baseline.get("high_complexity_methods")),
             change("high_complexity_methods", False),
         ),
+        (
+            "PMD Issues",
+            integer(current.get("pmd_issue_count")),
+            integer(baseline.get("pmd_issue_count")),
+            change("pmd_issue_count", False),
+        ),
     ]
 
     lines = [
@@ -249,15 +262,22 @@ def render_report(current: dict, baseline: dict | None = None) -> str:
     lines.extend(f"| {label} | {value} | {previous} | {delta} |" for label, value, previous, delta in rows)
 
     attention = []
-    complexity_issues = sorted(
-        current.get("complexity_issues", []),
-        key=lambda issue: issue.get("value") or 0,
+    complexity_by_method = defaultdict(list)
+    for issue in current.get("complexity_issues", []):
+        key = (issue.get("path"), issue.get("line"), issue.get("method"))
+        complexity_by_method[key].append(issue)
+    complexity_methods = sorted(
+        complexity_by_method.items(),
+        key=lambda item: max(issue.get("value") or 0 for issue in item[1]),
         reverse=True,
     )
-    for issue in complexity_issues[:3]:
-        rule = re.sub(r"(?<!^)(?=[A-Z])", " ", issue["rule"])
-        value = f" {issue['value']}" if issue.get("value") is not None else ""
-        attention.append(f"- `{issue['path']}:{issue['line']}` — {rule}{value}")
+    for (path, line, _method), issues in complexity_methods[:3]:
+        details = []
+        for issue in sorted(issues, key=lambda item: item["rule"]):
+            rule = _rule_label(issue["rule"])
+            value = f" {issue['value']}" if issue.get("value") is not None else ""
+            details.append(f"{rule}{value}")
+        attention.append(f"- `{path}:{line}` — {' / '.join(details)}")
 
     remaining = 5 - len(attention)
     duplicate_blocks = sorted(
@@ -277,6 +297,26 @@ def render_report(current: dict, baseline: dict | None = None) -> str:
 
     if attention:
         lines.extend(["", "### Attention", "", *attention])
+
+    code_issues = [
+        issue
+        for issue in current.get("pmd_issues", [])
+        if issue.get("rule") not in COMPLEXITY_RULES
+    ]
+    if code_issues:
+        lines.extend(["", "### Code Issues", ""])
+        for issue in sorted(
+            code_issues,
+            key=lambda item: (
+                item.get("priority", 5),
+                item.get("path", ""),
+                item.get("line", 0),
+            ),
+        )[:5]:
+            rule = _rule_label(issue["rule"])
+            lines.append(
+                f"- `{issue['path']}:{issue['line']}` — {rule}: {issue['message']}"
+            )
 
     warnings = current.get("warnings", [])
     if warnings:
