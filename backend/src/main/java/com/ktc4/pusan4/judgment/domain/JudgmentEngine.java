@@ -1,7 +1,6 @@
 package com.ktc4.pusan4.judgment.domain;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -183,17 +182,18 @@ public final class JudgmentEngine {
         };
     }
 
-    // 답이 당해 경비 '금액'을 바꾸는 속성. 자산화되면 당해 경비는 상각액뿐이라,
-    // 답을 듣기 전에 가능으로 확정하면 사용자가 전액 경비로 읽는다(금액 과대계상).
-    // 가산세_대상 같은 속성은 여기 없다 — 가산세를 계산할 뿐 경비 금액을 건드리지 않는다.
-    private static final Set<String> AMOUNT_BEARING_ATTRIBUTES = Set.of("자산", "즉시상각");
+    // 되묻기 답이 판정·계정과목·금액을 바꾸지 '않는' 정보성 속성. 여기 없는 속성은
+    // 안전한지 모르므로 결과를 바꾸는 것으로 본다 — 모를 때는 확정이 아니라 되묻는다.
+    // (증빙수취·가산세는 가산세만 계산할 뿐 경비 인정 여부·금액을 건드리지 않는다.)
+    private static final Set<String> OUTCOME_NEUTRAL_ATTRIBUTES =
+        Set.of("증빙수취", "가산세_대상", "가산세율");
 
     // 판정·계정과목·금액 중 하나라도 답에 따라 갈리면 확정하지 않는다.
     private static boolean changesOutcome(QuestionSpec question) {
         return question.effects().values().stream()
             .anyMatch(effect -> effect.verdict() != null
                 || effect.account() != null
-                || !Collections.disjoint(effect.attributes().keySet(), AMOUNT_BEARING_ATTRIBUTES));
+                || !OUTCOME_NEUTRAL_ATTRIBUTES.containsAll(effect.attributes().keySet()));
     }
 
     private static QuestionEffect resolvedEffect(
