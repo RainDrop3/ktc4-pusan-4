@@ -66,6 +66,18 @@ bash ./backend/gradlew -p backend bootRun --args='--spring.profiles.active=local
 
 `integrationTest`와 `check`를 실행하기 전에는 Docker가 실행 중이어야 합니다. CI는 `test` 다음 `integrationTest`를 실행하며, 특정 클래스를 지정하지 않으므로 이후 추가되는 `*IntegrationTest`도 자동으로 포함합니다. 현재는 도메인 단위 테스트가 없어 `test`가 `NO-SOURCE`로 완료됩니다.
 
+## 코드 건강도 리포트
+
+PR에서는 `.github/workflows/backend-code-health.yml`이 JaCoCo, PMD/CPD, Codelens 결과를 하나의 댓글로 갱신합니다. 모든 지표는 정보 제공용이며 품질 저하나 분석 도구 오류로 merge를 막지 않습니다. 변화량은 `develop` 또는 `main`의 최신 push에서 저장한 스냅샷과 비교하고, 첫 실행처럼 스냅샷이 없으면 기준값을 `N/A`로 표시합니다.
+
+JaCoCo, PMD, CPD 리포트는 로컬에서도 생성할 수 있습니다. 전체 테스트를 실행하므로 Docker가 필요합니다.
+
+```powershell
+.\backend\gradlew.bat -p backend codeHealthReports
+```
+
+PMD는 `backend/config/pmd/ruleset.xml`의 고복잡도·오류 가능성 규칙만 사용하고, CPD는 100토큰 이상의 운영 코드 중복만 보고합니다.
+
 ## 코드 구성
 
 기능 코드는 `com.ktc4.pusan4.<feature>` 아래에 모으고, 기능 내부에서 controller, service, repository, entity, dto로 나눕니다. 둘 이상의 기능에서 실제로 공유되기 전에는 공통 계층을 만들지 않습니다.
