@@ -76,6 +76,14 @@ JaCoCo, PMD, CPD 리포트는 로컬에서도 생성할 수 있습니다. 전체
 .\backend\gradlew.bat -p backend codeHealthReports
 ```
 
+에이전트와 개발자는 저장소 루트에서 다음 명령으로 분석 실행, Markdown 생성, 결과 출력을 한 번에 수행할 수 있습니다.
+
+```shell
+uv run --project ai python tools/run_backend_code_health.py
+```
+
+결과는 `build/quality/report.md`와 `build/quality/metrics.json`에 저장됩니다. Docker를 사용할 수 없으면 통합 테스트와 커버리지는 `N/A`로, Codelens가 `PATH`에 없으면 Code Health는 `N/A`로 표시하며 PMD/CPD 등 실행 가능한 분석은 계속 제공합니다.
+
 PMD는 `backend/config/pmd/ruleset.xml`의 고복잡도·오류 가능성 규칙만 사용하고, CPD는 100토큰 이상의 운영 코드 중복만 보고합니다.
 
 ## 코드 구성

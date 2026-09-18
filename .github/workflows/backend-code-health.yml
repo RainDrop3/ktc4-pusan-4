@@ -9,7 +9,9 @@ on:
       - "profiles/**"
       - "eval/**"
       - "tools/code_health_report.py"
+      - "tools/run_backend_code_health.py"
       - "tools/tests/test_code_health_report.py"
+      - "tools/tests/test_run_backend_code_health.py"
       - "compose.yaml"
       - ".github/workflows/backend-code-health.yml"
   push:
@@ -20,7 +22,9 @@ on:
       - "profiles/**"
       - "eval/**"
       - "tools/code_health_report.py"
+      - "tools/run_backend_code_health.py"
       - "tools/tests/test_code_health_report.py"
+      - "tools/tests/test_run_backend_code_health.py"
       - "compose.yaml"
       - ".github/workflows/backend-code-health.yml"
 
@@ -65,7 +69,11 @@ jobs:
         continue-on-error: true
         env:
           PYTHONPATH: .
-        run: uv run --project ai pytest tools/tests/test_code_health_report.py -q
+        run: >-
+          uv run --project ai pytest
+          tools/tests/test_code_health_report.py
+          tools/tests/test_run_backend_code_health.py
+          -q
 
       - name: Generate JaCoCo, PMD, and CPD reports
         continue-on-error: true
