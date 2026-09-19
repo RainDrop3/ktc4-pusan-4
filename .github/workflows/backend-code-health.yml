@@ -77,7 +77,7 @@ jobs:
 
       - name: Generate JaCoCo, PMD, and CPD reports
         continue-on-error: true
-        run: bash ./backend/gradlew -p backend codeHealthReports
+        run: bash ./backend/gradlew -p backend codeHealthReports --continue
 
       - name: Install Codelens v0.1.8
         continue-on-error: true
