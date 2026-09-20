@@ -152,6 +152,10 @@ Question
 │       └── override/
 │           └── POST                    사용자 판정 수정
 │
+├── judgment-overrides/
+│   └── {overrideId}/
+│       └── DELETE                      사용자 판정 수정 해제
+│
 ├── questions/
 │   └── GET                             룰엔진 확인 질문 목록
 │
@@ -267,7 +271,9 @@ Idempotency-Key: 0199c8f2-...
 POST /api/v1/upload-batches
 ```
 
-동일 사용자와 동일 Idempotency-Key로 동일 요청이 재전송되면 새로운 Batch를 생성하지 않고 최초 응답을 재사용한다.
+Idempotency-Key의 유효기간은 최초 요청 후 24시간이다.
+
+유효기간 안에 동일 사용자와 동일 Idempotency-Key로 동일 요청이 재전송되면 새로운 Batch를 생성하지 않고 최초 응답을 재사용한다.
 
 ```
 버튼 연타
@@ -283,6 +289,18 @@ POST /api/v1/upload-batches
 409 IDEMPOTENCY_KEY_REUSED
 ```
 
+최초 요청으로 생성된 Batch가 유효기간 안에 삭제되면 해당 키를 삭제하지 않고 `DELETED` 상태로 남긴다.
+
+같은 키와 같은 payload가 다시 전송되면:
+
+```
+410 IDEMPOTENCY_RESULT_DELETED
+```
+
+를 반환한다. 삭제된 Batch를 다시 업로드하려는 새로운 사용자 작업은 새로운 Idempotency-Key를 사용한다.
+
+24시간이 지나 키가 만료되면 같은 키도 새 요청으로 처리한다. 이때 `fileHash`, `naturalKey` 중복 규칙은 그대로 적용한다.
+
 `Idempotency-Key`와 `fileHash`, `naturalKey`의 역할은 서로 다르다.
 
 ```
@@ -296,7 +314,7 @@ naturalKey
 → 서로 다른 파일 간 동일 거래 중복 계상 방지
 ```
 
-Idempotency 응답 캐시는 Redis + TTL로 구현할 수 있으나 이는 API 계약이 아니라 구현 세부사항이다.
+24시간 보장 기간과 삭제 후 동작은 API 계약이다. 응답 기록을 Redis + TTL로 저장하는 것은 구현 세부사항이다.
 
 ---
 
@@ -722,6 +740,8 @@ UNIQUE(user_id, file_hash)
 ```
 409 DUPLICATE_FILE
 409 IDEMPOTENCY_KEY_REUSED
+
+410 IDEMPOTENCY_RESULT_DELETED
 
 422 INVALID_SOURCE_TYPE
 422 EMPTY_TRANSACTIONS
@@ -1209,7 +1229,7 @@ FAILED
 
 ```
 batchId / year
-→ Transaction별 현재 latest Judgment
+→ Transaction별 현재 Judgment
 
 runId
 → 해당 Run이 실제 생성한 historical Judgment
@@ -1238,13 +1258,17 @@ size
 true
 ```
 
+`latestOnly=true`는 현재 결과 호환 이름이다. 활성 Override가 최신 revision이 아니어도 현재 Judgment로 반환한다.
+
 ### batchId / year
 
 ```
 GET /api/v1/judgments?batchId=B1
 ```
 
-현재 유효한 Transaction마다 latest revision만 반환한다.
+현재 유효한 Transaction마다 현재 Judgment만 반환한다.
+
+활성 JudgmentOverride가 있으면 해당 Override revision이 현재 Judgment다. 활성 Override가 없으면 latest non-override revision이 현재 Judgment다.
 
 사용자가 현재 `EXCLUDED`한 Transaction은 제외한다.
 
@@ -1252,7 +1276,7 @@ GET /api/v1/judgments?batchId=B1
 GET /api/v1/judgments?year=2026
 ```
 
-해당 연도의 현재 유효한 Transaction마다 latest revision을 반환한다.
+해당 연도의 현재 유효한 Transaction마다 현재 Judgment를 반환한다.
 
 ### transactionId
 
@@ -1302,7 +1326,7 @@ GET /api/v1/judgments/summary?runId=R1
 
 `batchId`, `year`, `runId` 중 정확히 하나를 사용한다.
 
-현재 결과인 `batchId`, `year` 집계는 각 Transaction의 latest Judgment 기준이다.
+현재 결과인 `batchId`, `year` 집계는 각 Transaction의 현재 Judgment 기준이다.
 
 현재 대상에서 제외된 Transaction은 집계하지 않는다.
 
@@ -1472,7 +1496,12 @@ JudgmentOverride
 기존 Judgment는 그대로 보존
 JudgmentOverride 생성
 새 Judgment revision 생성
+같은 Transaction의 기존 활성 JudgmentOverride 비활성화
 ```
+
+새 JudgmentOverride는 즉시 활성 상태가 되며 사용자가 해제하기 전까지 현재 결과보다 우선한다.
+
+이후 JudgmentRun, Question 응답, 분류 응답이 새 자동 판정 revision을 생성해도 활성 Override는 유지된다. 자동 판정 revision은 이력과 `runId` 결과에는 정상적으로 포함된다.
 
 응답 `200`:
 
@@ -1507,10 +1536,32 @@ id
 source_judgment_id
 to_verdict
 reason
+active
 created_at
+released_at
 ```
 
 `override_log`보다는 행위 자체를 나타내는 `judgment_override`라는 이름을 사용한다.
+
+## `DELETE /api/v1/judgment-overrides/{overrideId}`
+
+활성 JudgmentOverride를 해제한다.
+
+응답:
+
+```
+204
+```
+
+Override 및 Override가 생성한 Judgment revision은 삭제하지 않는다. `active=false`, `releasedAt`을 기록하고, 해당 Transaction의 latest non-override revision을 현재 결과로 사용한다.
+
+이미 해제된 Override에 대한 DELETE도 `204`를 반환한다.
+
+에러:
+
+```
+404 JUDGMENT_OVERRIDE_NOT_FOUND
+```
 
 ---
 
@@ -1861,7 +1912,7 @@ Transaction의 현재 결과에 포함되려면:
 ```
 effectiveStatus = JUDGEABLE
 AND classificationStatus = CLASSIFIED
-AND latest Judgment가 존재
+AND 현재 Judgment가 존재
 ```
 
 해야 한다.
@@ -1870,7 +1921,8 @@ AND latest Judgment가 존재
 
 ```
 각 Transaction
-→ latest Judgment 1개 선택
+→ active Override가 있으면 해당 Override Judgment 선택
+→ 없으면 latest non-override Judgment 선택
 → 현재 제외 거래 제거
 → 집계
 ```
@@ -1884,6 +1936,8 @@ judgment.run_id = requestedRunId
 인 Judgment만 집계한다.
 
 따라서 Run 결과와 현재 결과가 서로 변하지 않는다.
+
+자동 판정이 활성 Override보다 나중 revision이어도 현재 결과는 Override를 사용한다. `runId` 결과는 Override와 무관하게 해당 Run이 직접 생성한 Judgment만 사용한다.
 
 예:
 
@@ -1925,6 +1979,8 @@ DELETE /upload-batches/{batchId}
 는 해당 업로드와 그 파생 결과 전체 삭제를 의미한다.
 
 Batch 범위 데이터는 cascade한다.
+
+해당 Batch를 생성한 Idempotency-Key가 아직 24시간 유효하면 키를 삭제하지 않고 `DELETED` 상태로 바꾼다. 남은 TTL 안에 같은 요청이 재전송되면 `410 IDEMPOTENCY_RESULT_DELETED`를 반환한다.
 
 ## Judgment revision 삭제
 
@@ -2079,7 +2135,9 @@ id
 source_judgment_id
 to_verdict
 reason
+active
 created_at
+released_at
 ```
 
 ---
@@ -2191,6 +2249,18 @@ POST /judgments/{id}/override
 JudgmentOverride 생성
 ↓
 Judgment rev3 UNAVAILABLE
+↓
+사용자가 해제하기 전까지 현재 결과로 유지
+```
+
+해제:
+
+```
+DELETE /judgment-overrides/{overrideId}
+↓
+JudgmentOverride active=false
+↓
+latest non-override Judgment가 현재 결과
 ```
 
 ---
@@ -2231,6 +2301,8 @@ POST /judgment-runs
 ```
 
 새 Run은 과거 Run을 덮어쓰지 않는다.
+
+활성 JudgmentOverride가 있는 Transaction도 Run 이력은 새로 생성하지만 현재 결과는 Override를 유지한다.
 
 ---
 
