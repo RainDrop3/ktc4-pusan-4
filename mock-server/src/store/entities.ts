@@ -133,6 +133,7 @@ export interface QuestionEntity {
   batchId: string;
   transactionId: string;
   groupKey: string;
+  factType: string;
   questionText: string;
   options: string[];
   status: QuestionStatusCode;

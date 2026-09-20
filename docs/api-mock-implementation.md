@@ -67,10 +67,12 @@ mock-server는 **인메모리 단일 `StoreService`** 하나로 모든 상태를
 ## 7. questions / question-responses (`src/questions/`)
 
 - `ClassificationReview`(가맹점 분류 질문)와 `Question`(룰엔진 확인 질문)을 명확히 분리했다(§0.5). 시드 데이터에서도 미분류 거래(tx1023)는 Question이 아니라 ClassificationReview로만 존재한다.
-- `question-responses` 처리 순서: batch 일치(`422 QUESTIONS_FROM_DIFFERENT_BATCHES`) → groupKey 일치(`409 QUESTION_GROUP_MISMATCH`) → 전부 `PENDING`(`409 QUESTION_ALREADY_ANSWERED`) → 답변값이 `options` 안에 있는지(`422 INVALID_ANSWER_VALUE`) → `UserFact` 생성 → **요청에 명시된 questionIds뿐 아니라, 같은 배치·같은 scope(groupKey)의 다른 `PENDING` 질문도 함께** `ANSWERED` 처리하고 재판정 대상에 포함 → 영향받는 거래마다 새 revision(`origin.type=USER_FACT`) → **같은 거래를 겨냥한 다른 `PENDING` 질문을 기계적으로 `CANCELED`** 처리.
+- `GET /questions`의 `unresolved`는 `batchId`·`transactionId` 범위에서 `PENDING` 질문 수를 세고, 연결된 Transaction을 중복 제거해 금액을 합산한다. `status` 필터와 페이지네이션은 이 집계에 적용하지 않는다.
+- `question-responses` 처리 순서: batch 일치(`422 QUESTIONS_FROM_DIFFERENT_BATCHES`) → groupKey와 factType 일치(`409 QUESTION_GROUP_MISMATCH`) → `CANCELED`가 아님(`409 QUESTION_NOT_ANSWERABLE`) → 답변값이 `options` 안에 있는지(`422 INVALID_ANSWER_VALUE`) → 새 version의 `UserFact` 생성 → **요청에 명시된 questionIds뿐 아니라, 같은 배치·같은 scope(groupKey)·같은 factType의 다른 `PENDING` 질문도 함께** `ANSWERED` 처리하고 재판정 대상에 포함 → 영향받는 거래마다 새 revision(`origin.type=USER_FACT`) → **같은 거래를 겨냥한 다른 `PENDING` 질문을 기계적으로 `CANCELED`** 처리. `ANSWERED` 질문을 다시 보내면 기존 UserFact를 덮어쓰지 않고 다음 version으로 정정한다.
   - 이 "scope 조회" 단계는 §3.10 4단계("동일 Batch에서 Fact의 scope가 영향을 주는 Transaction 조회")를 문자 그대로 구현한 것이다. 예전엔 요청에 명시된 questionIds만 처리하고 이 조회 단계를 건너뛰어서, 같은 scope의 다른 PENDING 질문이 방치되는 문제가 있었다(리뷰에서 발견, 수정됨). `answeredCount`는 요청에 명시된 개수가 아니라 실제로 `ANSWERED`된 총 개수(sibling 포함)를 반환한다.
   - 이 수정과 짝을 이뤄 시드 데이터의 groupKey도 정리했다: docs/api.md 3.10의 scopeKey 예시(`merchant:스타벅스`)는 상호 1개=scope 1개인데, 예전 시드는 "merchant:카페 · 편의점"(스타벅스+GS25), "merchant:통신비 · 자택 관리비"(SK텔레콤+관리비)처럼 서로 다른 상호를 한 groupKey로 묶어놨었다. 그대로 두면 "scope 조회"가 서로 무관한 상호까지 한꺼번에 답변 처리해버리므로, 상호 1개당 groupKey 1개로 쪼갰다(`src/seed/seed-data.ts`의 `RAW_QUESTION_GROUPS`, 6개 그룹으로 늘어남).
 - "더 이상 필요 없는 질문만 취소"라는 실제 룰엔진 판단은 흉내내지 않는다 — mock은 "같은 거래를 다시 겨냥하면 무조건 취소"로 단순화했다.
+- `POST /questions/bulk-answer`는 같은 Batch·factType의 `PENDING` 질문을 scopeKey별 UserFact로 묶어 답변하고, 영향 Transaction을 중복 제거해 한 번씩 재판정한다. 다른 factType 질문은 변경하지 않으며 처리 후 `unresolved`를 반환한다.
 - 재판정 verdict는 시드 데이터의 `QUESTION_ANSWER_VERDICT` 룩업 테이블(`src/seed/seed-data.ts`, 원본은 `frontend/src/mock/judgments.ts`의 `QUESTION_ANSWER_VERDICT`)을 그대로 쓴다. 테이블에 없는 groupKey/답변 조합은 `AVAILABLE`로 fallback한다.
 - 응답에 `runId`는 없다(`{answeredCount, factId, rejudgedTransactionCount}`) — 현재 스펙이 명시적으로 제거한 필드다.
 

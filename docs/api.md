@@ -157,7 +157,9 @@ Question
 │       └── DELETE                      사용자 판정 수정 해제
 │
 ├── questions/
-│   └── GET                             룰엔진 확인 질문 목록
+│   ├── GET                             룰엔진 확인 질문 목록
+│   └── bulk-answer/
+│       └── POST                        미해소 질문 일괄 응답
 │
 ├── question-responses/
 │   └── POST                            확인 질문 응답 및 부분 재판정
@@ -1601,6 +1603,7 @@ createdAt ASC, id ASC
   "items": [
     {
       "groupKey": "merchant:스타벅스",
+      "factType": "용도",
 
       "questionIds": [
         "0199a1...",
@@ -1634,6 +1637,34 @@ transaction
 merchant_norm
 ```
 
+같은 `groupKey`라도 `factType`이 다르면 별도 그룹이다.
+
+### 미해소 집계
+
+`items`, `page`와 별도로 응답 최상위에 미해소 집계를 포함한다.
+
+```json
+{
+  "items": [],
+  "unresolved": {
+    "count": 24,
+    "amount": 340000
+  },
+  "page": {}
+}
+```
+
+| 필드 | 뜻 |
+| --- | --- |
+| `count` | 페이지네이션 전 `PENDING` Question 수 |
+| `amount` | `PENDING` Question이 참조하는 Transaction 금액 합계(원) |
+
+집계에는 `batchId`, `transactionId` 필터를 적용하지만 `status`, `grouped`, `page`, `size`는 적용하지 않는다. 따라서 `page.totalElements`와 `unresolved.count`는 다를 수 있다.
+
+`amount`는 거래 단위 합계다. 동일 Transaction이 여러 Question에 걸린 경우 한 번만 합산한다.
+
+프론트가 "확인 필요 24건 · 340,000원"을 표시하기 위한 값이다.
+
 ---
 
 # 3.10 Question 응답
@@ -1654,11 +1685,13 @@ merchant_norm
 }
 ```
 
+같은 요청의 Question은 동일 Batch, `groupKey`, `factType`에 속해야 한다.
+
 처리 순서:
 
 ```
 1. Question 검증
-2. batch-scoped UserFact 생성
+2. batch-scoped UserFact의 새 version 생성
 3. Question → ANSWERED
 4. 동일 Batch에서 Fact의 scope가 영향을 주는 Transaction 조회
 5. 해당 Transaction만 재판정
@@ -1688,6 +1721,14 @@ merchant_norm
 ```
 
 는 제거한다.
+
+### 답변 정정
+
+`PENDING` Question은 최초 답변할 수 있고, `ANSWERED` Question은 같은 API로 정정할 수 있다.
+
+정정할 때 기존 UserFact를 수정하지 않는다. 동일한 `(userId, batchId, scopeKey, factType)`에서 `version`을 증가시킨 UserFact를 새로 생성하고 Question의 `answeredFactId`를 새 UserFact로 변경한다.
+
+`CANCELED` Question에는 응답할 수 없다.
 
 ### UserFact 범위
 
@@ -1746,7 +1787,7 @@ T3 rev2 → F10
 에러:
 
 ```
-409 QUESTION_ALREADY_ANSWERED
+409 QUESTION_NOT_ANSWERABLE
 409 QUESTION_GROUP_MISMATCH
 
 422 INVALID_ANSWER_VALUE
@@ -1755,7 +1796,86 @@ T3 rev2 → F10
 
 ---
 
-# 3.11 Question 취소
+# 3.11 Question 일괄 응답
+
+## `POST /api/v1/questions/bulk-answer`
+
+남은 소액 질문을 한 번에 닫는다. "남은 12건 전부 개인용" 같은 경우에 사용한다.
+
+연간 확정 조건이 `PENDING` Question 0을 요구하므로, 꼬리 질문을 한 건씩 묻는 대신 일괄로 닫을 수단이 필요하다.
+
+요청:
+
+```json
+{
+  "batchId": "0199c8f2-...",
+  "factType": "용도",
+  "answer": {
+    "value": "개인"
+  }
+}
+```
+
+| 필드 | 타입 | 필수 | 비고 |
+| --- | --- | --- | --- |
+| batchId | UUID | Y | 이 Batch의 `PENDING` Question만 대상 |
+| factType | string | Y | RuleCard `question.fact_type` 값 |
+| answer.value | string | Y | 대상 Question의 `options`에 포함되는 값 |
+
+대상은 다음을 모두 만족하는 Question이다.
+
+```
+batchId 일치
+status = PENDING
+factType 일치
+```
+
+모든 대상 Question이 `answer.value`를 허용해야 한다. 하나라도 허용하지 않으면 아무것도 변경하지 않고 `422 INVALID_ANSWER_VALUE`를 반환한다.
+
+각 `(scopeKey, factType)`마다 UserFact를 하나 생성하고, 영향받는 Transaction만 재판정해 새 Judgment revision을 만든다. 동일 Transaction이 여러 Question에 걸려도 한 번만 재판정한다. 새 `JudgmentRun`은 생성하지 않는다.
+
+`factType`이 다른 Question은 변경하지 않는다.
+
+응답 `200`:
+
+```json
+{
+  "answeredCount": 12,
+  "skippedCount": 3,
+  "factIds": [
+    "0199fact-..."
+  ],
+  "rejudgedTransactionCount": 12,
+  "unresolved": {
+    "count": 9,
+    "amount": 128000
+  }
+}
+```
+
+| 필드 | 뜻 |
+| --- | --- |
+| answeredCount | `ANSWERED`로 전환된 질문 수 |
+| skippedCount | 요청 당시 해당 Batch의 `PENDING` 중 factType이 달라 건너뛴 수 |
+| factIds | 생성된 UserFact ID. scopeKey가 다르면 여러 개 |
+| rejudgedTransactionCount | 중복을 제거한 재판정 Transaction 수 |
+| unresolved | 처리 후 해당 Batch에 남은 미해소 집계. 3.9와 같은 형태 |
+
+일괄 처리한 답변은 3.10의 `POST /question-responses`로 개별 정정할 수 있다.
+
+에러:
+
+```
+404 BATCH_NOT_FOUND
+422 INVALID_ANSWER_VALUE
+422 UNKNOWN_FACT_TYPE
+```
+
+해당 factType의 Question 이력은 있지만 `PENDING` 대상이 0건이면 에러가 아니다. `answeredCount = 0`으로 응답한다.
+
+---
+
+# 3.12 Question 취소
 
 사용자가 Question을 직접 취소하는 API는 제공하지 않는다.
 
@@ -1780,7 +1900,7 @@ Question을 삭제하지 않고 상태를 남겨 판정 이력을 보존한다.
 
 ---
 
-# 3.12 법령
+# 3.13 법령
 
 ## `GET /api/v1/statutes/{statuteVersionId}`
 
@@ -2152,6 +2272,7 @@ answered_fact_id
 reason_code
 question_text
 group_key
+fact_type
 options
 status
 created_at

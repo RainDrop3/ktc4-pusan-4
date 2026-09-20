@@ -205,6 +205,7 @@ export const SEED_CLASSIFICATION_REVIEW: ClassificationReviewEntity = {
 
 interface RawQuestionGroup {
   groupKey: string;
+  factType: string;
   questionText: string;
   options: string[];
   seqs: number[];
@@ -222,27 +223,31 @@ interface RawQuestionGroup {
 export const RAW_QUESTION_GROUPS: RawQuestionGroup[] = [
   {
     groupKey: 'merchant:스타벅스',
+    factType: '용도',
     questionText: '이 가맹점에서 쓴 비용은 주로 어떤 목적이었나요?',
-    options: ['업무 목적', '개인 목적', '섞여 있음'],
+    options: ['사업', '개인', '혼용'],
     seqs: [1005],
-    answerVerdicts: { '업무 목적': 'AVAILABLE', '개인 목적': 'UNAVAILABLE', '섞여 있음': 'NEEDS_REVIEW' },
+    answerVerdicts: { 사업: 'AVAILABLE', 개인: 'UNAVAILABLE', 혼용: 'NEEDS_REVIEW' },
   },
   {
     groupKey: 'merchant:GS25',
+    factType: '용도',
     questionText: '이 가맹점에서 쓴 비용은 주로 어떤 목적이었나요?',
-    options: ['업무 목적', '개인 목적', '섞여 있음'],
+    options: ['사업', '개인', '혼용'],
     seqs: [1017],
-    answerVerdicts: { '업무 목적': 'AVAILABLE', '개인 목적': 'UNAVAILABLE', '섞여 있음': 'NEEDS_REVIEW' },
+    answerVerdicts: { 사업: 'AVAILABLE', 개인: 'UNAVAILABLE', 혼용: 'NEEDS_REVIEW' },
   },
   {
     groupKey: 'merchant:카카오 T',
+    factType: '용도',
     questionText: '이 이동은 업무 목적이었나요?',
-    options: ['업무 이동', '개인 이동', '섞여 있음'],
+    options: ['사업', '개인', '혼용'],
     seqs: [1006],
-    answerVerdicts: { '업무 이동': 'AVAILABLE', '개인 이동': 'UNAVAILABLE', '섞여 있음': 'NEEDS_REVIEW' },
+    answerVerdicts: { 사업: 'AVAILABLE', 개인: 'UNAVAILABLE', 혼용: 'NEEDS_REVIEW' },
   },
   {
     groupKey: 'merchant:SK텔레콤',
+    factType: '안분비율',
     questionText: '업무용으로 쓰는 비율은 몇 %인가요?',
     options: ['20%', '50%', '80%'],
     seqs: [1007],
@@ -250,6 +255,7 @@ export const RAW_QUESTION_GROUPS: RawQuestionGroup[] = [
   },
   {
     groupKey: 'merchant:자택 관리비',
+    factType: '안분비율',
     questionText: '업무용으로 쓰는 비율은 몇 %인가요?',
     options: ['20%', '50%', '80%'],
     seqs: [1008],
@@ -257,6 +263,7 @@ export const RAW_QUESTION_GROUPS: RawQuestionGroup[] = [
   },
   {
     groupKey: 'merchant:Adobe',
+    factType: '서비스기간',
     questionText: '이 결제가 커버하는 서비스 기간은 어떻게 되나요?',
     options: ['올해 안에 끝남', '다음 해까지 걸침', '모르겠음'],
     seqs: [1004],
@@ -274,6 +281,7 @@ export const SEED_QUESTIONS: QuestionEntity[] = RAW_QUESTION_GROUPS.flatMap((gro
     batchId: BATCH_ID,
     transactionId: txId(seq),
     groupKey: group.groupKey,
+    factType: group.factType,
     questionText: group.questionText,
     options: group.options,
     status: 'PENDING' as const,
