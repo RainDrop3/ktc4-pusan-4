@@ -1,6 +1,7 @@
 package com.ktc4.pusan4.user.api;
 
 import com.ktc4.pusan4.shared.api.ApiException;
+import com.ktc4.pusan4.shared.api.ContractNotes;
 import com.ktc4.pusan4.shared.api.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "contexts", description = "사업자 Context (api.md 3.2). 수정하지 않고 새 버전을 만든다")
 @RestController
@@ -30,17 +32,17 @@ public class BusinessContextController {
         throw ApiException.notImplemented();
     }
 
-    @Operation(summary = "현재 Context 조회")
+    @Operation(summary = "현재 Context 조회", description = ContractNotes.SHAPE_UNSPECIFIED)
     @ApiResponse(responseCode = "404", description = "CONTEXT_NOT_FOUND — 문진 전",
         content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @GetMapping("/current")
-    public ContextResponse current() {
+    public Map<String, Object> current() {
         throw ApiException.notImplemented();
     }
 
-    @Operation(summary = "Context 버전 이력 조회", description = "페이지네이션 없음")
+    @Operation(summary = "Context 버전 이력 조회", description = "페이지네이션 없음. " + ContractNotes.SHAPE_UNSPECIFIED)
     @GetMapping
-    public List<ContextResponse> history() {
+    public List<Map<String, Object>> history() {
         throw ApiException.notImplemented();
     }
 }

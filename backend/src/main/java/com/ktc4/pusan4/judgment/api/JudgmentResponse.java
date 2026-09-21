@@ -31,7 +31,7 @@ public record JudgmentResponse(
     List<String> appliedRuleIds,
     String rulesCommitSha,
     @Schema(description = "판정에 사용된 Context 버전") Integer userContextVersion,
-    @Schema(description = "RuleCard 의 reason") String explanation,
+    @Schema(description = "판정 설명. 값의 출처는 api.md 확정 후 반영") String explanation,
     OffsetDateTime computedAt,
     List<CitationResponse> citations
 ) {

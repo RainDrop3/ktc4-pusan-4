@@ -26,8 +26,8 @@ public class ApiExceptionHandler {
     }
 
     /**
-     * api.md 에 전용 코드가 없는 일반 요청 오류(필수 값 누락, 타입 불일치, 헤더 누락, 본문 파싱 실패).
-     * mock-server 와 같은 코드를 쓴다.
+     * 일반 요청 오류(필수 값 누락, 타입 불일치, 헤더 누락, 본문 파싱 실패).
+     * api.md 에 이 경우의 코드가 없어 임시로 VALIDATION_ERROR 를 쓴다 (api.md 확정 후 반영).
      */
     @ExceptionHandler({
         MethodArgumentNotValidException.class,
