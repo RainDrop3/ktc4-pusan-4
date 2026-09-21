@@ -11,6 +11,13 @@
 #                                    값은 docs/categories.md 27종 enum 밖이면 검증기 FAIL
 #                 industry_code      user_context.industry_code varchar(6)
 #                 reason             unmatched_log.reason CHECK 4종
+#   query       고정 질의. 검색만 따로 재기 위한 얼어붙은 입력이다.
+#               input 을 질의로 바꾸는 건 에이전트(pipeline/query.py)의 일인데,
+#               그걸 매번 태우면 0/10 이 나와도 검색 탓인지 프롬프트 탓인지 모른다.
+#               그래서 기본 실행은 이 고정 질의를 쓰고, 청킹·RRF·필터를 바꿀 때
+#               상수 기준으로 잰다. --rewrite 를 주면 에이전트 경로로 잰다.
+#               ⚠️ expect 를 보고 거꾸로 쓰지 말 것. 카테고리의 세무 성격
+#                 (docs/categories.md)만 보고 세무 담당자가 쓸 법한 말로 적는다.
 #   stop_at     위계 순차 탐색이 멈춰야 하는 단계 (CONTEXT.md 1446~1460줄)
 #                 법령 > 행정규칙 > 심판례·해석 > 판례 > 보류
 #               상위에서 충분한데 하위까지 내려가면 실패다.
@@ -28,6 +35,7 @@
     merchant_category: 음식점
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 거래처 접대 성격 지출과 대표자 개인 식대의 필요경비 산입
   stop_at: 법령
   expect:
     - statute_id: 소득세법-35-1
@@ -49,6 +57,7 @@
     merchant_category: 온라인쇼핑
     industry_code: "940909"
     reason: UNCLASSIFIED
+  query: 품목이 불명한 구매 지출의 사업 관련성과 필요경비 산입
   stop_at: 보류
   expect: []
   must_not: []
@@ -69,6 +78,7 @@
     merchant_category: 수도광열
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 자택 겸용 사업장의 수도광열비 가사 관련 경비 안분
   stop_at: 법령
   expect:
     - statute_id: 소득세법-33-1-5
@@ -87,6 +97,7 @@
     merchant_category: 수도광열
     industry_code: "940909"
     reason: CONDITION_MISMATCH
+  query: 주거 겸용 사업장의 관리비와 감가상각비를 필요경비로 인정받는 요건
   stop_at: 심판례·해석
   expect:
     - statute_id: 심판례-115544
@@ -112,6 +123,7 @@
     merchant_category: 사무용품
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 취득가액이 적은 사업용 자산의 필요경비 산입과 감가상각
   stop_at: 법령
   expect:
     - statute_id: 소득세법시행령-67
@@ -128,6 +140,7 @@
     merchant_category: 카페
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 거래처 미팅 음료 등 접대 성격 지출의 필요경비 불산입
   stop_at: 법령
   expect:
     - statute_id: 소득세법-35-1
@@ -144,6 +157,7 @@
     merchant_category: 해외SaaS
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 사업 관련 지출의 적격증명서류 수취 및 보관 의무
   stop_at: 법령
   expect:
     - statute_id: 소득세법-160의2-2
@@ -168,6 +182,7 @@
     merchant_category: 게임
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 사업과 직접 관련이 없는 지출의 필요경비 불산입
   stop_at: 법령
   expect:
     - statute_id: 소득세법-33-1-13
@@ -184,6 +199,7 @@
     merchant_category: 차량
     industry_code: "940909"
     reason: RULE_NOT_FOUND
+  query: 업무용승용차 운행기록부 작성과 업무사용비율 입증
   stop_at: 행정규칙
   expect:
     - statute_id: 업무용승용차운행기록방법에관한고시#2104628-3
@@ -204,6 +220,7 @@
     merchant_category: PG_미상
     industry_code: "940909"
     reason: UNCLASSIFIED
+  query: 가맹점이 불명한 결제대행 지출의 사업 관련성
   stop_at: 보류
   expect: []
   must_not: []
