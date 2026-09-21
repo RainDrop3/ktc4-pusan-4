@@ -3,6 +3,12 @@
 벡터만 쓰면 "3만원 초과"와 "5만원 초과"의 임베딩이 거의 같아 세법에서 판정을
 가르는 숫자를 놓친다. 키워드만 쓰면 구어체 질문과 법률 문어체가 글자가 안 겹쳐
 못 찾는다. 둘을 순위로 합치면 가중치를 안 정해도 된다.
+
+키워드 쪽은 `=%` 가 아니라 LIKE 다. `=%` 는 길이가 비슷한 두 문자열의 유사도
+검색용이라, 짧은 질의와 긴 조문 사이에서는 기본 임계값(0.3)을 못 넘어 통째로
+죽는다(실측: '업무와 관련이 없다고 인정되는 금액' vs 소득세법-33-1-13 = 0.129).
+pg_bigm 의 gin_bigm_ops 인덱스는 원래 LIKE 를 가속하라고 있는 것이다.
+임계값을 낮추려면 shared_preload_libraries 가 필요한데 지금 비어 있기도 하다.
 """
 
 from __future__ import annotations
@@ -41,7 +47,7 @@ WITH vec AS (
 ), kw AS (
     SELECT id, ROW_NUMBER() OVER (ORDER BY s DESC) AS rnk FROM (
         SELECT id, bigm_similarity(body, %(q_text)s) AS s
-          FROM legal_chunk WHERE {_FILTER} AND body =%% %(q_text)s
+          FROM legal_chunk WHERE {_FILTER} AND body LIKE '%%' || %(q_text)s || '%%'
          ORDER BY s DESC LIMIT %(cand)s) t
 )
 SELECT c.statute_id, c.doc_id, c.doc_type, c.hierarchy, c.section, c.body,
