@@ -79,18 +79,26 @@ def search(
     on: date,
     k: int = TOP_K,
     q_vec: list[float] | None = None,
+    keyword: str | None = None,
 ) -> list[Hit]:
-    """한 위계만 뒤진다. 여러 위계를 볼 때는 q_vec 를 넘겨 임베딩을 한 번만 부른다."""
+    """한 위계만 뒤진다. 여러 위계를 볼 때는 q_vec 를 넘겨 임베딩을 한 번만 부른다.
+
+    두 쪽이 원하는 질의 길이가 반대다. 벡터는 문맥이 붙을수록 잘 찾고, LIKE 는
+    글자가 그대로 본문에 있어야 해서 길어지면 한 건도 안 걸린다. 그래서 키워드
+    쪽 문자열을 따로 받는다. 생략하면 같은 질의를 쓴다.
+    """
     vector = q_vec if q_vec is not None else embed([query])[0]
     rows = conn.execute(
         _SQL,
         {
             "q_vec": str(vector),
-            "q_text": query,
+            "q_text": keyword or query,
             "tier": tier,
             "on": on,
             "skip": SKIP_SECTIONS,
-            "cand": CANDIDATES,
+            # 후보가 k 보다 적으면 상위 k 를 채울 수 없다. 재현율 곡선을 재려고
+            # k 를 올릴 때 후보도 같이 올라가야 한다.
+            "cand": max(CANDIDATES, k),
             "rrf": RRF_K,
             "k": k,
         },

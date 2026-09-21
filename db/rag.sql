@@ -32,8 +32,17 @@ CREATE TABLE IF NOT EXISTS legal_chunk (
     UNIQUE NULLS NOT DISTINCT (statute_version_id, section, seq)
 );
 
-CREATE INDEX IF NOT EXISTS legal_chunk_embedding_idx
-    ON legal_chunk USING hnsw (embedding vector_cosine_ops);
+-- 벡터 인덱스는 일부러 만들지 않는다.
+--
+-- HNSW 는 doc_type 필터를 걸기 전에 후보를 뽑는다. 행정규칙은 전체의 9.7% 뿐이라
+-- 최근접 이웃을 아무리 긁어도 그 위계의 진짜 1~5위가 안 나온다. 실측으로
+-- hnsw.max_scan_tuples 를 20만까지 올려도 정답이 상위 8 에 안 들어왔고,
+-- 정확 스캔은 같은 질의에서 정답을 1·2위로 물어왔다. 속도도 110ms 대 115ms 로 같다.
+-- 55,530 행 규모에서는 인덱스가 1GB 중 대부분을 먹으면서 결과만 틀리게 만든다.
+--
+-- ponytail: 코퍼스가 몇 배로 커지거나 RDS 가 눈에 띄게 느리면 doc_type 별
+--           부분 인덱스(WHERE doc_type = '...')로 간다. 위계를 늘 필터로 걸기
+--           때문에 그때는 필터 문제 자체가 사라진다.
 
 CREATE INDEX IF NOT EXISTS legal_chunk_body_bigm_idx
     ON legal_chunk USING gin (body gin_bigm_ops);
