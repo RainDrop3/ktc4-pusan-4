@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 from openai import OpenAI
 
@@ -10,7 +10,11 @@ from app.config import settings
 
 MODEL = "text-embedding-3-small"
 DIM = 1536
+
+# 건수만으로 끊으면 안 된다. 청크 상한이 5,000자라 100건이면 50만 자가 되고,
+# 게이트웨이의 요청당 30만 토큰 상한에 걸려 400 이 돌아온다.
 BATCH = 100
+BATCH_CHARS = 100_000
 
 
 def client() -> OpenAI:
@@ -26,11 +30,24 @@ def client() -> OpenAI:
     )
 
 
+def batches(texts: Sequence[str]) -> Iterator[list[str]]:
+    part: list[str] = []
+    size = 0
+    for text in texts:
+        if part and (len(part) >= BATCH or size + len(text) > BATCH_CHARS):
+            yield part
+            part, size = [], 0
+        part.append(text)
+        size += len(text)
+    if part:
+        yield part
+
+
 def embed(texts: Sequence[str], api: OpenAI | None = None) -> list[list[float]]:
     api = api or client()
     out: list[list[float]] = []
-    for i in range(0, len(texts), BATCH):
-        res = api.embeddings.create(model=MODEL, input=list(texts[i : i + BATCH]))
+    for part in batches(texts):
+        res = api.embeddings.create(model=MODEL, input=part)
         out.extend(d.embedding for d in sorted(res.data, key=lambda d: d.index))
     if out and len(out[0]) != DIM:
         raise SystemExit(f"차원이 {len(out[0])}이다. legal_chunk.embedding 은 vector({DIM})")
