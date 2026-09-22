@@ -70,9 +70,10 @@ def category_meta() -> dict[str, str]:
     return meta
 
 
-def rewrite(
+def context(
     category: str, industry_code: str, reason: str, meta: dict[str, str] | None = None
-) -> SearchPlan:
+) -> str:
+    """집계 한 줄을 프롬프트에 넣을 블록으로. 질의 작성과 근거 선택이 같이 쓴다."""
     meta = category_meta() if meta is None else meta
     fields = [
         f"카테고리: {category}",
@@ -80,4 +81,10 @@ def rewrite(
         f"업종코드: {industry_code}",
         f"미판정 사유: {reason}",
     ]
-    return structured(SYSTEM, "\n".join(fields), SearchPlan)
+    return "\n".join(fields)
+
+
+def rewrite(
+    category: str, industry_code: str, reason: str, meta: dict[str, str] | None = None
+) -> SearchPlan:
+    return structured(SYSTEM, context(category, industry_code, reason, meta), SearchPlan)
