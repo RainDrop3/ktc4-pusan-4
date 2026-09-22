@@ -34,7 +34,7 @@ import yaml
 
 from pipeline.draft import draft
 from pipeline.query import category_meta, context, rewrite
-from pipeline.search import connect, search_tiers
+from pipeline.search import connect, expand, search_tiers
 from pipeline.select import needs_review, select
 
 with contextlib.suppress(Exception):
@@ -109,7 +109,8 @@ def produce(conn, cat: str, industry: str, meta: dict) -> dict:
     try:
         plan = rewrite(cat, industry, REASON, meta)
         by_tier = search_tiers(conn, plan.queries, plan.keywords, AS_OF)
-        ev = select(block, by_tier)
+        flat = [h for hs in by_tier.values() for h in hs]
+        ev = select(block, by_tier, bodies=expand(conn, flat))
         card = draft(block, ev)
     except (ValueError, RuntimeError) as e:
         return {"error": str(e)[:90], "refs": [], "pool": [], "gate": None,

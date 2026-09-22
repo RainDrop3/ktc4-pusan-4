@@ -2,6 +2,8 @@
 
 from pipeline.search import Hit
 from pipeline.select import (
+    ARTICLE_CHARS,
+    ARTICLE_NOTE,
     Evidence,
     StatuteRef,
     _candidates,
@@ -115,3 +117,41 @@ def test_같은_심판례의_다른_섹션에서_인용해도_통과():
     pool = _pool({"심판례해석": [요지, 판단]})
     for q in ("거주지를 사업장으로 겸용하는 경우", "구분하여 기장하여야 한다고"):
         assert _check(ev([StatuteRef(statute_id="심판례-1", quote=q)]), pool) == []
+
+
+# 조 전문으로 넓히기 — search.expand() 가 준 bodies 를 select 가 쓰는 부분
+JO = """제78조의3(업무용승용차 특례)
+③ 운행기록을 작성하여야 한다
+⑤ 감가상각비 한도를 적용한다"""
+LEAF3 = hit("영-78의3-3", "법령", "제78조의3(업무용승용차 특례)\n③ 운행기록을 작성하여야 한다")
+LEAF5 = hit("영-78의3-5", "법령", "제78조의3(업무용승용차 특례)\n⑤ 감가상각비 한도를 적용한다")
+BODIES = {"영-78의3-3": JO, "영-78의3-5": JO}
+
+
+def test_같은_조는_전문을_한_번만_싣는다():
+    text = _candidates({"법령": [LEAF3, LEAF5]}, BODIES)
+    assert text.count(ARTICLE_NOTE) == 1
+    # ID 는 라벨 하나에 본문 하나. 묶으면 어느 문장이 어느 호인지 모델이 못 맞춘다
+    lines = text.splitlines()
+    assert "  영-78의3-3" in lines and "  영-78의3-5" in lines
+
+
+def test_상한을_넘는_조는_안_넓히고_잎_청크를_쓴다():
+    긴조 = JO + "가" * ARTICLE_CHARS
+    text = _candidates({"법령": [LEAF3]}, {"영-78의3-3": 긴조})
+    assert ARTICLE_NOTE not in text
+    assert "운행기록을 작성하여야 한다" in text
+    assert "감가상각비" not in text
+
+
+def test_넓힌_전문에서_베낀_인용이_통과한다():
+    # 이 문장은 LEAF3 의 잎 청크엔 없고 조 전문에만 있다
+    refs = [StatuteRef(statute_id="영-78의3-3", quote="감가상각비 한도를 적용한다")]
+    assert _check(ev(refs), _pool({"법령": [LEAF3]}, BODIES)) == []
+
+
+def test_안_보여준_전문은_인용처가_아니다():
+    긴조 = JO + "가" * ARTICLE_CHARS
+    refs = [StatuteRef(statute_id="영-78의3-3", quote="감가상각비 한도를 적용한다")]
+    bad = _check(ev(refs), _pool({"법령": [LEAF3]}, {"영-78의3-3": 긴조}))
+    assert len(bad) == 1 and "본문에 없다" in bad[0]

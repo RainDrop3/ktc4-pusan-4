@@ -29,7 +29,7 @@ from psycopg.types.json import Json
 from app.config import settings
 from pipeline.draft import draft, missing_statutes, render
 from pipeline.query import category_meta, context, rewrite
-from pipeline.search import TIERS, Hit, search_tiers
+from pipeline.search import TIERS, Hit, expand, search_tiers
 from pipeline.select import Evidence, needs_review, select
 
 REASON = "RULE_NOT_FOUND"
@@ -105,7 +105,8 @@ def propose(
     try:
         plan = rewrite(cat, ind, REASON, meta)
         by_tier = search_tiers(conn, plan.queries, plan.keywords, as_of)
-        ev = select(block, by_tier)
+        flat = [h for hs in by_tier.values() for h in hs]
+        ev = select(block, by_tier, bodies=expand(conn, flat))
         card = draft(block, ev)
     except (ValueError, RuntimeError) as e:
         return out, f"에이전트 실패 — {e}"
