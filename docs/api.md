@@ -1028,6 +1028,19 @@ userInclusion = EXCLUDED
 userInclusion = INCLUDED
 ```
 
+응답:
+
+```
+{
+  "id": "0199c8f2-...",
+  "userInclusion": "INCLUDED",
+  "effectiveStatus": {
+    "code": "JUDGEABLE",
+    "label": "판정대상"
+  }
+}
+```
+
 파서가 `EXCLUDED`로 판단했던 거래도 사용자가 명시적으로 복구할 수 있다.
 
 단:
@@ -1435,6 +1448,19 @@ R1 이후 QuestionResponse나 Override로 생성된 revision은 포함하지 않
 ```
 computedAt DESC, id DESC
 ```
+
+응답:
+
+```
+{
+  "items": [
+    // 각 항목은 GET /api/v1/judgments/{judgmentId} 응답과 같은 형태
+  ],
+  "page": {}
+}
+```
+
+`latestOnly=false`로 특정 Transaction 이력을 조회하면 한 Transaction의 여러 revision이 함께 반환된다.
 
 ---
 
