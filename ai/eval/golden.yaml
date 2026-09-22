@@ -3,12 +3,12 @@
 # 청크 ID가 아니라 statute_id + must_contain 문구에 고정한다.
 # 청킹 전략을 바꾸면 청크 ID는 전부 바뀌지만 이 둘은 그대로라, A안과 B안을 같은 자로 잴 수 있다.
 #
-# 필드 7개 설명서
+# 필드 8개 설명서
 #   id          식별자
 #   consumer    검색을 부르는 쪽. 규칙후보 or 보고서
 #   input       에이전트가 받는 집계 결과 한 줄. 아래 세 필드가 실제 컬럼이다
 #                 merchant_category  unmatched_log.merchant_category varchar(50)
-#                                    값은 docs/categories.md 27종 enum 밖이면 검증기 FAIL
+#                                    값은 docs/categories.md 32종 enum 밖이면 검증기 FAIL
 #                 industry_code      user_context.industry_code varchar(6)
 #                 reason             unmatched_log.reason CHECK 4종
 #   query       고정 질의. 검색만 따로 재기 위한 얼어붙은 입력이다.
@@ -18,16 +18,23 @@
 #               상수 기준으로 잰다. --rewrite 를 주면 에이전트 경로로 잰다.
 #               ⚠️ expect 를 보고 거꾸로 쓰지 말 것. 카테고리의 세무 성격
 #                 (docs/categories.md)만 보고 세무 담당자가 쓸 법한 말로 적는다.
-#   stop_at     위계 순차 탐색이 멈춰야 하는 단계 (CONTEXT.md 1446~1460줄)
+#   keywords    정확 일치(LIKE)용 짧은 법률 용어. 벡터와 요구가 반대라 따로 둔다 —
+#               긴 문장은 본문에 글자가 그대로 없어 한 건도 안 걸린다(실측 10/10 이 0건).
+#               고르는 법도 query 와 같다. 카테고리 어휘에서 뽑고, 조문에 실재하는지만
+#               DB 로 확인한다. '적격증명서류'는 법령·행정규칙에 0건이라 뺐고
+#               '증명서류'가 실제 조문 용어다. expect 청크의 문구는 쓰지 않는다.
+#   stop_at     인용이 내려가도 되는 가장 아래 위계 (CONTEXT.md 9.5)
 #                 법령 > 행정규칙 > 심판례·해석 > 판례 > 보류
-#               상위에서 충분한데 하위까지 내려가면 실패다.
-#               "하위 근거가 상위를 뒤집는 초안이 나오면 안 된다"를 재는 필드.
+#               검색은 네 위계를 동시에 본다. 순차 탐색·조기 종료는 버렸다.
+#               이 필드는 하네스가 어디까지 뒤질지를 정하고, 동시에
+#               "하위 근거가 상위를 뒤집는 초안이 나오면 안 된다"를 재는 자다.
 #   expect      정답 조문. statute_id가 상위 k에 있어야 하고 그 청크가 must_contain을 포함해야 한다
 #   must_not    상위 k에 올라오면 실패. 기각된 주장, 다른 세목의 동명 고시 등
 #   note        왜 이 조문인지 나중에 이 항목을 의심할 사람을 위한 것
 #
 # 2026-09-10 기준 코퍼스에서 statute_id 존재와 문구 일치를 전수 확인했다.
-# 룰카드가 아직 0개라(rules/cards 없음) 현재 모든 카테고리가 RULE_NOT_FOUND다.
+# 카드 47장이 32개 카테고리를 다 덮고 있지만, 조건 없는 기본 카드가 있는 건 11개뿐이라
+# 나머지는 industry·amount 가 어긋나면 RULE_NOT_FOUND 로 떨어진다.
 
 - id: RC-001
   consumer: 규칙후보
@@ -36,6 +43,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 거래처 접대 성격 지출과 대표자 개인 식대의 필요경비 산입
+  keywords: ["기업업무추진비", "가사관련경비"]
   stop_at: 법령
   expect:
     - statute_id: 소득세법-35-1
@@ -58,6 +66,7 @@
     industry_code: "940909"
     reason: UNCLASSIFIED
   query: 품목이 불명한 구매 지출의 사업 관련성과 필요경비 산입
+  keywords: ["사업과 직접 관련"]
   stop_at: 보류
   expect: []
   must_not: []
@@ -79,6 +88,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 자택 겸용 사업장의 수도광열비 가사 관련 경비 안분
+  keywords: ["가사관련경비", "안분"]
   stop_at: 법령
   expect:
     - statute_id: 소득세법-33-1-5
@@ -98,6 +108,7 @@
     industry_code: "940909"
     reason: CONDITION_MISMATCH
   query: 주거 겸용 사업장의 관리비와 감가상각비를 필요경비로 인정받는 요건
+  keywords: ["가사", "감가상각"]
   stop_at: 심판례·해석
   expect:
     - statute_id: 심판례-115544
@@ -124,6 +135,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 취득가액이 적은 사업용 자산의 필요경비 산입과 감가상각
+  keywords: ["즉시상각", "취득가액", "내용연수"]
   stop_at: 법령
   expect:
     - statute_id: 소득세법시행령-67
@@ -141,6 +153,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 거래처 미팅 음료 등 접대 성격 지출의 필요경비 불산입
+  keywords: ["기업업무추진비", "가사관련경비"]
   stop_at: 법령
   expect:
     - statute_id: 소득세법-35-1
@@ -158,6 +171,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 사업 관련 지출의 적격증명서류 수취 및 보관 의무
+  keywords: ["증명서류", "신용카드매출전표"]
   stop_at: 법령
   expect:
     - statute_id: 소득세법-160의2-2
@@ -183,6 +197,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 사업과 직접 관련이 없는 지출의 필요경비 불산입
+  keywords: ["사업과 직접 관련", "업무와 관련이 없"]
   stop_at: 법령
   expect:
     - statute_id: 소득세법-33-1-13
@@ -200,6 +215,7 @@
     industry_code: "940909"
     reason: RULE_NOT_FOUND
   query: 업무용승용차 운행기록부 작성과 업무사용비율 입증
+  keywords: ["업무용승용차", "운행기록", "업무사용비율"]
   stop_at: 행정규칙
   expect:
     - statute_id: 업무용승용차운행기록방법에관한고시#2104628-3
@@ -221,6 +237,7 @@
     industry_code: "940909"
     reason: UNCLASSIFIED
   query: 가맹점이 불명한 결제대행 지출의 사업 관련성
+  keywords: ["결제대행", "사업과 직접 관련"]
   stop_at: 보류
   expect: []
   must_not: []

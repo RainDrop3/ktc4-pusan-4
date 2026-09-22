@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from openai import OpenAI
+from pydantic import BaseModel
 
 from app.config import settings
 
@@ -20,11 +21,16 @@ def client() -> OpenAI:
     )
 
 
-def complete(system: str, user: str, api: OpenAI | None = None) -> str:
+def structured[T: BaseModel](system: str, user: str, schema: type[T], api: OpenAI | None = None) -> T:
+    """스키마를 강제해서 받는다. 파싱 실패를 호출부가 떠안지 않게 한다."""
     api = api or client()
-    res = api.chat.completions.create(
+    res = api.chat.completions.parse(
         model=MODEL,
         temperature=0,
+        response_format=schema,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
     )
-    return (res.choices[0].message.content or "").strip()
+    out = res.choices[0].message.parsed
+    if out is None:
+        raise RuntimeError(f"구조화 출력 실패: {res.choices[0].message.refusal}")
+    return out

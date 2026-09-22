@@ -1,11 +1,11 @@
-"""검색 골든셋 하네스. 청킹 전략을 A/B 로 재는 자다.
+"""검색 골든셋 하네스. 청킹·검색 전략을 A/B 로 재는 자다.
 
 사용: python -m eval.run_search [--k 8] [--case RC-004] [--rewrite]
 
 두 층을 잰다.
 
-  기본      golden.yaml 의 고정 질의 -> search()      검색만. 모델 호출 0회
-  --rewrite pipeline.query.rewrite() -> search()      에이전트 경로까지
+  기본      golden.yaml 의 고정 질의 -> search      검색만. 모델 호출 0회
+  --rewrite pipeline.query.rewrite() -> search      에이전트 경로까지
 
 기본을 고정 질의로 둔 이유는 원인 귀속이다. 매번 모델이 질의를 새로 쓰면
 0/10 이 나와도 검색이 깨진 건지 프롬프트가 나쁜 건지 구분할 수 없다.
@@ -27,8 +27,8 @@ from pathlib import Path
 import yaml
 
 from pipeline.embed import embed
-from pipeline.query import category_meta, rewrite
-from pipeline.search import SKIP_SECTIONS, TIERS, Hit, connect, search
+from pipeline.query import SearchPlan, category_meta, rewrite
+from pipeline.search import SKIP_SECTIONS, TIERS, Hit, connect, search_tiers
 
 with contextlib.suppress(Exception):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -45,21 +45,22 @@ _TIER_OF = {"법령": "법령", "행정규칙": "행정규칙", "심판례·해�
 CACHE = Path(__file__).parent / ".queries.json"
 
 
-def query_of(case: dict, meta: dict, cache: dict, use_llm: bool) -> str:
-    """고정 질의를 쓰거나, 에이전트에게 질의를 받아온다.
+def plan_of(case: dict, meta: dict, cache: dict, use_llm: bool) -> SearchPlan:
+    """고정 질의를 쓰거나, 에이전트에게 검색 계획을 받아온다.
 
     에이전트 경로는 한 번 부르고 캐시한다. 검색 자체가 결정론이라 질의만
     고정하면 하네스도 재현된다.
     """
     if not use_llm:
-        return case["query"]
+        return SearchPlan(queries=[case["query"]], keywords=case.get("keywords") or [])
 
     i = case["input"]
     key = f"{i['merchant_category']}|{i['industry_code']}|{i['reason']}"
     if key not in cache:
-        cache[key] = rewrite(i["merchant_category"], i["industry_code"], i["reason"], meta)
+        plan = rewrite(i["merchant_category"], i["industry_code"], i["reason"], meta)
+        cache[key] = plan.model_dump()
         CACHE.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
-    return cache[key]
+    return SearchPlan(**cache[key])
 
 
 def _key(want: dict) -> tuple[str, str]:
@@ -91,20 +92,31 @@ SELECT rnk FROM (
 """
 
 
-def rank_of(conn, vector: list[float], tier: str, want: dict) -> int | None:
-    """정답 청크가 그 위계 안에서 몇 위인지. 통과/실패보다 이게 조정에 쓸모 있다."""
-    row = conn.execute(
-        _RANK,
-        {
-            "v": str(vector),
-            "tier": tier,
-            "skip": SKIP_SECTIONS,
-            "sid": want["statute_id"],
-            "pre": want["statute_id"] + "-%",
-            "mc": want["must_contain"],
-        },
-    ).fetchone()
-    return row["rnk"] if row else None
+def rank_of(conn, vectors: list[list[float]], tiers: list[str], want: dict) -> int | None:
+    """정답 청크가 몇 위인지. 질의·위계를 통틀어 가장 좋은 순위를 쓴다.
+
+    통과/실패보다 이 숫자가 조정에 쓸모 있다. 벡터 단독 순위라 RRF 결과와는
+    다르지만, 키워드가 안 걸릴 때 무엇이 한계인지는 이쪽이 보여준다.
+    """
+    found = [
+        row["rnk"]
+        for v in vectors
+        for tier in tiers
+        if (
+            row := conn.execute(
+                _RANK,
+                {
+                    "v": str(v),
+                    "tier": tier,
+                    "skip": SKIP_SECTIONS,
+                    "sid": want["statute_id"],
+                    "pre": want["statute_id"] + "-%",
+                    "mc": want["must_contain"],
+                },
+            ).fetchone()
+        )
+    ]
+    return min(found) if found else None
 
 
 def run(case: dict, k: int, meta: dict, cache: dict, use_llm: bool) -> dict:
@@ -112,24 +124,18 @@ def run(case: dict, k: int, meta: dict, cache: dict, use_llm: bool) -> dict:
     stop = case["stop_at"]
     tiers = TIERS if stop == "보류" else TIERS[: TIERS.index(_TIER_OF[stop]) + 1]
 
-    query = query_of(case, meta, cache, use_llm)
-    hits: list[Hit] = []
+    plan = plan_of(case, meta, cache, use_llm)
     with connect() as conn:
-        vector = embed([query])[0]
-        for tier in tiers:
-            hits += search(conn, query, tier, AS_OF, k, q_vec=vector)
+        by_tier = search_tiers(conn, plan.queries, plan.keywords, AS_OF, k, tiers)
+        hits = [h for tier_hits in by_tier.values() for h in tier_hits]
+        vectors = embed(plan.queries)
         # RC-004 는 expect 와 must_not 의 statute_id 가 같다(한 심판례의 다른 섹션).
         # statute_id 만으로 키를 잡으면 서로 덮어쓴다.
-        ranks = {
-            _key(w): next(
-                (r for t in tiers if (r := rank_of(conn, vector, t, w)) is not None), None
-            )
-            for w in case["expect"] + case["must_not"]
-        }
+        ranks = {_key(w): rank_of(conn, vectors, tiers, w) for w in case["expect"] + case["must_not"]}
 
     return {
         "id": case["id"],
-        "query": query,
+        "plan": plan,
         "ranks": ranks,
         "found": [w for w in case["expect"] if _matches(hits, w)],
         "missed": [w for w in case["expect"] if not _matches(hits, w)],
@@ -160,7 +166,7 @@ def main() -> int:
     got = sum(len(r["found"]) for r in results)
 
     print(f"{'id':<8} {'재현율':<9} {'must_not':<9} 비고")
-    for r, c in zip(results, cases):
+    for r in results:
         n = len(r["found"]) + len(r["missed"])
         recall = f"{len(r['found'])}/{n}" if n else "—(음성)"
         bad = "위반" if r["violated"] else "ok"
@@ -169,7 +175,8 @@ def main() -> int:
             for w in r["missed"] + r["violated"]
         )
         print(f"{r['id']:<8} {recall:<9} {bad:<9} {note}")
-        print(f"{'':<8} 질의: {r['query']}")
+        print(f"{'':<8} 질의: {' / '.join(r['plan'].queries)}")
+        print(f"{'':<8} 키워드: {' / '.join(r['plan'].keywords) or '(없음)'}")
 
     print(f"\n재현율 {got}/{want}   환각(must_not 위반) {hallucinated}건")
 

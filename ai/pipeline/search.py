@@ -9,10 +9,15 @@
 죽는다(실측: '업무와 관련이 없다고 인정되는 금액' vs 소득세법-33-1-13 = 0.129).
 pg_bigm 의 gin_bigm_ops 인덱스는 원래 LIKE 를 가속하라고 있는 것이다.
 임계값을 낮추려면 shared_preload_libraries 가 필요한데 지금 비어 있기도 하다.
+
+키워드 쪽 순위는 bigm_similarity 가 아니라 '몇 개나 걸렸나'로 매긴다. 짧은 용어와
+긴 본문 사이의 유사도는 본문이 짧을수록 커져서, 그걸로 정렬하면 관련성이 아니라
+짧은 청크 순이 된다(실측: 그렇게 두면 recall@8 이 4/10 에서 2/10 으로 내려간다).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -21,7 +26,9 @@ from psycopg.rows import dict_row
 
 from pipeline.embed import embed
 
-# 상위 근거로 충분하면 아래로 안 내려간다. 순서를 코드로 강제한다.
+# 위계는 여기서 지키지 않는다. 네 개를 다 뒤지고, 하위 근거만으로 확정 결론이
+# 서 있는지는 초안 검증이 본다(CONTEXT.md 9.5). 조기 종료를 두면 그 판정 자체가
+# 모델의 "이 정도면 됐다"가 되고, 법령에서 끊으면 심판례의 반례를 영영 못 본다.
 TIERS = ["법령", "행정규칙", "심판례해석", "판례"]
 
 # 기각된 청구인 주장이 근거로 인용되면 정반대 결론이 나간다.
@@ -45,12 +52,13 @@ WITH vec AS (
           FROM legal_chunk WHERE {_FILTER}
          ORDER BY d LIMIT %(cand)s) t
 ), kw AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY s DESC) AS rnk FROM (
-        SELECT id, bigm_similarity(body, %(q_text)s) AS s
-          FROM legal_chunk WHERE {_FILTER} AND body LIKE '%%' || %(q_text)s || '%%'
-         ORDER BY s DESC LIMIT %(cand)s) t
+    SELECT id, ROW_NUMBER() OVER (ORDER BY n DESC, s DESC) AS rnk FROM (
+        SELECT c.id, count(DISTINCT k) AS n, max(bigm_similarity(c.body, k)) AS s
+          FROM legal_chunk c, unnest(%(kws)s::text[]) AS k
+         WHERE {_FILTER} AND c.body LIKE '%%' || k || '%%'
+         GROUP BY c.id ORDER BY n DESC, s DESC LIMIT %(cand)s) t
 )
-SELECT c.statute_id, c.doc_id, c.doc_type, c.hierarchy, c.section, c.body,
+SELECT c.id, c.statute_id, c.doc_id, c.doc_type, c.hierarchy, c.section, c.body,
        COALESCE(1.0 / (%(rrf)s + vec.rnk), 0)
      + COALESCE(1.0 / (%(rrf)s + kw.rnk), 0) AS score
   FROM legal_chunk c
@@ -63,6 +71,7 @@ SELECT c.statute_id, c.doc_id, c.doc_type, c.hierarchy, c.section, c.body,
 
 @dataclass(frozen=True)
 class Hit:
+    id: int
     statute_id: str
     doc_id: str
     doc_type: str
@@ -79,20 +88,20 @@ def search(
     on: date,
     k: int = TOP_K,
     q_vec: list[float] | None = None,
-    keyword: str | None = None,
+    keywords: Sequence[str] = (),
 ) -> list[Hit]:
-    """한 위계만 뒤진다. 여러 위계를 볼 때는 q_vec 를 넘겨 임베딩을 한 번만 부른다.
+    """한 질의로 한 위계만 뒤진다. q_vec 를 넘기면 임베딩을 다시 부르지 않는다.
 
     두 쪽이 원하는 질의 길이가 반대다. 벡터는 문맥이 붙을수록 잘 찾고, LIKE 는
-    글자가 그대로 본문에 있어야 해서 길어지면 한 건도 안 걸린다. 그래서 키워드
-    쪽 문자열을 따로 받는다. 생략하면 같은 질의를 쓴다.
+    글자가 그대로 본문에 있어야 해서 길어지면 한 건도 안 걸린다. 그래서 키워드를
+    따로 받는다. 비워두면 벡터 단독으로 돈다 — 빈 배열은 LIKE 가 0행이라 그대로다.
     """
     vector = q_vec if q_vec is not None else embed([query])[0]
     rows = conn.execute(
         _SQL,
         {
             "q_vec": str(vector),
-            "q_text": keyword or query,
+            "kws": list(keywords),
             "tier": tier,
             "on": on,
             "skip": SKIP_SECTIONS,
@@ -106,15 +115,40 @@ def search(
     return [Hit(**r) for r in rows]
 
 
-def search_tiers(conn: psycopg.Connection, query: str, on: date, k: int = TOP_K):
-    """위계 순서대로 훑는다. '충분한가' 판정은 여기서 하지 않는다.
+def search_tier(
+    conn: psycopg.Connection,
+    queries: Sequence[str],
+    keywords: Sequence[str],
+    tier: str,
+    on: date,
+    k: int = TOP_K,
+    vecs: Sequence[list[float]] | None = None,
+) -> list[Hit]:
+    """질의 여러 개를 각각 돌려 합친다. 같은 청크가 겹치면 높은 점수를 남긴다.
 
-    조기 종료는 에이전트가 근거를 읽고 정하는 일이다. 검색이 점수 임계값으로
-    끊으면 그 임계값 자체가 비결정성의 원천이 된다.
+    질의별 RRF 점수는 같은 식에서 나와 서로 비교 가능하다. 합산하지 않는 이유는
+    질의를 많이 쓴 청크가 유리해져서 — 한 갈래만 맞는 조문이 밀린다.
     """
-    vector = embed([query])[0]
-    for tier in TIERS:
-        yield tier, search(conn, query, tier, on, k, q_vec=vector)
+    vecs = embed(list(queries)) if vecs is None else vecs
+    best: dict[int, Hit] = {}
+    for q, v in zip(queries, vecs, strict=True):
+        for h in search(conn, q, tier, on, k, q_vec=v, keywords=keywords):
+            if h.id not in best or h.score > best[h.id].score:
+                best[h.id] = h
+    return sorted(best.values(), key=lambda h: -h.score)[:k]
+
+
+def search_tiers(
+    conn: psycopg.Connection,
+    queries: Sequence[str],
+    keywords: Sequence[str],
+    on: date,
+    k: int = TOP_K,
+    tiers: Sequence[str] = TIERS,
+) -> dict[str, list[Hit]]:
+    """네 위계를 한 번에 본다. 임베딩은 질의당 한 번뿐이다."""
+    vecs = embed(list(queries))
+    return {t: search_tier(conn, queries, keywords, t, on, k, vecs) for t in tiers}
 
 
 def expand(conn: psycopg.Connection, hits: list[Hit]) -> dict[str, str]:
