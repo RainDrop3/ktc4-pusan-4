@@ -139,6 +139,8 @@ interface RawJudgment {
   finalAmount: number | null;
   explanation: string;
   citations: { statuteVersionId: number; statuteId: string }[];
+  /** 룰엔진 판정 범위 밖(핸드오프)인지. NEEDS_REVIEW일 때만 true. 생략 시 false. */
+  outOfScope?: boolean;
 }
 
 const RAW_JUDGMENTS: RawJudgment[] = [
@@ -175,6 +177,7 @@ export const SEED_JUDGMENTS: JudgmentEntity[] = RAW_JUDGMENTS.map((raw, index) =
   origin: { type: 'RUN', id: RUN_ID },
   runId: RUN_ID,
   verdict: raw.verdict,
+  outOfScope: raw.outOfScope ?? false,
   blockedAtGate: raw.blockedAtGate,
   account: raw.account,
   finalAmount: raw.finalAmount,

@@ -216,6 +216,19 @@ ID      "0199c8f2-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
 }
 ```
 
+각 엔드포인트에 명시한 전용 `code` 외에, 전용 코드가 없는 실패는 상태 코드별 공통 코드로 내려간다.
+
+| 상태 | code | 쓰임 |
+| --- | --- | --- |
+| 400 | VALIDATION_ERROR | 필수 필드 누락·타입 불일치 등 문서화되지 않은 요청 검증 실패 |
+| 401 | UNAUTHORIZED | `Authorization` 헤더 누락 |
+| 404 | NOT_FOUND | 전용 `*_NOT_FOUND`가 없는 경로의 리소스 없음 |
+| 409 | CONFLICT | 전용 코드가 없는 상태 충돌 |
+| 422 | UNPROCESSABLE_ENTITY | 전용 코드가 없는 처리 불가 |
+| 500 | INTERNAL_ERROR | 그 외 서버 오류 |
+
+단건 리소스 조회의 404는 리소스별 전용 코드를 쓴다: `BATCH_NOT_FOUND`, `TRANSACTION_NOT_FOUND`, `CONTEXT_NOT_FOUND`, `JUDGMENT_NOT_FOUND`, `JUDGMENT_RUN_NOT_FOUND`, `JUDGMENT_OVERRIDE_NOT_FOUND`, `CLASSIFICATION_REVIEW_NOT_FOUND`, `QUESTION_NOT_FOUND`, `STATUTE_NOT_FOUND`.
+
 ---
 
 ## 1.4 페이지네이션
@@ -506,16 +519,11 @@ DB에서는 polymorphic `originId`를 사용하지 않고 실제 FK 컬럼으로
 
 ## 2.12 가맹점 카테고리
 
-기존 카테고리에 `미분류`를 추가한다.
+허용값은 `rules/categories.yaml`의 카테고리(현재 32종) + `미분류`다.
 
-```
-카페 음식점 편의점 온라인쇼핑 음식배달 해외SaaS 국내SW 통신 수도광열
-여비교통 차량 도서 교육 광고 사무용품 의료 금융 지자체_과태료
-경찰청_범칙금 조세 PG_미상 기타 게임 구독서비스 여가 미용 생활용품
-미분류
-```
+`rules/categories.yaml`이 카테고리 어휘의 단일 원본이며 `docs/categories.md`도 이 목록에서 생성된다. 카테고리를 추가·변경할 때는 이 목록만 갱신한다.
 
-`미분류`는 RuleCard의 match 대상이 될 수 없다.
+분류에 실패한 거래에는 `미분류`를 부여한다. `미분류`는 이 파일에 없는 별도 센티넬 값이며, RuleCard의 match 대상이 될 수 없다.
 
 ---
 
@@ -589,6 +597,23 @@ Context는 수정하지 않고 새 버전을 생성한다.
 
 현재 최신 Context를 반환한다.
 
+```
+{
+  "id": "0199d3a1-...",
+  "userId": "0199c8f2-...",
+  "version": 4,
+  "industryCode": "62010",
+  "prevYearRevenue": 48000000,
+  "businessOpenDate": "2024-03-02",
+  "bookkeepingDuty": "간편장부",
+  "hasEmployee": false,
+  "homeOfficeRatio": 20,
+  "createdAt": "2026-09-01T10:00:00+09:00"
+}
+```
+
+`bookkeepingDuty`는 §2.9 enum 문자열 그대로다(coded 아님). `homeOfficeRatio`는 미입력 시 `null`.
+
 문진 전이면:
 
 ```
@@ -597,9 +622,16 @@ Context는 수정하지 않고 새 버전을 생성한다.
 
 ### `GET /api/v1/users/me/contexts`
 
-Context 버전 이력을 반환한다.
+Context 버전 이력을 `version` 오름차순 배열로 반환한다. 각 항목은 `current`와 같은 형태다.
 
-페이지네이션 없음.
+페이지네이션 없음. 응답은 페이지 래퍼 없이 배열 자체다.
+
+```
+[
+  { "id": "0199d3a1-...", "version": 1, "...": "..." },
+  { "id": "0199d3b2-...", "version": 2, "...": "..." }
+]
+```
 
 ---
 
@@ -740,6 +772,8 @@ UNIQUE(user_id, file_hash)
 ### 에러
 
 ```
+400 IDEMPOTENCY_KEY_REQUIRED
+
 409 DUPLICATE_FILE
 409 IDEMPOTENCY_KEY_REUSED
 
@@ -749,6 +783,8 @@ UNIQUE(user_id, file_hash)
 422 EMPTY_TRANSACTIONS
 422 MISSING_NATURAL_KEY
 ```
+
+`Idempotency-Key` 헤더가 없으면 `400 IDEMPOTENCY_KEY_REQUIRED`.
 
 ---
 
@@ -767,11 +803,58 @@ size
 createdAt DESC
 ```
 
+응답:
+
+```
+{
+  "items": [
+    {
+      "id": "0199aa11-...",
+      "sourceType": "승인내역",
+      "cardIssuer": "국민",
+      "periodStart": "2026-01-01",
+      "periodEnd": "2026-01-31",
+      "transactionCount": 289,
+      "skippedDuplicateCount": 3,
+      "classificationPendingCount": 4,
+      "createdAt": "2026-09-18T01:10:00+09:00"
+    }
+  ],
+  "page": {
+    "number": 0,
+    "size": 20,
+    "totalElements": 1,
+    "totalPages": 1,
+    "hasNext": false
+  }
+}
+```
+
 ---
 
 ## `GET /api/v1/upload-batches/{batchId}`
 
-Batch 메타데이터와 거래 수 등을 반환한다.
+Batch 메타데이터와 거래 수 등을 반환한다. 목록 `items[]`와 같은 형태다.
+
+```
+{
+  "id": "0199aa11-...",
+  "sourceType": "승인내역",
+  "cardIssuer": "국민",
+  "periodStart": "2026-01-01",
+  "periodEnd": "2026-01-31",
+  "transactionCount": 289,
+  "skippedDuplicateCount": 3,
+  "classificationPendingCount": 4,
+  "createdAt": "2026-09-18T01:10:00+09:00"
+}
+```
+
+에러:
+
+```
+404 BATCH_NOT_FOUND
+```
 
 ---
 
@@ -782,6 +865,8 @@ Batch 메타데이터와 거래 수 등을 반환한다.
 ```
 204
 ```
+
+없는 배치면 `404 BATCH_NOT_FOUND`.
 
 사용자가 Batch를 삭제하는 것은 해당 업로드와 그로부터 파생된 데이터를 삭제하려는 의도로 해석한다.
 
@@ -987,6 +1072,36 @@ size
 createdAt ASC, id ASC
 ```
 
+### grouped=false (기본)
+
+Review 개별 항목을 반환한다.
+
+```
+{
+  "items": [
+    {
+      "id": "0199c1...",
+      "batchId": "0199aa11-...",
+      "transactionId": "0199f1...",
+      "merchantRaw": "XYZ PAYMENTS",
+      "merchantNorm": "XYZ PAYMENTS",
+      "status": {
+        "code": "PENDING",
+        "label": "대기"
+      },
+      "suggestedCategories": [
+        "해외SaaS",
+        "온라인쇼핑",
+        "기타"
+      ],
+      "createdAt": "2026-09-18T01:10:00+09:00",
+      "resolvedAt": null
+    }
+  ],
+  "page": {}
+}
+```
+
 ### grouped=true
 
 동일 `merchantNorm` 또는 분류 키를 갖는 Review를 한 카드로 묶어 표시할 수 있다.
@@ -1077,10 +1192,16 @@ CLASSIFICATION_REVIEW
 에러:
 
 ```
+404 CLASSIFICATION_REVIEW_NOT_FOUND
+
 409 CLASSIFICATION_ALREADY_RESOLVED
+
 422 INVALID_MERCHANT_CATEGORY
 422 UNCLASSIFIED_CATEGORY_NOT_ALLOWED
+422 REVIEWS_FROM_DIFFERENT_BATCHES
 ```
+
+`reviewIds`가 서로 다른 배치에 걸쳐 있으면 `422 REVIEWS_FROM_DIFFERENT_BATCHES`.
 
 `merchantCategory = 미분류`를 사용자 답변으로 제출할 수 없다.
 
@@ -1124,6 +1245,13 @@ classificationStatus = CLASSIFIED
 }
 ```
 
+에러:
+
+```
+404 BATCH_NOT_FOUND
+404 CONTEXT_NOT_FOUND
+```
+
 ### 재실행
 
 같은 Batch에 여러 JudgmentRun을 실행할 수 있다.
@@ -1165,6 +1293,8 @@ T1 rev2 ← Run R2
 `processedCount`는 성공적으로 처리가 끝난 Transaction 수다.
 
 `NEEDS_REVIEW` Judgment도 성공적으로 처리된 것으로 센다.
+
+없는 Run이면 `404 JUDGMENT_RUN_NOT_FOUND`. 아래 `/failures`도 같다.
 
 ---
 
@@ -1326,7 +1456,7 @@ GET /api/v1/judgments/summary?year=2026
 GET /api/v1/judgments/summary?runId=R1
 ```
 
-`batchId`, `year`, `runId` 중 정확히 하나를 사용한다.
+`batchId`, `year`, `runId` 중 정확히 하나를 사용한다. 0개거나 2개 이상이면 `400 INVALID_SUMMARY_SCOPE`.
 
 현재 결과인 `batchId`, `year` 집계는 각 Transaction의 현재 Judgment 기준이다.
 
@@ -1388,6 +1518,7 @@ GET /api/v1/judgments/summary?runId=R1
     "label": "가능"
   },
 
+  "outOfScope": false,
   "blockedAtGate": null,
   "account": "소모품비",
   "finalAmount": 1200000,
@@ -1421,12 +1552,15 @@ GET /api/v1/judgments/summary?runId=R1
 }
 ```
 
+없는 판정이면 `404 JUDGMENT_NOT_FOUND`.
+
 ### 주요 필드
 
 | 필드 | 설명 |
 | --- | --- |
 | revision | Transaction 재판정마다 증가 |
 | origin | 이 revision이 생성된 직접 원인 |
+| outOfScope | 룰엔진 판정 범위 밖(핸드오프)인지. `verdict = NEEDS_REVIEW`일 때만 `true`일 수 있고 그 외 verdict에서는 항상 `false` |
 | account | 계정과목 |
 | finalAmount | 안분, 상각, 한도 적용 후 인정 금액 |
 | isInference | 룰로 확정하지 못해 fallback 결과인지 |
@@ -1594,6 +1728,42 @@ Question은 이후 revision에서도 추가될 수 있기 때문이다.
 
 ```
 createdAt ASC, id ASC
+```
+
+### grouped=false (기본)
+
+Question 개별 항목을 반환한다. `unresolved` 집계는 grouped 여부와 무관하게 항상 최상위에 포함한다(아래 "미해소 집계" 참고).
+
+```
+{
+  "items": [
+    {
+      "id": "0199a1...",
+      "batchId": "0199aa11-...",
+      "transactionId": "0199f1...",
+      "groupKey": "merchant:스타벅스",
+      "factType": "용도",
+      "questionText": "이 가맹점에서 사용한 비용은 주로 어떤 목적으로 지출하셨나요?",
+      "options": [
+        "사업",
+        "개인",
+        "혼용"
+      ],
+      "status": {
+        "code": "PENDING",
+        "label": "대기"
+      },
+      "answeredFactId": null,
+      "createdAt": "2026-09-12T14:05:00+09:00",
+      "answeredAt": null
+    }
+  ],
+  "unresolved": {
+    "count": 24,
+    "amount": 340000
+  },
+  "page": {}
+}
 ```
 
 ### grouped=true
@@ -1787,6 +1957,8 @@ T3 rev2 → F10
 에러:
 
 ```
+404 QUESTION_NOT_FOUND
+
 409 QUESTION_NOT_ANSWERABLE
 409 QUESTION_GROUP_MISMATCH
 
@@ -1921,6 +2093,8 @@ Question을 삭제하지 않고 상태를 남겨 판정 이력을 보존한다.
 ```
 
 법률, 시행령, 기본통칙, 판례 등의 표시를 구분할 수 있도록 `hierarchy`를 반환한다.
+
+없는 법령이면 `404 STATUTE_NOT_FOUND`.
 
 ---
 

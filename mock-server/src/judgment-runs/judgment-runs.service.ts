@@ -16,7 +16,7 @@ export class JudgmentRunsService {
 
   create(batchId: string, contextId: string) {
     const batch = this.store.uploadBatches.find((b) => b.id === batchId);
-    if (!batch) throw new ApiError(404, 'UPLOAD_BATCH_NOT_FOUND', '요청한 배치를 찾을 수 없습니다.');
+    if (!batch) throw new ApiError(404, 'BATCH_NOT_FOUND', '요청한 배치를 찾을 수 없습니다.');
     const context = this.store.contexts.find((c) => c.id === contextId);
     if (!context) throw new ApiError(404, 'CONTEXT_NOT_FOUND', '요청한 사업자 정보를 찾을 수 없습니다.');
 
@@ -45,7 +45,11 @@ export class JudgmentRunsService {
     // 진행률(QUEUED→RUNNING→COMPLETED)만 흉내낸다 (judgment-runs 계획의 "진행 시뮬레이션" 참고).
     for (const tx of targets) {
       const verdict = pickVerdictForCategory(tx.merchantCategory);
-      const { blockedAtGate, account, finalAmount } = mockJudgmentFields(verdict, tx.amount);
+      const { blockedAtGate, account, finalAmount, outOfScope } = mockJudgmentFields(
+        verdict,
+        tx.amount,
+        tx.merchantCategory,
+      );
       this.store.judgments.push({
         id: this.store.newId(),
         transactionId: tx.id,
@@ -53,6 +57,7 @@ export class JudgmentRunsService {
         origin: { type: 'RUN', id: runId },
         runId,
         verdict,
+        outOfScope,
         blockedAtGate,
         account,
         finalAmount,

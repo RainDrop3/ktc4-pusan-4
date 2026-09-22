@@ -91,6 +91,8 @@ export interface JudgmentEntity {
   origin: { type: JudgmentOriginType; id: string };
   runId: string | null;
   verdict: Verdict;
+  /** 룰엔진 판정 범위 밖(핸드오프)인지. verdict=NEEDS_REVIEW일 때만 true일 수 있다. */
+  outOfScope: boolean;
   blockedAtGate: string | null;
   account: string | null;
   finalAmount: number | null;

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ApiError } from '../common/api-error';
 import { QUESTION_STATUS_LABELS, coded } from '../common/coded';
+import { isOutOfScope } from '../common/mock-verdict';
 import { paginate } from '../common/pagination';
 import { nowKst } from '../common/time';
 import { QUESTION_ANSWER_VERDICT } from '../seed/seed-data';
@@ -77,6 +78,7 @@ export class QuestionsService {
       origin: { type: 'USER_FACT', id: factId },
       runId: null,
       verdict,
+      outOfScope: isOutOfScope(verdict, transaction.merchantCategory),
       blockedAtGate: null,
       account: previous?.account ?? null,
       finalAmount: verdict === 'AVAILABLE' ? transaction.amount : null,

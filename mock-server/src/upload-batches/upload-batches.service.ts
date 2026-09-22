@@ -157,7 +157,7 @@ export class UploadBatchesService {
 
   private findOrThrow(batchId: string): UploadBatchEntity {
     const batch = this.store.uploadBatches.find((b) => b.id === batchId);
-    if (!batch) throw new ApiError(404, 'UPLOAD_BATCH_NOT_FOUND', '요청한 배치를 찾을 수 없습니다.');
+    if (!batch) throw new ApiError(404, 'BATCH_NOT_FOUND', '요청한 배치를 찾을 수 없습니다.');
     return batch;
   }
 

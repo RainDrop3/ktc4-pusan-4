@@ -111,7 +111,11 @@ export class ClassificationService {
 
       if (latestRun) {
         const verdict = pickVerdictForCategory(merchantCategory);
-        const { blockedAtGate, account, finalAmount } = mockJudgmentFields(verdict, tx.amount);
+        const { blockedAtGate, account, finalAmount, outOfScope } = mockJudgmentFields(
+          verdict,
+          tx.amount,
+          merchantCategory,
+        );
         this.store.judgments.push({
           id: this.store.newId(),
           transactionId: tx.id,
@@ -119,6 +123,7 @@ export class ClassificationService {
           origin: { type: 'CLASSIFICATION_REVIEW', id: review.id },
           runId: null,
           verdict,
+          outOfScope,
           blockedAtGate,
           account,
           finalAmount,

@@ -9,6 +9,18 @@ mock-server는 **인메모리 단일 `StoreService`** 하나로 모든 상태를
 
 ---
 
+## 계약 동기화 (2026-09-22)
+
+#42 스웨거 대조 리뷰에서 나온 api.md-mock 불일치를 반영해 두 축을 다시 맞췄다. 요지:
+
+- **카테고리**: api.md §2.12가 27종 나열 대신 `rules/categories.yaml`(32종) + `미분류`를 가리키도록 바뀌었다. 아래 "merchantCategory enum" 절의 divergence는 해소됐다.
+- **outOfScope**: api.md §3.7·mock 둘 다 없던 필드를 mock에도 구현했다(아래 6절 참고). backend에는 원래 있던 필드다.
+- **응답 형태**: Context 조회, 업로드 배치 목록·상세, `grouped=false` 질문·분류 항목의 응답 형태가 api.md에 추가됐다. mock 응답이 정본이다.
+- **에러 코드**: mock이 쓰던 코드가 api.md에 모두 문서화됐다(공통/fallback 표 + 엔드포인트별). 아래에서 "문서에 없는 발명"이라 적힌 코드들(`IDEMPOTENCY_KEY_REQUIRED`, `INVALID_SUMMARY_SCOPE`, `REVIEWS_FROM_DIFFERENT_BATCHES`, `VALIDATION_ERROR`, 각 `*_NOT_FOUND`)은 이제 계약에 있다.
+- **mock 내부 불일치 수정**: "배치 없음"을 `UPLOAD_BATCH_NOT_FOUND`(업로드·판정실행)와 `BATCH_NOT_FOUND`(bulk-answer)로 나눠 쓰던 것을 `BATCH_NOT_FOUND` 하나로 통일했다.
+
+---
+
 ## 공통 (docs/api.md 1장)
 
 - 전역 prefix `/api/v1`, 전역 `ValidationPipe({whitelist:true, transform:true})`, 전역 예외 필터(`src/common/http-exception.filter.ts`)가 모든 예외를 `{code, message, traceId}`로 통일한다. `traceId`는 `uuid`의 v7로 매 응답마다 새로 생성한다.
@@ -52,7 +64,8 @@ mock-server는 **인메모리 단일 `StoreService`** 하나로 모든 상태를
 ## 5. judgment-runs (`src/judgment-runs/`)
 
 - **진행률은 poll 횟수 기반으로 흉내낸다.** `POST`로 대상 거래(`effectiveStatus=JUDGEABLE AND classificationStatus=CLASSIFIED`)를 즉시 동기 판정해 Judgment를 전부 만들어두고, `GET`을 부를 때마다 내부 `pollCount`를 근거로 `QUEUED`(1회차) → `RUNNING`(2회차) → `COMPLETED`(3회차 이상)로 상태와 `processedCount`만 단계적으로 노출한다. 타이머·백그라운드 잡은 없다.
-- 실제 룰카드 대신 `pickVerdictForCategory()`로 verdict를 정하고, `account`/`finalAmount`/`blockedAtGate`는 `mockJudgmentFields()`(`src/common/mock-verdict.ts`)로 채운다(`AVAILABLE`→account=`소모품비`+finalAmount=amount, `NEEDS_REVIEW`→G2, `UNAVAILABLE`→G1). 이 헬퍼는 `classification-responses` 경로와 공유한다 — 따로 두면 같은 verdict인데 계정과목/금액 유무가 갈리는 불일치가 생긴다(리뷰에서 발견, 공유 헬퍼로 통합). `citations`는 항상 빈 배열이다.
+- 실제 룰카드 대신 `pickVerdictForCategory()`로 verdict를 정하고, `account`/`finalAmount`/`blockedAtGate`/`outOfScope`는 `mockJudgmentFields()`(`src/common/mock-verdict.ts`)로 채운다(`AVAILABLE`→account=`소모품비`+finalAmount=amount, `NEEDS_REVIEW`→G2, `UNAVAILABLE`→G1). 이 헬퍼는 `classification-responses` 경로와 공유한다 — 따로 두면 같은 verdict인데 계정과목/금액 유무가 갈리는 불일치가 생긴다(리뷰에서 발견, 공유 헬퍼로 통합). `citations`는 항상 빈 배열이다.
+- **outOfScope**(범위 밖/핸드오프)는 backend엔 있으나 api.md·mock엔 없던 필드라 mock에도 추가했다. 룰카드가 없으므로 `mock-verdict.ts`의 `OUT_OF_SCOPE_LIKE` 카테고리 소집합(`차량`)으로 흉내내며, `isOutOfScope(verdict, category)` = `verdict==='NEEDS_REVIEW' && OUT_OF_SCOPE_LIKE.has(category)`로 계산한다. 근거: 실제 `out_of_scope: true` 카드는 R-070(차량)·R-071(급여원천세)뿐이고 R-071은 category를 걸지 않아 카테고리 근사로는 `차량`만 해당한다(`PG_미상`(R-105)은 out_of_scope가 아니라 되묻기 대기다). 불변식(NEEDS_REVIEW일 때만 true)은 backend `RuleCardLoader`와 동일하게 지킨다. question 재판정은 `isOutOfScope`를 직접 호출하고 override는 `toVerdict!=='NEEDS_REVIEW'`이면 false로 리셋한다. seed 판정은 모두 정적으로 작성돼 부팅 시 `outOfScope=true`인 항목은 없지만(차량 seed tx1024는 "사업용 차량 없음" 사실이 반영된 UNAVAILABLE 확정 케이스), 해당 배치를 재판정하면 tx1024가 `NEEDS_REVIEW`+`outOfScope=true`로 나온다.
 - `GET /judgment-runs/{runId}/failures`는 **항상 빈 페이지**를 반환한다 — 기술적 실패 시나리오는 재현하지 않았다.
 - **알려진 한계**: 이 mock은 `NEEDS_REVIEW` 판정을 만들 때 대응하는 `Question`을 새로 생성하지 않는다(§8.3 흐름의 "Judgment rev1 NEEDS_REVIEW → Question 생성" 단계는 시드 데이터로만 재현되고, 새로 업로드·재판정한 배치에서는 일어나지 않는다). Question은 오직 `src/seed/seed-data.ts`에만 존재한다.
 
@@ -82,9 +95,11 @@ mock-server는 **인메모리 단일 `StoreService`** 하나로 모든 상태를
 
 ---
 
-## merchantCategory enum: categories.md를 채택
+## merchantCategory enum (해소됨)
 
-`docs/api.md` §2.12는 27개(+미분류) 카테고리만 나열하지만, `docs/categories.md`는 스스로 "단일 원본"이라 선언하고 `tools/validate_rules.py`에서 자동 생성되는 **32개** 목록을 갖고 있다(`임차료`, `전자기기`, `전문가수수료`, `보험`, `수리비`가 더 있음). mock-server의 카테고리 검증(`src/common/merchant-category.ts`)은 categories.md의 32개 + `미분류`를 기준으로 한다. 실제 seed 데이터(예: `전자기기`, `임차료`)도 이 목록을 전제로 한다.
+mock-server의 카테고리 검증(`src/common/merchant-category.ts`)은 `rules/categories.yaml`의 **32개** + `미분류`를 기준으로 한다(`docs/categories.md`도 이 yaml에서 생성된다). 실제 seed 데이터(예: `전자기기`, `임차료`)도 이 목록을 전제로 한다.
+
+예전엔 api.md §2.12가 27개만 나열해 갈라져 있었으나(누락: `임차료`, `전자기기`, `전문가수수료`, `보험`, `수리비`), 2026-09-22에 api.md가 `rules/categories.yaml` 포인터로 바뀌어 mock과 일치한다.
 
 ---
 
@@ -96,6 +111,7 @@ mock-server는 **인메모리 단일 `StoreService`** 하나로 모든 상태를
 - `judgment-runs/{runId}/failures`(항상 빈 페이지)
 - 가맹점 분류 로직(실제 rules/keyword_rules.yaml 대신 작은 키워드 표)
 - 판정 로직 자체(6관문 룰카드 대신 카테고리→verdict 매핑)
+- `outOfScope` 근사(룰카드 `out_of_scope` 대신 카테고리 `차량` 하나만 핸드오프로 흉내 — R-071은 category를 안 걸어 재현 불가, seed엔 정적 true 케이스 없음. 자세히는 5절)
 - 문서에 없는 제네릭 검증 실패(400 `VALIDATION_ERROR`로 통일), Idempotency-Key 누락 처리(문서에 없는 `IDEMPOTENCY_KEY_REQUIRED`)
 
 **충실하게 구현한 부분** (스프링 이관 시 계약 충실도를 좌우하므로 정확히 맞춤):

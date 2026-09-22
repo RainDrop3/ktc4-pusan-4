@@ -34,6 +34,7 @@ export class JudgmentsService {
       revision: j.revision,
       origin: j.origin,
       verdict: coded(j.verdict, VERDICT_LABELS),
+      outOfScope: j.outOfScope,
       blockedAtGate: j.blockedAtGate,
       account: j.account,
       finalAmount: j.finalAmount,
@@ -185,6 +186,8 @@ export class JudgmentsService {
       origin: { type: 'OVERRIDE', id: overrideId },
       runId: null,
       verdict: toVerdict,
+      // 불변식: outOfScope는 NEEDS_REVIEW에서만 true. 다른 verdict로 override하면 반드시 리셋한다.
+      outOfScope: toVerdict === 'NEEDS_REVIEW' ? source.outOfScope : false,
       computedAt: createdAt,
     };
     this.store.judgments.push(newJudgment);
