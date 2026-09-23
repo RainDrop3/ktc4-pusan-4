@@ -90,3 +90,5 @@ data/
 /*.jpeg
 /*.png
 /screenshots/
+ai/eval/.queries.json
+ai/eval/.drafts.json
