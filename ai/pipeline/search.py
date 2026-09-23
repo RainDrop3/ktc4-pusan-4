@@ -45,27 +45,30 @@ _FILTER = """
     AND (section IS NULL OR section <> ALL(%(skip)s))
 """
 
+# 벡터 r위와 키워드 r위는 점수가 같고 두 목록이 거의 안 겹쳐 top-k 경계가 동점으로 갈린다.
+# 재색인해도 안 바뀌는 (statute_id, section, seq) 로 깬다. id 는 재색인마다 바뀐다.
 _SQL = f"""
 WITH vec AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY d) AS rnk FROM (
-        SELECT id, embedding <=> %(q_vec)s::vector AS d
+    SELECT id, ROW_NUMBER() OVER (ORDER BY d, statute_id, section, seq) AS rnk FROM (
+        SELECT id, statute_id, section, seq, embedding <=> %(q_vec)s::vector AS d
           FROM legal_chunk WHERE {_FILTER}
-         ORDER BY d LIMIT %(cand)s) t
+         ORDER BY d, statute_id, section, seq LIMIT %(cand)s) t
 ), kw AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY n DESC, s DESC) AS rnk FROM (
-        SELECT c.id, count(DISTINCT k) AS n, max(bigm_similarity(c.body, k)) AS s
+    SELECT id, ROW_NUMBER() OVER (ORDER BY n DESC, s DESC, statute_id, section, seq) AS rnk FROM (
+        SELECT c.id, c.statute_id, c.section, c.seq,
+               count(DISTINCT k) AS n, max(bigm_similarity(c.body, k)) AS s
           FROM legal_chunk c, unnest(%(kws)s::text[]) AS k
          WHERE {_FILTER} AND c.body LIKE '%%' || k || '%%'
-         GROUP BY c.id ORDER BY n DESC, s DESC LIMIT %(cand)s) t
+         GROUP BY c.id ORDER BY n DESC, s DESC, c.statute_id, c.section, c.seq LIMIT %(cand)s) t
 )
 SELECT c.id, c.statute_id, c.doc_id, c.doc_type, c.hierarchy, c.section, c.body,
-       COALESCE(1.0 / (%(rrf)s + vec.rnk), 0)
-     + COALESCE(1.0 / (%(rrf)s + kw.rnk), 0) AS score
+       (COALESCE(1.0 / (%(rrf)s + vec.rnk), 0)
+      + COALESCE(1.0 / (%(rrf)s + kw.rnk), 0))::float8 AS score
   FROM legal_chunk c
   LEFT JOIN vec ON c.id = vec.id
   LEFT JOIN kw  ON c.id = kw.id
  WHERE vec.id IS NOT NULL OR kw.id IS NOT NULL
- ORDER BY score DESC LIMIT %(k)s
+ ORDER BY score DESC, c.statute_id, c.section, c.seq LIMIT %(k)s
 """
 
 
