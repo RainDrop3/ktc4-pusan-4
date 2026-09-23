@@ -4,7 +4,7 @@
 
 - push 한 번에 문서 한 개. `.githooks/pre-push` 가 이걸 강제한다.
 - 문서는 Claude Code 에서 `/worklog` 로 만든다.
-- 경로: `worklog/<fe|be|ai|etc>/<YYYY-MM-DD-HHmm>-<슬러그>.md`
+- 경로: `worklog/<fe|be|ai|etc>/<YYYY-MM-DD>-<슬러그>.md`
 
 현재 스펙과 구조는 `docs/` 가 원본이다. 여기 문서는 "그때 이랬다" 는 기록이라
 지금도 맞는지는 보장하지 않는다.
