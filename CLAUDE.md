@@ -69,10 +69,11 @@ Before finishing a change, read and follow the verification instructions in the 
 | 경로 | 성격 |
 | :--- | :--- |
 | `docs/` | 현재 스펙과 구조. 틀리면 고친다. 단일 원본이 여기 있다. |
-| `worklog/` | 작업 기록. append-only 이고, 올라간 문서는 고치지 않는다. |
+| `worklog/` | 작업 기록. append-only — 이미 쓴 줄은 고치지 않고 끝에만 덧붙인다. |
 
 `worklog/` 는 `fe`·`be`·`ai`·`etc` 도메인별로 `YYYY-MM-DD-<슬러그>.md` 를 쌓는다.
-push 한 번에 문서 한 개이고 `.githooks/pre-push` 가 이를 강제한다. 문서는 `/worklog` 스킬이 만든다.
+push 한 번에 기록 한 번이고, 같은 날 같은 도메인이면 기존 문서에 이어 쓴다.
+`.githooks/pre-push` 가 이를 강제하고, 문서는 `/worklog` 스킬이 쓴다.
 
 **작업을 시작하기 전에, 건드릴 도메인의 worklog 최신 2개를 읽는다.**
 직전에 무엇을 왜 했는지 모르면 이미 내린 결정을 다시 뒤집게 된다.
