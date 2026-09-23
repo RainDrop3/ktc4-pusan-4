@@ -102,3 +102,11 @@ def test_차단형은_verdict_가_있어야_한다():
 def test_속성관문은_verdict_없어도_된다():
     from pipeline.draft import _check
     assert _check(card(gate="G5", verdict=None), ev()) == []
+
+
+def test_여러_줄_note_도_전부_주석이다():
+    두줄 = ev(note="업무 관련성이 인정되는 경우에 한한다\n다만 가사 관련분은 제외한다")
+    text = render(card(), 두줄, "카페", "940909", TODAY)
+    # 둘째 줄이 주석 밖으로 나가면 카드 전체가 파싱 실패한다
+    assert yaml.safe_load(text)["gate"] == "G2"
+    assert "# 다만 가사 관련분은 제외한다" in text

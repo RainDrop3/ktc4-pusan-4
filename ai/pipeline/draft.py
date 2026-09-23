@@ -125,7 +125,9 @@ def render(
     seen: dict[str, None] = dict.fromkeys(r.statute_id for r in ev.refs)
     out = []
     if ev.note:
-        out += [f"# {ev.note}", "#"]
+        # 줄마다 붙인다. 첫 줄에만 붙이면 모델이 두 줄로 쓸 때 둘째 줄이 주석 밖으로
+        # 나가 카드 전체가 YAML 로 안 읽힌다.
+        out += [f"# {line}" for line in ev.note.splitlines()] + ["#"]
     out += [
         "# 자동 생성 초안이다. 세무 검수 전이고 아직 카드가 아니다.",
         "# id 와 effective_period.start 는 승인 시점에 박는다(기본은 소급 적용 안 함).",

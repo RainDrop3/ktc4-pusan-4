@@ -28,9 +28,14 @@ from pydantic import BaseModel
 from pipeline.llm import structured
 from pipeline.search import Hit
 
-# 이 위계만으로는 확정 결론을 세우지 않는다. 규칙 카드는 일반 규칙인데 이쪽은
-# 개별 사실관계에 대한 판단이라, 그대로 카드로 올리면 다른 사안까지 덮는다.
-LOWER = {"심판례해석", "판례"}
+# 이 위계만으로는 확정 결론을 세우지 않는다. 심판례·해석례·판례는 개별 사실관계에
+# 대한 판단이라 일반 규칙으로 올리면 다른 사안까지 덮고, 위임 없는 훈령은 과세관청
+# 내부만 구속해 납세자에게 대항력이 없다.
+#
+# doc_type 이 아니라 hierarchy 로 가른다 — 같은 행정규칙이어도 위임 고시는 대외적
+# 구속력이 있어 확정 근거가 된다. 행정규칙 청크의 87.6%(4,703/5,366)가 훈령이라
+# doc_type 으로 묶으면 당직근무규정으로 선 확정 결론이 그대로 나간다.
+LOWER = {"훈령", "심판례", "해석례", "판례"}
 
 # 심판례 심리판단은 최대 12만자다. 통째로 넣을 수 없고, 모델은 보여준 만큼만
 # 인용할 수 있으니 quote 검증은 잘라내기 전 원문으로 해도 그대로 통과한다.
@@ -197,10 +202,10 @@ def select(
 def needs_review(ev: Evidence, by_tier: dict[str, list[Hit]]) -> bool:
     """확정 결론이 하위 근거만으로 서 있으면 보류 큐로 보낸다. 거부가 아니다.
 
-    조문 근거 없이 심판례만으로 선 초안이라는 표시다. 세무 검수자가 주당 수십 건
+    대외적 구속력이 있는 근거 없이 선 초안이라는 표시다. 세무 검수자가 주당 수십 건
     중에 뭘 먼저 볼지 정하는 키가 된다.
     """
     if ev.direction == "확인필요":
         return False
-    tier_of = {h.statute_id: t for t, hits in by_tier.items() for h in hits}
-    return bool(ev.refs) and {tier_of[r.statute_id] for r in ev.refs} <= LOWER
+    hier = {h.statute_id: h.hierarchy for hits in by_tier.values() for h in hits}
+    return bool(ev.refs) and {hier[r.statute_id] for r in ev.refs} <= LOWER

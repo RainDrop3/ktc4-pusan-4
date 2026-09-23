@@ -13,21 +13,23 @@ from pipeline.select import (
 )
 
 
-def hit(sid, tier, body, section=None):
+def hit(sid, tier, body, section=None, hier=None):
     return Hit(
         id=abs(hash(sid)) % 10**6,
         statute_id=sid,
         doc_id="X",
         doc_type=tier,
-        hierarchy=tier,
+        hierarchy=hier or tier,
         section=section,
         body=body,
         score=0.01,
     )
 
 
-LAW = hit("소득세법-33-1-5", "법령", "5. 대통령령으로 정하는 가사의 경비와 이에 관련되는 경비")
-CASE = hit("심판례-115544", "심판례해석", "구분하여 기장하여야 한다", section="심리판단")
+LAW = hit("소득세법-33-1-5", "법령", "5. 대통령령으로 정하는 가사의 경비와 이에 관련되는 경비",
+          hier="법률")
+CASE = hit("심판례-115544", "심판례해석", "구분하여 기장하여야 한다", section="심리판단",
+           hier="심판례")
 POOL = {"법령": [LAW], "심판례해석": [CASE]}
 FLAT = _pool(POOL)
 
@@ -155,3 +157,20 @@ def test_안_보여준_전문은_인용처가_아니다():
     refs = [StatuteRef(statute_id="영-78의3-3", quote="감가상각비 한도를 적용한다")]
     bad = _check(ev(refs), _pool({"법령": [LEAF3]}, {"영-78의3-3": 긴조}))
     assert len(bad) == 1 and "본문에 없다" in bad[0]
+
+
+# 같은 doc_type 인데 위계로 갈린다 — 위임 고시는 대외적 구속력이 있고 훈령은 없다
+고시 = hit("업무용승용차운행기록방법에관한고시#2104628-3", "행정규칙",
+          "운행기록등을 작성ㆍ비치하여야 한다", hier="고시")
+훈령 = hit("국세청당직근무규정-5", "행정규칙",
+          "당직근무자는 근무상황을 기록하여야 한다", hier="훈령")
+
+
+def test_위임_고시만으로도_확정할_수_있다():
+    refs = [StatuteRef(statute_id=고시.statute_id, quote="운행기록등을 작성ㆍ비치하여야 한다")]
+    assert not needs_review(ev(refs), {"행정규칙": [고시]})
+
+
+def test_훈령만으로_선_확정은_보류다():
+    refs = [StatuteRef(statute_id="국세청당직근무규정-5", quote="당직근무자는 근무상황을 기록하여야 한다")]
+    assert needs_review(ev(refs), {"행정규칙": [훈령]})
