@@ -1,3 +1,4 @@
 backend/gradlew text eol=lf
 backend/gradlew.bat text eol=crlf
 .githooks/* text eol=lf
+.claude/hooks/* text eol=lf

@@ -13,6 +13,9 @@
   실행된 경우에는 막혔던 push 를 이어서 한다. 사용자가 미는 push 는 한 번이면 된다.
 - `.claude/settings.json` — SessionStart 훅이 `core.hooksPath` 를 자동으로 건다.
   팀원이 수동으로 설정할 게 없다.
+- `.claude/hooks/push-nudge.sh` — PostToolUse(Bash) 훅. 게이트에 막힌 push 를 감지하면
+  Claude 에게 worklog 스킬을 돌리고 push 를 다시 하라는 지시를 주입한다. 훅은 스킬을
+  직접 호출할 수 없어서, stderr 를 읽고 알아서 판단하길 기대하는 대신 지시를 꽂는다.
 - 안 쓰는 워크트리(`.claude/worktrees/eval-set`)를 지웠다. 원격에 다 올라가 있고
   미커밋 변경이 없어서 잃은 것은 없다. 덕분에 `.gitignore` 는
   `.claude/settings.local.json` 과 `.claude/worktrees/` 두 줄로 끝난다.
