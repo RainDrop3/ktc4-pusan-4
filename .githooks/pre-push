@@ -19,7 +19,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
 	code=$(printf '%s\n' "$changed" | grep -cv '^worklog/')
 	[ "$code" -gt 0 ] || continue
-	printf '%s\n' "$changed" | grep -q '^worklog/' && continue
+	printf '%s\n' "$changed" | grep -q '^worklog/[^/][^/]*/' && continue   # README 는 문서로 치지 않는다
 
 	echo "  $local_ref — 코드 변경 ${code}개, worklog 문서 0개" >&2
 	fail=1
