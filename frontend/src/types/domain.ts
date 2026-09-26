@@ -43,6 +43,18 @@ export type CardIssuer = '국민' | '기업';
 export type SourceType = '승인내역' | '청구내역' | '판별불가';
 export type GateId = 'G0' | 'G1' | 'G2' | 'G3' | 'G4' | 'G5' | 'G6';
 
+/**
+ * 2.12 가맹점 카테고리. 단일 원본은 rules/categories.yaml (32종).
+ * 분류 실패 거래에는 별도 센티넬 `미분류`가 붙고, 사용자 답변으로는 제출할 수 없다.
+ */
+export const MERCHANT_CATEGORIES = [
+'카페', '음식점', '편의점', '온라인쇼핑', '음식배달', '해외SaaS', '국내SW', '통신',
+'수도광열', '여비교통', '차량', '도서', '교육', '광고', '사무용품', '의료', '금융',
+'지자체_과태료', '경찰청_범칙금', '조세', 'PG_미상', '기타',
+'게임', '구독서비스', '여가', '미용', '생활용품'] as const;
+
+export const UNCLASSIFIED = '미분류';
+
 // ── 1. 공통 ─────────────────────────────────────────
 
 export interface ApiError {

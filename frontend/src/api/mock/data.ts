@@ -632,6 +632,75 @@ export const TRANSACTIONS: Transaction[] = [
       code: 'JUDGEABLE',
       label: '판정대상'
     }
+  },
+  {
+    id: '0199c8f2-0000-7000-8000-0000000001101',
+    batchId: '0199c8f2-0000-7000-8000-000000000001',
+    approvedAt: '2026-01-19',
+    merchantRaw: 'XYZ PAYMENTS',
+    merchantNorm: 'XYZ PAYMENTS',
+    merchantCategory: '미분류',
+    classificationStatus: {
+      code: 'NEEDS_REVIEW',
+      label: '분류 확인 필요'
+    },
+    amount: 47_000,
+    installmentMonths: 0,
+    sourceStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    },
+    userInclusion: 'AUTO',
+    effectiveStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    }
+  },
+  {
+    id: '0199c8f2-0000-7000-8000-0000000001102',
+    batchId: '0199c8f2-0000-7000-8000-000000000001',
+    approvedAt: '2026-01-22',
+    merchantRaw: '(주)케이지이니시스',
+    merchantNorm: 'KG이니시스',
+    merchantCategory: '미분류',
+    classificationStatus: {
+      code: 'NEEDS_REVIEW',
+      label: '분류 확인 필요'
+    },
+    amount: 132_000,
+    installmentMonths: 0,
+    sourceStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    },
+    userInclusion: 'AUTO',
+    effectiveStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    }
+  },
+  {
+    id: '0199c8f2-0000-7000-8000-0000000001103',
+    batchId: '0199c8f2-0000-7000-8000-000000000001',
+    approvedAt: '2026-01-24',
+    merchantRaw: 'PADDLE.NET* CURSOR AI',
+    merchantNorm: 'Paddle',
+    merchantCategory: '미분류',
+    classificationStatus: {
+      code: 'NEEDS_REVIEW',
+      label: '분류 확인 필요'
+    },
+    amount: 28_800,
+    installmentMonths: 0,
+    sourceStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    },
+    userInclusion: 'AUTO',
+    effectiveStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    }
   }
 ];
 
@@ -1657,7 +1726,7 @@ export const CLASSIFICATION_REVIEWS: ClassificationReview[] = [
 {
   id: '0199c100-0000-7000-8000-000000000001',
   batchId: '0199c8f2-0000-7000-8000-000000000001',
-  transactionId: '0199c8f2-0000-7000-8000-0000000001022',
+  transactionId: '0199c8f2-0000-7000-8000-0000000001101',
   merchantRaw: 'XYZ PAYMENTS',
   merchantNorm: 'XYZ PAYMENTS',
   status: { code: 'PENDING', label: '대기' },
@@ -1668,7 +1737,7 @@ export const CLASSIFICATION_REVIEWS: ClassificationReview[] = [
 {
   id: '0199c100-0000-7000-8000-000000000002',
   batchId: '0199c8f2-0000-7000-8000-000000000001',
-  transactionId: '0199c8f2-0000-7000-8000-0000000001023',
+  transactionId: '0199c8f2-0000-7000-8000-0000000001102',
   merchantRaw: '(주)케이지이니시스',
   merchantNorm: 'KG이니시스',
   status: { code: 'PENDING', label: '대기' },
@@ -1679,8 +1748,8 @@ export const CLASSIFICATION_REVIEWS: ClassificationReview[] = [
 {
   id: '0199c100-0000-7000-8000-000000000003',
   batchId: '0199c8f2-0000-7000-8000-000000000001',
-  transactionId: '0199c8f2-0000-7000-8000-0000000001024',
-  merchantRaw: 'PADDLE.NET* CURSOR',
+  transactionId: '0199c8f2-0000-7000-8000-0000000001103',
+  merchantRaw: 'PADDLE.NET* CURSOR AI',
   merchantNorm: 'Paddle',
   status: { code: 'PENDING', label: '대기' },
   suggestedCategories: ['해외SaaS', '국내SW', '기타'],
