@@ -6,7 +6,7 @@ import { api, useApi } from '../api';
 import { useSession } from '../contexts/SessionContext';
 import { Badge, Button, Card, Empty, Select } from '../components/ui';
 import { MERCHANT_CATEGORIES } from '../types/domain';
-import { formatNumber, formatWon } from '../utils/format';
+import { formatFullDate, formatNumber, formatWon } from '../utils/format';
 
 /**
  * 2단계 · 분류 확인.
@@ -26,6 +26,29 @@ export function ClassificationPreview() {
     () => batchId ? api.uploads.get(batchId) : Promise.resolve(null),
     [batchId]
   );
+  // 그룹 응답에는 건별 정보가 없어(api.md 3.5) 개별 리뷰와 거래를 함께 읽는다
+  const reviewsQ = useApi(
+    () => api.classificationReviews.list({ batchId: batchId ?? undefined, status: 'PENDING' }),
+    [batchId]
+  );
+  const txQ = useApi(
+    () =>
+    api.transactions.list({
+      batchId: batchId ?? undefined,
+      classificationStatus: 'NEEDS_REVIEW',
+      size: 100
+    }),
+    [batchId]
+  );
+
+  const txById = new Map((txQ.data?.items ?? []).map((t) => [t.id, t]));
+  /** groupKey → 그 그룹에 묶인 거래들 (승인일 오름차순) */
+  const rowsOf = (groupKey: string) =>
+  (reviewsQ.data?.items ?? []).
+  filter((review) => `merchant:${review.merchantNorm}` === groupKey).
+  map((review) => txById.get(review.transactionId)).
+  filter((t): t is NonNullable<typeof t> => Boolean(t)).
+  sort((a, b) => a.approvedAt.localeCompare(b.approvedAt));
 
   const groups = groupsQ.data?.items ?? [];
   const batch = batchQ.data;
@@ -43,6 +66,8 @@ export function ClassificationPreview() {
     window.setTimeout(() => {
       groupsQ.reload();
       batchQ.reload();
+      reviewsQ.reload();
+      txQ.reload();
       setResolving((prev) => {
         const next = { ...prev };
         delete next[groupKey];
@@ -128,8 +153,16 @@ export function ClassificationPreview() {
 
 
           <ul className="mt-4 space-y-3">
-              {groups.map((group) =>
-            <Card
+              {groups.map((group) => {
+              const rows = rowsOf(group.groupKey);
+              // 한 가맹점이 카드사에서 여러 표기로 찍힌 경우, 제목은 정규화된 이름을 쓴다
+              const rawVariants = new Set(rows.map((row) => row.merchantRaw)).size;
+              const title =
+              rawVariants > 1 ?
+              group.groupKey.replace(/^merchant:/, '') :
+              group.merchantRaw;
+              return (
+                <Card
               key={group.groupKey}
               as="li"
               padding="md"
@@ -141,18 +174,48 @@ export function ClassificationPreview() {
 
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <p className="text-body-lg font-semibold text-ink">
-                      {group.merchantRaw}
+                      {title}
                     </p>
                     <p className="text-small tabular-nums text-muted">
                       {formatNumber(group.count)}건 · {formatWon(group.totalAmount)}
                     </p>
                   </div>
                   <p className="mt-1 text-small text-muted">
-                    카드사에 찍힌 표기 그대로입니다. 이것만으로는 업종을 읽지 못했습니다
+                    {rawVariants > 1 ?
+                    `카드사에 ${formatNumber(rawVariants)}가지 표기로 찍혔습니다. 업종을 읽지 못했습니다` :
+                    '카드사에 찍힌 표기 그대로입니다. 이것만으로는 업종을 읽지 못했습니다'}
                   </p>
 
+                  {/* 어떤 결제였는지 떠올릴 수 있도록 건별로 보여준다 */}
+                  <ul className="mt-4 divide-y divide-line2 rounded-xl border border-line2 bg-canvas">
+                    {rows.slice(0, 4).map((row) =>
+                <li
+                  key={row.id}
+                  className="flex items-baseline justify-between gap-3 px-3.5 py-2.5">
+                  
+                        <span className="w-24 shrink-0 text-small tabular-nums text-ink2">
+                          {formatFullDate(row.approvedAt)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-small text-muted">
+                          {/* 그룹 제목과 같은 표기면 반복하지 않는다 */}
+                          {row.merchantRaw === title ? '' : row.merchantRaw}
+                          {row.installmentMonths > 0 &&
+                    `${row.merchantRaw === title ? '' : ' · '}${row.installmentMonths}개월 할부`}
+                        </span>
+                        <span className="shrink-0 text-small font-semibold tabular-nums text-ink">
+                          {formatWon(row.amount)}
+                        </span>
+                      </li>
+                )}
+                    {group.count > 4 &&
+                <li className="px-3.5 py-2 text-caption text-muted">
+                        외 {formatNumber(group.count - 4)}건
+                      </li>
+                }
+                  </ul>
+
                   <p className="mt-5 text-body font-semibold text-ink">
-                    어떤 지출인가요?
+                    이 {formatNumber(group.count)}건은 어떤 지출인가요?
                   </p>
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
                     {group.suggestedCategories.map((category, index) =>
@@ -175,7 +238,7 @@ export function ClassificationPreview() {
 
                     <div className="w-44">
                       <Select
-                    aria-label={`${group.merchantRaw} 카테고리 직접 선택`}
+                    aria-label={`${title} 카테고리 직접 선택`}
                     defaultValue=""
                     onChange={(event) => {
                       if (!event.target.value) return;
@@ -195,8 +258,9 @@ export function ClassificationPreview() {
                       </Select>
                     </div>
                   </div>
-                </Card>
-            )}
+                </Card>);
+
+            })}
             </ul>
           }
         </section>

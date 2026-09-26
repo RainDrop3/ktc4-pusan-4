@@ -701,6 +701,52 @@ export const TRANSACTIONS: Transaction[] = [
       code: 'JUDGEABLE',
       label: '판정대상'
     }
+  },
+  {
+    id: '0199c8f2-0000-7000-8000-0000000001104',
+    batchId: '0199c8f2-0000-7000-8000-000000000001',
+    approvedAt: '2026-01-08',
+    merchantRaw: 'PADDLE.NET* RAYCAST',
+    merchantNorm: 'Paddle',
+    merchantCategory: '미분류',
+    classificationStatus: {
+      code: 'NEEDS_REVIEW',
+      label: '분류 확인 필요'
+    },
+    amount: 38_400,
+    installmentMonths: 0,
+    sourceStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    },
+    userInclusion: 'AUTO',
+    effectiveStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    }
+  },
+  {
+    id: '0199c8f2-0000-7000-8000-0000000001105',
+    batchId: '0199c8f2-0000-7000-8000-000000000001',
+    approvedAt: '2026-01-16',
+    merchantRaw: 'PADDLE.NET* TABLEPLUS',
+    merchantNorm: 'Paddle',
+    merchantCategory: '미분류',
+    classificationStatus: {
+      code: 'NEEDS_REVIEW',
+      label: '분류 확인 필요'
+    },
+    amount: 110_000,
+    installmentMonths: 0,
+    sourceStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    },
+    userInclusion: 'AUTO',
+    effectiveStatus: {
+      code: 'JUDGEABLE',
+      label: '판정대상'
+    }
   }
 ];
 
@@ -1754,5 +1800,27 @@ export const CLASSIFICATION_REVIEWS: ClassificationReview[] = [
   status: { code: 'PENDING', label: '대기' },
   suggestedCategories: ['해외SaaS', '국내SW', '기타'],
   createdAt: '2026-09-12T13:58:12+09:00',
+  resolvedAt: null
+},
+{
+  id: '0199c100-0000-7000-8000-000000000004',
+  batchId: '0199c8f2-0000-7000-8000-000000000001',
+  transactionId: '0199c8f2-0000-7000-8000-0000000001104',
+  merchantRaw: 'PADDLE.NET* RAYCAST',
+  merchantNorm: 'Paddle',
+  status: { code: 'PENDING', label: '대기' },
+  suggestedCategories: ['해외SaaS', '국내SW', '기타'],
+  createdAt: '2026-09-12T13:58:14+09:00',
+  resolvedAt: null
+},
+{
+  id: '0199c100-0000-7000-8000-000000000005',
+  batchId: '0199c8f2-0000-7000-8000-000000000001',
+  transactionId: '0199c8f2-0000-7000-8000-0000000001105',
+  merchantRaw: 'PADDLE.NET* TABLEPLUS',
+  merchantNorm: 'Paddle',
+  status: { code: 'PENDING', label: '대기' },
+  suggestedCategories: ['해외SaaS', '국내SW', '기타'],
+  createdAt: '2026-09-12T13:58:15+09:00',
   resolvedAt: null
 }];
