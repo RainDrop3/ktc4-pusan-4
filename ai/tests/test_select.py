@@ -1,5 +1,7 @@
 """근거 선택의 순수 부분. 모델 호출은 여기서 검증하지 않는다."""
 
+import pytest
+
 from pipeline.search import Hit
 from pipeline.select import (
     Evidence,
@@ -105,9 +107,16 @@ def test_띄어쓰기만_달라도_통과():
     assert _check(ev([StatuteRef(statute_id="영-78", quote=stuck)]), h) == []
 
 
-def test_앞_번호만_달라도_통과():
+@pytest.mark.parametrize("no", ["⑤", "5.", "5의2.", "가."])
+def test_앞_번호만_달라도_통과(no):
     # 원문은 '5.' 인데 모델이 '⑤' 로 적는다. 나머지는 원문 그대로여야 한다
-    assert _check(ev([StatuteRef(statute_id="소득세법-33-1-5", quote="⑤ 대통령령으로 정하는 가사의 경비")]), FLAT) == []
+    assert _check(ev([StatuteRef(statute_id="소득세법-33-1-5", quote=f"{no} 대통령령으로 정하는 가사의 경비")]), FLAT) == []
+
+
+@pytest.mark.parametrize("quote", ["대통령령으로 ⑤ 정하는 가사의 경비", "⑤ 대통령령으로 정하는 가사의 비용"])
+def test_앞_번호_말고는_봐주지_않는다(quote):
+    bad = _check(ev([StatuteRef(statute_id="소득세법-33-1-5", quote=quote)]), FLAT)
+    assert len(bad) == 1 and "본문에 없다" in bad[0]
 
 
 def test_너무_짧은_인용은_거른다():
