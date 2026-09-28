@@ -126,7 +126,7 @@ flowchart TD
         AGG["① 집계 (SQL)<br/>unmatched_log(RULE_NOT_FOUND)<br/>merchant_category × industry_code<br/>distinct_users ≥ 2 로 자르고, 빈도는 상위 N 정렬에만 쓴다<br/>이미 후보 행이 있는 조합은 건너뛴다"]
         PLAN["② 질의 작성 (에이전트 ①)<br/>SearchPlan: 의미질의 + 정확일치 키워드"]
         SEARCH["③ 4개 위계 동시 검색 (코드)<br/>법령 · 행정규칙 · 심판례해석 · 판례 각 top-k<br/>하이브리드: 벡터 + LIKE(pg_bigm) → RRF<br/>법령은 조 단위로 뽑아 형제 잎까지 라벨을 붙여 넘긴다<br/>임베딩 호출은 여기 한 번뿐"]
-        FRAME["기본 조문 · search.retrieve() (코드)<br/>소득세법 27조 · 33조 잎을 검색 없이 항상 붙인다<br/>업종에 안 맞는 조문은 뺀다 (940909 → 33-1-9)"]
+        FRAME["기본 조문 · search.retrieve() (코드)<br/>소득세법 27조 · 33조 잎을 검색 없이 항상 붙인다<br/>33-1-9 는 뺀다 (페르소나가 면세라 9호 단서에 해당)"]
         PICK["④ 근거 선택 (에이전트 ②)<br/>Evidence: 인용문 원문 대조, 검색결과 밖 ID 차단<br/>검증 실패 시 사유를 붙여 최대 3회 재시도"]
         DRAFT["⑤ 초안 생성 (에이전트 ③, Pydantic 강제)<br/>모델이 정하는 건 gate · verdict · account 셋뿐<br/>인용 · 매칭 · 우선순위는 코드가 박는다"]
         HOLD["⑥ 보류 판정 (코드)<br/>근거 부족 · 하위 근거만으로 확정 · 폐지된 조문<br/>하나라도 걸리면 보류"]

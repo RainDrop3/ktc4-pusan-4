@@ -38,6 +38,10 @@ SKIP_SECTIONS = ["주장"]
 # 대부분이 여기서 나오는데, 주제 질의로는 수백 위로 밀린다(docs/rag-eval.md).
 FRAME = ("소득세법-27", "소득세법-33")
 
+# 페르소나(940909 인적용역)는 부가세 면세라 33조1항9호 단서(면제분 매입세액은 제외)에 해당한다.
+# 모델에게 면세라고 알려줘도 단서를 적용하지 못해 후보에서 뺀다(실측: 해외SaaS 3회 모두 인용).
+DROP = {"소득세법-33-1-9"}
+
 TOP_K = 8
 CANDIDATES = 200
 RRF_K = 60
@@ -212,15 +216,11 @@ def retrieve(
     queries: Sequence[str],
     keywords: Sequence[str],
     on: date,
-    drop: Collection[str] = (),
 ) -> dict[str, list[Hit]]:
-    """검색 결과 앞에 기본 조문(FRAME)을 '기본' 위계로 붙인다. 검색은 FRAME 조를 건너뛴다.
-
-    drop 은 이 사업자에게 적용되지 않는 statute_id 다(query.NOT_APPLICABLE).
-    """
-    base = [h for h in _leaves(conn, FRAME, "법령", on) if h.statute_id not in drop]
+    """검색 결과 앞에 기본 조문(FRAME)을 '기본' 위계로 붙인다. 검색은 FRAME 조를 건너뛴다."""
+    base = [h for h in _leaves(conn, FRAME, "법령", on) if h.statute_id not in DROP]
     found = search_tiers(conn, queries, keywords, on, skip=FRAME)
-    return {"기본": base} | {t: [h for h in hs if h.statute_id not in drop] for t, hs in found.items()}
+    return {"기본": base} | {t: [h for h in hs if h.statute_id not in DROP] for t, hs in found.items()}
 
 
 def connect() -> psycopg.Connection:

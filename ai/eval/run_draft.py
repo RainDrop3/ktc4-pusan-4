@@ -34,7 +34,7 @@ import yaml
 
 from eval.run_search import cached_plan
 from pipeline.draft import draft
-from pipeline.query import NOT_APPLICABLE, category_meta, context
+from pipeline.query import category_meta, context
 from pipeline.search import FRAME, connect, retrieve
 from pipeline.select import _candidates, needs_review, select
 
@@ -115,7 +115,7 @@ def produce(conn, cat: str, industry: str, meta: dict, plans: dict, search_only:
     out = {"error": None, "refs": [], "pool": [], "chars": 0, "gate": None, "verdict": None, "hold": True}
     try:
         plan = cached_plan(cat, industry, REASON, meta, plans, PLANS)
-        by_tier = retrieve(conn, plan.queries, plan.keywords, AS_OF, NOT_APPLICABLE.get(industry, ()))
+        by_tier = retrieve(conn, plan.queries, plan.keywords, AS_OF)
         out["pool"] = sorted({h.statute_id for hs in by_tier.values() for h in hs})
         out["chars"] = len(_candidates(by_tier))
         if search_only:

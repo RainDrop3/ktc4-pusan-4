@@ -28,7 +28,7 @@ from psycopg.types.json import Json
 
 from app.config import settings
 from pipeline.draft import draft, missing_statutes, render
-from pipeline.query import NOT_APPLICABLE, category_meta, context, rewrite
+from pipeline.query import category_meta, context, rewrite
 from pipeline.search import TIERS, Hit, retrieve
 from pipeline.select import Evidence, needs_review, select
 
@@ -107,7 +107,7 @@ def propose(
     }
     try:
         plan = rewrite(cat, ind, REASON, meta)
-        by_tier = retrieve(conn, plan.queries, plan.keywords, as_of, NOT_APPLICABLE.get(ind, ()))
+        by_tier = retrieve(conn, plan.queries, plan.keywords, as_of)
         ev = select(block, by_tier)
         card = draft(block, ev)
     except (ValueError, RuntimeError) as e:
