@@ -10,6 +10,11 @@ from datetime import datetime, timedelta, timezone
 REVIEW_WAIT_THRESHOLD = timedelta(hours=24)
 # 새 PR 알림은 이만큼 기다렸다가 리뷰어를 조회하고, 그 사이 들어온 리뷰 요청은 따로 알리지 않는다.
 REVIEWER_SETTLE_WINDOW = timedelta(minutes=2)
+REVIEW_STATE_LABELS = {
+    "APPROVED": "approve",
+    "COMMENTED": "comment",
+    "CHANGES_REQUESTED": "request changes",
+}
 
 
 def mention(login: str, user_ids: dict[str, str]) -> str:
@@ -118,6 +123,42 @@ def build_reminder_message(pr: dict, logins: list[str], user_ids: dict[str, str]
     )
 
 
+def mentioned_logins(texts: list[str], user_ids: dict[str, str]) -> list[str]:
+    # 팀원만 남긴다. 코드 조각의 @Transactional 같은 어노테이션이 멘션으로 잡히지 않는다.
+    team = {login.lower(): login for login in user_ids}
+    logins: list[str] = []
+    for text in texts:
+        for handle in re.findall(r"(?<![A-Za-z0-9])@([A-Za-z0-9-]+)", text):
+            login = team.get(handle.lower())
+            if login and login not in logins:
+                logins.append(login)
+    return logins
+
+
+def build_review_notification(
+    pr: dict, actor: str, review: str, texts: list[str], user_ids: dict[str, str]
+) -> str | None:
+    # main 대상은 운영진 notify-discord 워크플로가 알리고, public 레포라 팀원이 아닌 사람의 글은 거른다.
+    if pr["base"]["ref"] == "main" or actor not in user_ids:
+        return None
+    mentions = [login for login in mentioned_logins(texts, user_ids) if login != actor]
+    mentioned = " ".join(mention(login, user_ids) for login in mentions)
+    author = pr["user"]["login"]
+    if actor == author:
+        if not mentions:
+            return None
+        return (
+            f"{mentioned}\n"
+            f"{author}의 PR {_pr_link(pr)}에서 {', '.join(mentions)}를 멘션했어요."
+        )
+    return (
+        f"{mention(author, user_ids)}\n"
+        f"PR {_pr_link(pr)}에 {actor}의 리뷰가 달렸습니다.\n"
+        f"review: {review}\n"
+        f"mention: {mentioned or '없음'}"
+    )
+
+
 def _github_request(url: str, token: str) -> urllib.request.Request:
     return urllib.request.Request(
         url,
@@ -204,9 +245,33 @@ def collect_reminder(
     return build_reminder_message(pr, logins, user_ids) if logins else None
 
 
+def collect_review_notification(
+    event: dict, repo: str, token: str, user_ids: dict[str, str]
+) -> str | None:
+    api = f"https://api.github.com/repos/{repo}"
+    if "workflow_run" in event:
+        # relay run 제목은 fork 에서 바꿀 수 있어서 번호만 받고 리뷰는 API 로 다시 조회한다.
+        number, review_id = re.fullmatch(
+            r"review #(\d+) (\d+)", event["workflow_run"]["display_title"]
+        ).groups()
+        review_url = f"{api}/pulls/{number}/reviews/{review_id}"
+        review = github_get(review_url, token)
+        comments = github_get_all(f"{review_url}/comments?per_page=100", token)
+        actor = review["user"]["login"]
+        label = REVIEW_STATE_LABELS[review["state"]]
+        texts = [review["body"], *(comment["body"] for comment in comments)]
+    else:
+        number = event["issue"]["number"]
+        actor = event["comment"]["user"]["login"]
+        label = "none"
+        texts = [event["comment"]["body"]]
+    pr = github_get(f"{api}/pulls/{number}", token)
+    return build_review_notification(pr, actor, label, texts, user_ids)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="팀 내부 PR 을 Discord 로 알린다.")
-    parser.add_argument("command", choices=["notify", "remind"])
+    parser.add_argument("command", choices=["notify", "remind", "review"])
     parser.add_argument(
         "--dry-run", action="store_true", help="기다리거나 전송하지 않고 출력만 한다"
     )
@@ -225,8 +290,10 @@ def main() -> None:
         content = collect_notification(
             event, repo, token, user_ids, now, settle_seconds
         )
-    else:
+    elif args.command == "remind":
         content = collect_reminder(event, repo, token, user_ids, now)
+    else:
+        content = collect_review_notification(event, repo, token, user_ids)
 
     if content is None:
         print("보낼 알림이 없습니다.")

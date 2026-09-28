@@ -5,11 +5,13 @@ import pytest
 from tools.pr_discord_bot import (
     build_new_pr_message,
     build_reminder_message,
+    build_review_notification,
     build_review_request_message,
     due_reviewers,
     is_late_review_request,
     latest_request_times,
     mention,
+    mentioned_logins,
 )
 
 
@@ -180,3 +182,58 @@ def test_reminder_message_mentions_waiting_reviewers_on_authors_pr():
         "리뷰 요청 후 24시간이 지났습니다.\n"
         "yuyeol3님의 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45): <@222>, @Jaeseong22"
     )
+
+
+TEAM = {"yuyeol3": "111", "cho104": "222", "Jaeseong22": "333"}
+
+
+def test_mentioned_logins_keeps_teammates_once_in_order():
+    texts = [
+        "@Jaeseong22님 `@Transactional` 확인 부탁",
+        "cc @yuyeol3 mail@cho104.dev @jaeseong22",
+    ]
+
+    assert mentioned_logins(texts, TEAM) == ["Jaeseong22", "yuyeol3"]
+
+
+def test_review_notification_tags_author_with_state_and_mentions():
+    message = build_review_notification(
+        make_pr(), "cho104", "request changes", ["@Jaeseong22 확인 부탁"], TEAM
+    )
+
+    assert message == (
+        "<@111>\n"
+        "PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)에 cho104의 리뷰가 달렸습니다.\n"
+        "review: request changes\n"
+        "mention: <@333>"
+    )
+
+
+def test_review_notification_says_none_when_only_self_is_mentioned():
+    message = build_review_notification(make_pr(), "cho104", "none", ["@cho104 LGTM"], TEAM)
+
+    assert message.endswith("review: none\nmention: 없음")
+
+
+def test_authors_own_comment_notifies_mentioned_teammates():
+    message = build_review_notification(
+        make_pr(), "yuyeol3", "comment", ["@cho104 @Jaeseong22 반영했어요"], TEAM
+    )
+
+    assert message == (
+        "<@222> <@333>\n"
+        "yuyeol3의 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)에서 cho104, Jaeseong22를 멘션했어요."
+    )
+
+
+@pytest.mark.parametrize(
+    ("pr", "actor", "texts"),
+    [
+        (make_pr(), "yuyeol3", ["수정했습니다"]),
+        (make_pr(), "outsider", ["@cho104 확인해 주세요"]),
+        (make_pr(base="main"), "cho104", ["LGTM"]),
+    ],
+    ids=["author-without-mention", "not-teammate", "mentor-review-to-main"],
+)
+def test_review_notification_is_skipped(pr, actor, texts):
+    assert build_review_notification(pr, actor, "comment", texts, TEAM) is None
