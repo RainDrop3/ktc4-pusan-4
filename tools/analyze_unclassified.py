@@ -169,19 +169,27 @@ def find_peers(name, pool):
     return sorted(set(peers))
 
 
+def row_key(r, norm):
+    """중복 제거·집계 키. raw_merchant 만 쓰면 같은 상호가 카드사마다 다른 트랙을
+    가질 때(KB 는 사업자번호가 비고 IBK 는 있다) 먼저 나온 트랙 하나만 남는다."""
+    res = norm.normalize(r["raw_merchant"], r.get("biz_no", ""))
+    return (r["raw_merchant"], res["track"], res["norm_key"])
+
+
 def detail_rows(product, rows, norm, pg, rules):
     pool = {r["raw_merchant"] for r in rows}
-    freq = collections.Counter(r["raw_merchant"] for r in product)
+    freq = collections.Counter(row_key(r, norm) for r in product)
     amount = collections.Counter()
     for r in product:
-        amount[r["raw_merchant"]] += int(r["amount"] or 0)
+        amount[row_key(r, norm)] += int(r["amount"] or 0)
 
     out, seen = [], set()
     for r in product:
         m = r["raw_merchant"]
-        if m in seen:
+        key = row_key(r, norm)
+        if key in seen:
             continue
-        seen.add(m)
+        seen.add(key)
         p = kw.pipeline(m, r.get("biz_no", ""), norm, pg, rules)
         # PG 블록도 분류가 아니라 되묻기로 가므로 판단 대상이다.
         if p["category"] is not None and p["stage"] != "pg":
@@ -191,7 +199,7 @@ def detail_rows(product, rows, norm, pg, rules):
         out.append({
             "raw_merchant": m,
             "string_norm": res["string_norm"], "norm_key": res["norm_key"],
-            "track": res["track"], "거래건수": freq[m], "합계금액": amount[m],
+            "track": res["track"], "거래건수": freq[key], "합계금액": amount[key],
             "branch": res["branch"], "branch_raw": res["branch_raw"],
             "branch_blocked": len(res["branch_blocked"] or []),
             "is_truncated": res["is_truncated"], "enc_bytes": res["enc_bytes"],
@@ -312,6 +320,19 @@ def selftest_detail():
     km2 = measure_key_split(fake[:1], _FakeNorm)
     assert km2["split"] == {} and km2["n_track"] == 0 and km2["n_bizno"] == 0
     print("selftest_key_split ok")
+
+    # 같은 raw_merchant 가 사업자번호 있는 행 + 없는 행 -> 트랙이 달라 두 행 모두 남아야 한다.
+    # 실제 정규화·키워드룰을 쓰되 상호는 합성이다(어느 룰에도 안 걸려 미분류로 남는다).
+    norm_, pg_, rules_ = nz.load(), pg_block.load(), kw.load()
+    syn = "가나다테스트합성상점"
+    rows_ = [{"raw_merchant": syn, "biz_no": "123-45-67890", "amount": "1000", "source_card": "ibk"},
+             {"raw_merchant": syn, "biz_no": "", "amount": "2000", "source_card": "kb"}]
+    dr = detail_rows(rows_, rows_, norm_, pg_, rules_)
+    assert len(dr) == 2, dr
+    assert {d["track"] for d in dr} == {"bizno", "string"}
+    # 건수·금액은 행별로 나뉘어야 한다(한 행이 전체를 들고 나오면 이중 집계)
+    assert sorted((d["거래건수"], d["합계금액"]) for d in dr) == [(1, 1000), (1, 2000)]
+    print("selftest_dedup_track ok")
     print("selftest_detail ok")
 
 # ── 키 분열 지표 ────────────────────────────────────────────────────
@@ -397,24 +418,25 @@ BLOCKED_FIELDS = ["raw_merchant", "string_norm", "norm_key", "track", "category"
 
 def blocked_rows(rows, norm, pg, rules):
     """branch_blocked 전건. 미분류 목록은 이 중 분류 실패한 것만 보여준다."""
-    freq = collections.Counter(r["raw_merchant"] for r in rows)
+    freq = collections.Counter(row_key(r, norm) for r in rows)
     amount = collections.Counter()
     for r in rows:
-        amount[r["raw_merchant"]] += int(r["amount"] or 0)
+        amount[row_key(r, norm)] += int(r["amount"] or 0)
     out, seen = [], set()
     for r in rows:
         m = r["raw_merchant"]
-        if m in seen:
+        key = row_key(r, norm)
+        if key in seen:
             continue
         res = norm.normalize(m, r.get("biz_no", ""))
         if not res["branch_blocked"]:
             continue
-        seen.add(m)
+        seen.add(key)
         p = kw.pipeline(m, r.get("biz_no", ""), norm, pg, rules)
         out.append({
             "raw_merchant": m, "string_norm": res["string_norm"],
             "norm_key": res["norm_key"], "track": res["track"],
-            "category": p["category"], "거래건수": freq[m], "합계금액": amount[m],
+            "category": p["category"], "거래건수": freq[key], "합계금액": amount[key],
             "branch": res["branch"], "branch_raw": res["branch_raw"],
             "blocked_patterns": " | ".join(res["branch_blocked"]),
             "enc_bytes": res["enc_bytes"], "is_truncated": res["is_truncated"],
