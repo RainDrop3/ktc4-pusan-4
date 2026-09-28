@@ -101,10 +101,6 @@ const store = {
   reviews: CLASSIFICATION_REVIEWS.map((r) => ({ ...r })) as ClassificationReview[]
 };
 
-const GROUP_OF_TRANSACTION: Record<string, string> = Object.fromEntries(
-  Object.entries(QUESTION_TRANSACTIONS).flatMap(([g, ids]) => ids.map((id) => [id, g]))
-);
-
 const latestOf = (transactionId: string) =>
 store.judgments.
 filter((j) => j.transactionId === transactionId).
