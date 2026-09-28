@@ -4,7 +4,7 @@
 > 채워져 있고, 기준은 전부 빈칸이다. 룰카드 `review.by` 와 같은 이유로 자동으로
 > 채우지 않는다.
 
-판단 대상 목록: `data/unclassified_detail.csv` (gitignore — 레포에 없다).
+판단 대상 목록: `data/snapshots/2026-09-28/unclassified_detail.csv` (gitignore — 레포에 없다. 아래 "판단 로그" 의 스냅샷 기준 참고).
 이 문서의 **판단 로그는 순위 번호로만 참조한다.** 상호명 원문은 개인 지출
 패턴이라 public 레포에 올리지 않는다.
 
@@ -92,7 +92,24 @@
 
 ## 판단 로그
 
-`data/unclassified_detail.csv` 의 순위와 1:1 대응한다. 상호명은 적지 않는다.
+### 스냅샷 기준
+
+판단 로그의 순위 번호는 아래 스냅샷 기준이다. **스냅샷 밖 CSV 와 번호를 대조하지 않는다.**
+
+- 생성 도구 커밋: `d4dfcb4` (`tools/analyze_unclassified.py --detail --blocked`)
+- 생성일: 2026-09-28
+- 경로: `data/snapshots/2026-09-28/`
+
+| 파일 | 행 수 | sha256 |
+|---|---:|---|
+| `unclassified_detail.csv` | 25 | `1c1e657e6d343e8460cbc868c93538b7b42d1789ef2de3f2e71a5e08fa229c39` |
+| `branch_blocked.csv` | 7 | `51141480af56c4e56df41b4c0bc3897c9215896b99a2888af9e7d1559ffede4e` |
+
+스냅샷은 `data/`(gitignore)에 있어 레포에는 없다. 원문 대조는 스냅샷 보유자(PM)만 가능하다.
+
+### 로그
+
+`unclassified_detail.csv` 스냅샷의 순위와 1:1 대응한다. 상호명은 적지 않는다.
 
 | 순위 | 1층 결과 (norm_key) | 2층 결과 (category) | 이유 |
 |---:|---|---|---|
@@ -121,7 +138,6 @@
 | 23 |  |  |  |
 | 24 |  |  |  |
 | 25 |  |  |  |
-| 26 |  |  |  |
 
 ---
 
