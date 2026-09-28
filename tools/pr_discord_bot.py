@@ -5,9 +5,8 @@ import re
 import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from typing import NamedTuple
 
-DISCORD_CONTENT_LIMIT = 2000
+# pr-review-reminder.yml 의 environment(review-reminder) wait timer 와 같아야 한다.
 REVIEW_WAIT_THRESHOLD = timedelta(hours=24)
 # 새 PR 알림은 이만큼 기다렸다가 리뷰어를 조회하고, 그 사이 들어온 리뷰 요청은 따로 알리지 않는다.
 REVIEWER_SETTLE_WINDOW = timedelta(minutes=2)
@@ -42,14 +41,20 @@ def build_review_request_message(pr: dict, login: str, user_ids: dict[str, str])
     return f"👀 {mention(login, user_ids)} 리뷰 요청: {_pr_link(pr)} · {pr['user']['login']}"
 
 
+def opened_time(pr: dict, last_ready: datetime | None) -> datetime:
+    created_at = datetime.fromisoformat(pr["created_at"])
+    return max(created_at, last_ready) if last_ready else created_at
+
+
 def is_late_review_request(
     pr: dict, requested_at: datetime, last_ready: datetime | None
 ) -> bool:
     # PR 생성·ready 직후 지정된 리뷰어는 새 PR 알림이 기다렸다가 함께 멘션한다(#41: ready 27초 뒤 5명 지정).
     # draft 에서 받은 요청은 ready_for_review 알림에서 멘션된다.
-    created_at = datetime.fromisoformat(pr["created_at"])
-    opened_at = max(created_at, last_ready) if last_ready else created_at
-    return not pr["draft"] and requested_at - opened_at > REVIEWER_SETTLE_WINDOW
+    return (
+        not pr["draft"]
+        and requested_at - opened_time(pr, last_ready) > REVIEWER_SETTLE_WINDOW
+    )
 
 
 def latest_request_times(events: list[dict]) -> dict[str, datetime]:
@@ -75,74 +80,42 @@ def last_ready_time(events: list[dict]) -> datetime | None:
     )
 
 
-def wait_start_times(events: list[dict]) -> dict[str, datetime]:
-    # draft 일 때 받은 요청은 ready 로 바뀐 시점부터 기다린 것으로 본다.
+def due_reviewers(
+    pr: dict, events: list[dict], action: str, login: str | None, now: datetime
+) -> list[str]:
+    # 24시간을 기다린 run 이 멘션할 리뷰어. 그 사이 재요청이나 ready 가 있었으면 그때 뜬 run 이 맡는다.
+    if pr["state"] != "open" or pr["draft"]:
+        return []
+    request_times = latest_request_times(events)
     last_ready = last_ready_time(events)
-    return {
-        login: max(requested_at, last_ready) if last_ready else requested_at
-        for login, requested_at in latest_request_times(events).items()
-    }
+    waiting = [
+        reviewer["login"]
+        for reviewer in pr["requested_reviewers"]
+        if reviewer["login"] in request_times
+    ]
+    if action == "review_requested":
+        if login not in waiting:
+            return []
+        requested_at = request_times[login]
+        # PR 과 함께 지정된 리뷰어는 opened·ready run 이 묶어서 멘션한다.
+        if not is_late_review_request(pr, requested_at, last_ready):
+            return []
+        return [login] if now - requested_at >= REVIEW_WAIT_THRESHOLD else []
+    if now - opened_time(pr, last_ready) < REVIEW_WAIT_THRESHOLD:
+        return []
+    return [
+        reviewer
+        for reviewer in waiting
+        if not is_late_review_request(pr, request_times[reviewer], last_ready)
+    ]
 
 
-class StaleReview(NamedTuple):
-    pr: dict
-    login: str
-    waited: timedelta
-
-
-def find_stale_reviews(
-    prs: list[dict],
-    wait_starts_by_pr: dict[int, dict[str, datetime]],
-    now: datetime,
-    threshold: timedelta,
-) -> list[StaleReview]:
-    stale = []
-    for pr in prs:
-        wait_starts = wait_starts_by_pr[pr["number"]]
-        for reviewer in pr["requested_reviewers"]:
-            waited = now - wait_starts[reviewer["login"]]
-            if waited >= threshold:
-                stale.append(StaleReview(pr, reviewer["login"], waited))
-    return stale
-
-
-def is_reminder_target(pr: dict) -> bool:
-    # develop → main 은 운영진 notify-discord 워크플로가 멘토에게 알린다.
-    return not pr["draft"] and pr["base"]["ref"] != "main"
-
-
-def build_reminder_message(
-    stale: list[StaleReview], user_ids: dict[str, str]
-) -> str | None:
-    if not stale:
-        return None
-    by_pr: dict[int, list[StaleReview]] = {}
-    for review in stale:
-        by_pr.setdefault(review.pr["number"], []).append(review)
-
-    lines = ["⏰ 리뷰를 기다리는 PR이 있어요"]
-    for reviews in by_pr.values():
-        pr = reviews[0].pr
-        waiting = ", ".join(
-            f"{mention(review.login, user_ids)} ({int(review.waited.total_seconds() // 3600)}시간)"
-            for review in reviews
-        )
-        lines.append(f"• {_pr_link(pr)} · {pr['user']['login']} → {waiting}")
-    return "\n".join(lines)
-
-
-def split_message(content: str, limit: int = DISCORD_CONTENT_LIMIT) -> list[str]:
-    # 한 줄은 PR 하나라 limit 을 넘지 않는다. 줄 단위로만 자른다.
-    chunks: list[str] = []
-    current = ""
-    for line in content.split("\n"):
-        candidate = f"{current}\n{line}" if current else line
-        if len(candidate) > limit:
-            chunks.append(current)
-            candidate = line
-        current = candidate
-    chunks.append(current)
-    return chunks
+def build_reminder_message(pr: dict, logins: list[str], user_ids: dict[str, str]) -> str:
+    reviewers = ", ".join(mention(login, user_ids) for login in logins)
+    return (
+        f"리뷰 요청 후 {REVIEW_WAIT_THRESHOLD // timedelta(hours=1)}시간이 지났습니다.\n"
+        f"{pr['user']['login']}님의 PR {_pr_link(pr)}: {reviewers}"
+    )
 
 
 def _github_request(url: str, token: str) -> urllib.request.Request:
@@ -176,23 +149,22 @@ def github_get_all(url: str, token: str) -> list[dict]:
 
 
 def post_discord(webhook_url: str, content: str) -> None:
-    for chunk in split_message(content):
-        payload = {
-            "content": chunk,
-            "allowed_mentions": {"parse": ["users"]},  # @everyone·역할 멘션 차단
-            "flags": 4,  # 링크 미리보기(embed) 끄기
-        }
-        request = urllib.request.Request(
-            webhook_url,
-            data=json.dumps(payload).encode("utf-8"),
-            # 기본 Python-urllib User-Agent 는 Discord 앞단에서 403 으로 막힌다.
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "ktc4-pr-discord-bot",
-            },
-            method="POST",
-        )
-        urllib.request.urlopen(request, timeout=30).close()
+    payload = {
+        "content": content,
+        "allowed_mentions": {"parse": ["users"]},  # @everyone·역할 멘션 차단
+        "flags": 4,  # 링크 미리보기(embed) 끄기
+    }
+    request = urllib.request.Request(
+        webhook_url,
+        data=json.dumps(payload).encode("utf-8"),
+        # 기본 Python-urllib User-Agent 는 Discord 앞단에서 403 으로 막힌다.
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "ktc4-pr-discord-bot",
+        },
+        method="POST",
+    )
+    urllib.request.urlopen(request, timeout=30).close()
 
 
 def collect_notification(
@@ -222,22 +194,14 @@ def collect_notification(
 
 
 def collect_reminder(
-    repo: str, token: str, user_ids: dict[str, str], now: datetime
+    event: dict, repo: str, token: str, user_ids: dict[str, str], now: datetime
 ) -> str | None:
     api = f"https://api.github.com/repos/{repo}"
-    prs = [
-        pr
-        for pr in github_get_all(f"{api}/pulls?state=open&per_page=100", token)
-        if is_reminder_target(pr) and pr["requested_reviewers"]
-    ]
-    wait_starts_by_pr = {
-        pr["number"]: wait_start_times(
-            github_get_all(f"{api}/issues/{pr['number']}/events?per_page=100", token)
-        )
-        for pr in prs
-    }
-    stale = find_stale_reviews(prs, wait_starts_by_pr, now, REVIEW_WAIT_THRESHOLD)
-    return build_reminder_message(stale, user_ids)
+    pr = github_get(f"{api}/pulls/{event['pull_request']['number']}", token)
+    events = github_get_all(f"{api}/issues/{pr['number']}/events?per_page=100", token)
+    login = event.get("requested_reviewer", {}).get("login")
+    logins = due_reviewers(pr, events, event["action"], login, now)
+    return build_reminder_message(pr, logins, user_ids) if logins else None
 
 
 def main() -> None:
@@ -254,15 +218,15 @@ def main() -> None:
     repo = os.environ["GITHUB_REPOSITORY"]
     token = os.environ["GITHUB_TOKEN"]
     now = datetime.now(timezone.utc)
+    with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+        event = json.load(event_file)
     if args.command == "notify":
-        with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
-            event = json.load(event_file)
         settle_seconds = 0 if args.dry_run else REVIEWER_SETTLE_WINDOW.total_seconds()
         content = collect_notification(
             event, repo, token, user_ids, now, settle_seconds
         )
     else:
-        content = collect_reminder(repo, token, user_ids, now)
+        content = collect_reminder(event, repo, token, user_ids, now)
 
     if content is None:
         print("보낼 알림이 없습니다.")
