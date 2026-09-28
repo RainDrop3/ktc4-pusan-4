@@ -78,7 +78,7 @@ public class ApiExceptionHandler {
     }
 
     /**
-     * api.md 1.3 표에 없는 상태(405, 415 등)는 HTTP 상태 이름을 code 로 쓴다.
+     * api.md 1.3 표에 없는 상태는 HTTP 상태 이름을 code 로 쓴다. 405·415 는 이 규칙대로 표에 올려 두었다.
      */
     private static String commonCode(HttpStatusCode status) {
         String code = COMMON_CODES.get(status.value());
