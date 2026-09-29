@@ -115,7 +115,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    subgraph CORPUS["법령 코퍼스 구축 (별도 배치, 일 1회)"]
+    subgraph CORPUS["법령 코퍼스 구축 (별도 배치, 주 1회 EC2 timer)"]
         LAW["국가법령정보 OPEN API<br/>법령 · 행정규칙 · 심판례 · 판례"]
         SV["statute_version (원문, append-only)<br/>조 / 항 / 호 / 문서 전부"]
         LC["legal_chunk (맨 아래 잎만)<br/>벡터 임베딩(1536) + pg_bigm 인덱스"]

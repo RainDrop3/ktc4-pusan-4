@@ -327,9 +327,8 @@ JudgmentEngine.java:51 은 조건 미스매치도 RULE_NOT_FOUND 로 쓴다. 그
 - draft.py 의 render() 가 account 를 따옴표 없이 쓴다. 콜론이 들어가면 YAML 파싱
   실패, "no" 같은 값은 불리언이 된다. note 쪽만 고쳤다.
 - Evidence.refs 에 중복 제거가 없다.
-- ai/Dockerfile 이 `COPY app ./app` 뿐이라 pipeline/ 이 이미지에 없다. compose 는
-  AGENT_*/EMBEDDING_* 를 ai 서비스에 넘기고 있어 배포 시 어긋난다.
-- 배포 트리거(EC2 cron / GH Actions cron) 미정. 아무것도 배포돼 있지 않다.
+- 코퍼스 동기화는 EC2 timer 로 주 1회 돈다(`docs/deployment.md` §6). 규칙 후보 추출
+  (`candidates.py`) 배치 트리거는 아직 없다.
 - 평가 하네스 둘 다 CI 에 없다.
 - §9 2단계의 백업 테이블 `legal_chunk_bak` 은 결과를 확인한 뒤 지웠다(2026-09-23). 되돌리려면
   `chunk.clean()` 을 빼고 `reindex --full --doc-type=법령`, `--doc-type=행정규칙` 을 다시 돌린다.
