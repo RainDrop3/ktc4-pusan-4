@@ -59,6 +59,8 @@ def wanted() -> dict[tuple[str, str], dict]:
     """카드를 (카테고리, 업종)으로 묶는다. 키워드·금액으로만 매칭하는 카드는 뺀다.
 
     그런 카드는 카테고리를 입력으로 줄 수 없어 이 하네스가 재현할 수 없다.
+    휴일 카드(match.holiday)도 뺀다. 입력에 날짜가 없어서, 같은 카테고리의 평일 카드와
+    섞이면 정답 판정이 {확인필요, 불가} 처럼 서로 반대인 값이 된다.
     """
     out: dict[tuple[str, str], dict] = defaultdict(
         lambda: {"cards": [], "gates": set(), "verdicts": set(), "cites": set()}
@@ -66,6 +68,8 @@ def wanted() -> dict[tuple[str, str], dict]:
     for f in sorted(CARDS.glob("R-*.yaml")):
         card = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
         match = card.get("match") or {}
+        if match.get("holiday") is True:
+            continue
         industry = (match.get("industry") or [PERSONA])[0]
         for cat in match.get("category") or []:
             w = out[(cat, industry)]
