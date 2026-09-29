@@ -1,5 +1,6 @@
 package com.ktc4.pusan4.judgment.rule;
 
+import com.ktc4.pusan4.judgment.domain.Citation;
 import com.ktc4.pusan4.judgment.domain.QuestionEffect;
 import com.ktc4.pusan4.judgment.domain.Gate;
 import com.ktc4.pusan4.judgment.domain.RuleCard;
@@ -90,6 +91,93 @@ class RuleCardLoaderTest {
                 Map.of("limit_bucket", "접대비")
             )
         );
+    }
+
+    @Test
+    void loads_option_citations_as_citations_not_attributes() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-027.yaml"), """
+            id: R-027
+            version: 1
+            gate: G3
+            priority: 401
+            effective_period: { start: 2025-01-01, end: null }
+            match:
+              category: [카페]
+            question:
+              code: PURPOSE
+              text: 이 결제는 어떤 용도였나요?
+              fact_type: 용도
+              group_by: transaction
+              options:
+                - { value: 업무미팅, verdict: 가능, citations: [{ id: 소득세법-35-1, verified: true }] }
+                - { value: 개인, verdict: 불가 }
+            citations: [소득세법-33-1-5]
+            review: { by: 외부자문, date: 2026-09-05 }
+            """);
+
+        RuleCard card = new RuleCardLoader().load(root).get(Gate.G3).getFirst();
+
+        assertThat(card.questions().getFirst().effects()).containsEntry(
+            "업무미팅",
+            new QuestionEffect(Verdict.AVAILABLE, null, Map.of(), List.of(new Citation("소득세법-35-1")))
+        );
+    }
+
+    // 카드 근거가 없어도 확정 답마다 자기 근거가 있으면 된다. 근거 없는 확정 답이 하나라도 있으면 거부한다.
+    @Test
+    void rejects_final_option_verdict_without_card_or_option_citation() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-027.yaml"), """
+            id: R-027
+            version: 1
+            gate: G3
+            priority: 401
+            effective_period: { start: 2025-01-01, end: null }
+            match:
+              category: [카페]
+            question:
+              code: PURPOSE
+              text: 이 결제는 어떤 용도였나요?
+              fact_type: 용도
+              group_by: transaction
+              options:
+                - { value: 업무미팅, verdict: 가능, citations: [소득세법-35-1] }
+                - { value: 개인, verdict: 불가 }
+            review: { by: 외부자문, date: 2026-09-05 }
+            """);
+
+        assertThatThrownBy(() -> new RuleCardLoader().load(root))
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("R-027")
+            .hasMessageContaining("effect verdict requires citation");
+    }
+
+    @Test
+    void accepts_final_option_verdicts_that_each_carry_their_own_citation() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-027.yaml"), """
+            id: R-027
+            version: 1
+            gate: G3
+            priority: 401
+            effective_period: { start: 2025-01-01, end: null }
+            match:
+              category: [카페]
+            question:
+              code: PURPOSE
+              text: 이 결제는 어떤 용도였나요?
+              fact_type: 용도
+              group_by: transaction
+              options:
+                - { value: 업무미팅, verdict: 가능, citations: [소득세법-35-1] }
+                - { value: 개인, verdict: 불가, citations: [소득세법-33-1-5] }
+            review: { by: 외부자문, date: 2026-09-05 }
+            """);
+
+        RuleCard card = new RuleCardLoader().load(root).get(Gate.G3).getFirst();
+
+        assertThat(card.citations()).isEmpty();
     }
 
     @Test

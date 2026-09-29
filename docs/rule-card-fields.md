@@ -183,12 +183,28 @@ options:
 ```
 
 `value`·`verdict`·`account`를 뺀 **나머지 키가 그대로 판정 속성**이 됩니다. 위에서는
-`limit_bucket: 접대비`가 속성입니다.
+`limit_bucket: 접대비`가 속성입니다. `citations`도 속성이 아니라 근거입니다(아래).
 
 `verdict`를 두지 않은 선택지는 판정을 확정하지 않습니다(위 `업무·개인 혼용`). 안분·기간배분은
 판정이 아니라 금액 산정이라 뒤 관문이 처리합니다. 이게 위 표의 ③입니다.
 
-확정 verdict를 내는 선택지가 있으면 카드에 `citations`가 있어야 합니다.
+**답마다 근거가 다르면 선택지에 `citations`를 둡니다.** 카드 `citations`는 모든 답에 붙기 때문입니다.
+음식점에서 업무미팅은 §35① 기업업무추진비로 가능, 개인은 §33①5 가사경비로 불가입니다. 카드에 §35①을
+두면 개인 불가에도 붙어 접대비 오적용이 됩니다(E-027).
+
+```yaml
+citations:
+  - { id: 소득세법-33-1-5, verified: true }     # 답이 없거나, 선택지 근거가 없는 답에 붙음
+question:
+  options:
+    - { value: 업무미팅, verdict: 가능, citations: [{ id: 소득세법-35-1, verified: true }], account: 접대비 }
+    - { value: 개인, verdict: 불가 }
+```
+
+답한 선택지에 `citations`가 있으면 엔진은 그 카드의 카드 `citations` 대신 선택지 것을 싣습니다.
+
+확정 verdict(`가능`·`불가`)를 내는 선택지는 자기 `citations`가 있거나, 카드에 `citations`가 있어야
+합니다. 둘 다 없으면 로더가 거부합니다.
 
 ---
 

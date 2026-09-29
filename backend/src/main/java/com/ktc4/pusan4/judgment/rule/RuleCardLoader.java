@@ -139,12 +139,13 @@ public final class RuleCardLoader {
         }
 
         List<QuestionSpec> questions = questions(root);
-        boolean hasFinalEffectVerdict = questions.stream()
+        // 확정 답은 자기 근거가 있거나 카드 근거를 물려받아야 한다.
+        boolean hasUncitedFinalEffect = questions.stream()
             .flatMap(question -> question.effects().values().stream())
-            .map(QuestionEffect::verdict)
-            .anyMatch(effectVerdict ->
-                effectVerdict == Verdict.AVAILABLE || effectVerdict == Verdict.UNAVAILABLE);
-        if (hasFinalEffectVerdict && citations.isEmpty()) {
+            .filter(effect ->
+                effect.verdict() == Verdict.AVAILABLE || effect.verdict() == Verdict.UNAVAILABLE)
+            .anyMatch(effect -> effect.citations().isEmpty());
+        if (hasUncitedFinalEffect && citations.isEmpty()) {
             throw new RuleCardValidationException(id + ": effect verdict requires citation");
         }
         if (!ruleMatch.weekdays().isEmpty()) {
@@ -305,12 +306,14 @@ public final class RuleCardLoader {
                 attributes.remove("value");
                 attributes.remove("verdict");
                 attributes.remove("account");
+                attributes.remove("citations");
                 effects.put(value, new QuestionEffect(
                     option.hasNonNull("verdict")
                         ? verdictValue(option.get("verdict").asText())
                         : null,
                     optionalText(option, "account"),
-                    attributes
+                    attributes,
+                    citations(option.path("citations"))
                 ));
             }
         });

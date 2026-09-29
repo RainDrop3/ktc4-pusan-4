@@ -699,6 +699,56 @@ class JudgmentEngineTest {
             .containsExactly(Verdict.UNAVAILABLE, List.of());
     }
 
+    // 카드 근거는 모든 답에 붙으므로, 답마다 근거가 다르면 선택지 근거가 카드 근거를 대신한다.
+    // 업무미팅 가능에 §33①5(가사경비)가, 개인 불가에 §35①(접대비)이 붙으면 안 된다(E-027).
+    @Test
+    void answered_option_citations_replace_card_citations() {
+        TransactionInput transaction = restaurant();
+        RuleSet rules = new RuleSet(List.of(optionCited()));
+        UserContext context = new UserContext("940909", false, null);
+
+        Judgment meeting = JudgmentEngine.judge(transaction, context, List.of(
+            new UserFact("transaction:" + transaction.id(), "용도", Map.of("value", "업무미팅"))
+        ), rules);
+        Judgment personal = JudgmentEngine.judge(transaction, context, List.of(
+            new UserFact("transaction:" + transaction.id(), "용도", Map.of("value", "개인"))
+        ), rules);
+
+        assertThat(meeting)
+            .extracting(Judgment::verdict, Judgment::citations)
+            .containsExactly(Verdict.AVAILABLE, List.of(new Citation("소득세법-35-1")));
+        assertThat(personal)
+            .extracting(Judgment::verdict, Judgment::citations)
+            .containsExactly(Verdict.UNAVAILABLE, List.of(new Citation("소득세법-33-1-5")));
+    }
+
+    @Test
+    void unanswered_option_cited_card_keeps_card_citations() {
+        Judgment result = JudgmentEngine.judge(
+            restaurant(), new UserContext("940909", false, null), List.of(),
+            new RuleSet(List.of(optionCited()))
+        );
+
+        assertThat(result.citations()).containsExactly(new Citation("소득세법-33-1-5"));
+    }
+
+    private static RuleCard optionCited() {
+        QuestionSpec purpose = new QuestionSpec(
+            "PURPOSE", "어떤 용도였나요?", "용도", "transaction",
+            List.of("업무미팅", "개인"),
+            Map.of(
+                "업무미팅", new QuestionEffect(
+                    Verdict.AVAILABLE, "접대비", Map.of(), List.of(new Citation("소득세법-35-1"))),
+                "개인", new QuestionEffect(Verdict.UNAVAILABLE, null, Map.of())
+            )
+        );
+        return new RuleCard(
+            "R-301", 1, Gate.G2, 500, RuleMatch.categories("음식점"),
+            Verdict.NEEDS_REVIEW, null, List.of(new Citation("소득세법-33-1-5")),
+            Map.of(), List.of(purpose)
+        );
+    }
+
     private static TransactionInput restaurant() {
         return new TransactionInput(UUID.randomUUID(), LocalDate.of(2025, 3, 15), "한식당", "음식점", 25_000);
     }

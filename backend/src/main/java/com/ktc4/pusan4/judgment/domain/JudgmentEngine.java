@@ -82,6 +82,7 @@ public final class JudgmentEngine {
             // 카드의 기본 판정을, 그 카드의 되묻기 응답(effect)이 있으면 대체한다.
             Verdict cardVerdict = rule.verdict();
             boolean rebuttable = false;
+            List<Citation> answeredCitations = new ArrayList<>();
             if (defaultAccount == null && rule.account() != null) {
                 defaultAccount = rule.account();
             }
@@ -96,6 +97,7 @@ public final class JudgmentEngine {
                 if (effect.verdict() != null) {
                     cardVerdict = effect.verdict();
                 }
+                answeredCitations.addAll(effect.citations());
                 if (effect.account() != null) {
                     if (answeredAccount == null) {
                         answeredAccount = effect.account();
@@ -111,7 +113,8 @@ public final class JudgmentEngine {
             resolvedVerdict = moreRestrictive(resolvedVerdict, cardVerdict);
             appliedRuleIds.add(rule.id());
             appliedRuleVersions.add(rule.version());
-            citations.addAll(rule.citations());
+            // 답에 근거가 따로 있으면 카드 근거 대신 싣는다(업무미팅 §35① / 개인 §33①5 처럼 답마다 근거가 다름).
+            citations.addAll(answeredCitations.isEmpty() ? rule.citations() : answeredCitations);
         }
 
         // 이미 불가로 확정된 거래는 되묻지 않는다: 미해소 질문을 버려 되묻기 예산 낭비를 막는다.
