@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -321,57 +322,106 @@ class RuleCardLoaderRealCardsTest {
     }
 
     /**
-     * 주말 식대는 개인 식사로 추정해 불가지만, 소명할 수 있게 용도 질문을 남긴다
-     * (세무사 실무 질의응답 2026-09 Q2: 소명이 없으면 개인 식사비로 추정).
-     * 주말 카드가 평일 카드보다 priority 가 높아 이기는지도 함께 본다.
+     * 주말·공휴일 식대·여비교통은 개인 지출로 추정해 불가지만, 소명할 수 있게 용도 질문을 남긴다
+     * (세무사 실무 질의응답 2026-09 Q2, 회의 결정 2026-09: 기본 불가, 소명하면 가능).
+     * 휴일 카드가 평일 카드보다 priority 가 높아 이기는지도 함께 본다.
      */
     @ParameterizedTest
-    @ValueSource(strings = {"음식점", "카페", "음식배달"})
-    void 주말_식대는_불가로_추정하되_소명_질문을_남긴다(String 카테고리) throws IOException {
+    @ValueSource(strings = {"음식점", "카페", "음식배달", "여비교통"})
+    void 주말_결제는_불가로_추정하되_소명_질문을_남긴다(String 카테고리) throws IOException {
         Judgment judgment = JudgmentEngine.judge(
             주말거래(카테고리), 인적용역, List.of(), load());
 
         assertThat(judgment.verdict()).isEqualTo(Verdict.UNAVAILABLE);
         assertThat(judgment.questions()).singleElement()
             .satisfies(question -> assertThat(question.factType()).isEqualTo("용도"));
-        assertThat(judgment.attributes()).containsEntry("주말결제", true);
+        assertThat(judgment.attributes()).containsEntry("휴일결제", true);
     }
 
-    /** 소명한 주말 식대는 평일과 같은 결과여야 한다. 주말이라 더 불리하거나 유리하지 않다. */
+    /** 평일 공휴일(2025-10-09 목, 한글날)도 넘겨 받으면 주말과 같다. */
     @Test
-    void 주말_업무미팅_소명은_평일과_같은_결과다() throws IOException {
-        TransactionInput 토요일 = 주말거래("음식점");
-        TransactionInput 금요일 = 거래("한식당", "음식점", 25_000);
+    void 평일_공휴일_식대도_불가로_추정한다() throws IOException {
+        LocalDate 한글날 = LocalDate.of(2025, 10, 9);
+        TransactionInput 거래 = new TransactionInput(UUID.randomUUID(), 한글날, "한식당", "음식점", 25_000);
 
-        Judgment 주말 = JudgmentEngine.judge(토요일, 인적용역, List.of(업무미팅(토요일)), load());
-        Judgment 평일 = JudgmentEngine.judge(금요일, 인적용역, List.of(업무미팅(금요일)), load());
+        Judgment judgment = JudgmentEngine.judge(거래, 인적용역, List.of(), load(), Set.of(한글날));
 
-        assertThat(주말.verdict()).isEqualTo(평일.verdict());
-        assertThat(주말.account()).isEqualTo(평일.account());
-        assertThat(주말.attributes()).containsEntry("limit_bucket", 평일.attributes().get("limit_bucket"));
-        assertThat(주말.questions()).isEmpty();
+        assertThat(judgment.verdict()).isEqualTo(Verdict.UNAVAILABLE);
+        assertThat(judgment.appliedRuleIds()).containsExactly("R-311");
+    }
+
+    /** 업무미팅은 요일과 무관하게 §35① 기업업무추진비로 가능이다. §33①5 가 같이 붙으면 안 된다. */
+    @ParameterizedTest
+    @ValueSource(strings = {"음식점", "카페", "음식배달"})
+    void 업무미팅_소명은_주말_평일_모두_가능이고_35조만_인용한다(String 카테고리) throws IOException {
+        TransactionInput 토요일 = 주말거래(카테고리);
+        TransactionInput 금요일 = 거래("가맹점", 카테고리, 25_000);
+
+        Judgment 주말 = JudgmentEngine.judge(토요일, 인적용역, List.of(용도(토요일, "업무미팅")), load());
+        Judgment 평일 = JudgmentEngine.judge(금요일, 인적용역, List.of(용도(금요일, "업무미팅")), load());
+
+        for (Judgment judgment : List.of(주말, 평일)) {
+            assertThat(judgment.verdict()).isEqualTo(Verdict.AVAILABLE);
+            assertThat(인용조문(judgment)).containsExactly("소득세법-35-1");
+            assertThat(judgment.account()).isEqualTo("접대비");
+            assertThat(judgment.attributes()).containsEntry("limit_bucket", "접대비");
+            assertThat(judgment.questions()).isEmpty();
+        }
+    }
+
+    /** 개인 식사에 §35① 이 붙으면 접대비 오적용이다(E-027). */
+    @ParameterizedTest
+    @ValueSource(strings = {"음식점", "카페", "음식배달"})
+    void 주말_개인_답은_불가이고_35조를_인용하지_않는다(String 카테고리) throws IOException {
+        TransactionInput 토요일 = 주말거래(카테고리);
+
+        Judgment judgment = JudgmentEngine.judge(토요일, 인적용역, List.of(용도(토요일, "개인")), load());
+
+        assertThat(judgment.verdict()).isEqualTo(Verdict.UNAVAILABLE);
+        assertThat(인용조문(judgment)).containsExactly("소득세법-33-1-5");
+    }
+
+    /** 혼자 카페 작업은 업무비로 보기 어렵다. 주말에는 소명으로 인정하지 않는다. */
+    @Test
+    void 주말_카페_혼자작업은_불가다() throws IOException {
+        TransactionInput 토요일 = 주말거래("카페");
+
+        Judgment judgment = JudgmentEngine.judge(토요일, 인적용역, List.of(용도(토요일, "혼자작업")), load());
+
+        assertThat(judgment.verdict()).isEqualTo(Verdict.UNAVAILABLE);
+        assertThat(judgment.questions()).isEmpty();
+    }
+
+    @Test
+    void 주말_여비교통_업무출장_소명은_27조로_가능이다() throws IOException {
+        TransactionInput 토요일 = 주말거래("여비교통");
+
+        Judgment judgment = JudgmentEngine.judge(토요일, 인적용역, List.of(용도(토요일, "업무출장")), load());
+
+        assertThat(judgment.verdict()).isEqualTo(Verdict.AVAILABLE);
+        assertThat(인용조문(judgment)).containsExactly("소득세법-27-1");
+        assertThat(judgment.account()).isEqualTo("여비교통비");
     }
 
     /**
-     * 로더는 모르는 match 키를 조용히 무시한다. 주말 카드에 weekday 를 weekdays 처럼 오타 내면
-     * 요일 조건이 사라져 평일 식대까지 전부 불가가 되는데, 그걸 잡는 건 이 테스트뿐이다.
+     * 휴일 카드에 holiday 를 빠뜨리면 평일까지 전부 불가가 된다. 그걸 잡는 건 이 테스트다.
      */
     @ParameterizedTest
-    @ValueSource(strings = {"음식점", "카페", "음식배달"})
-    void 평일_식대는_기존_카드가_판정한다(String 카테고리) throws IOException {
+    @ValueSource(strings = {"음식점", "카페", "음식배달", "여비교통"})
+    void 평일_결제는_기존_카드가_판정한다(String 카테고리) throws IOException {
         Judgment judgment = JudgmentEngine.judge(
             거래("가맹점", 카테고리, 25_000), 인적용역, List.of(), load());
 
         assertThat(judgment.verdict()).isEqualTo(Verdict.NEEDS_REVIEW);
-        assertThat(judgment.attributes()).doesNotContainKey("주말결제");
+        assertThat(judgment.attributes()).doesNotContainKey("휴일결제");
     }
 
     private static TransactionInput 주말거래(String 카테고리) {
         return new TransactionInput(UUID.randomUUID(), LocalDate.of(2025, 3, 15), "가맹점", 카테고리, 25_000);
     }
 
-    private static UserFact 업무미팅(TransactionInput 거래) {
-        return new UserFact("transaction:" + 거래.id(), "용도", Map.of("value", "업무미팅"));
+    private static UserFact 용도(TransactionInput 거래, String 값) {
+        return new UserFact("transaction:" + 거래.id(), "용도", Map.of("value", 값));
     }
 
     /** 무엇을 샀는지는 여전히 모르므로 가능이어도 계정과목은 비운다. */
