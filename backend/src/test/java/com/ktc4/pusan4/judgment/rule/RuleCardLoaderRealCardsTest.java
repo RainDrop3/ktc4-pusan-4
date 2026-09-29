@@ -335,7 +335,7 @@ class RuleCardLoaderRealCardsTest {
         assertThat(judgment.verdict()).isEqualTo(Verdict.UNAVAILABLE);
         assertThat(judgment.questions()).singleElement()
             .satisfies(question -> assertThat(question.factType()).isEqualTo("용도"));
-        assertThat(judgment.attributes()).containsEntry("휴일결제", true);
+        assertThat(judgment.appliedRuleIds()).first().isIn(휴일카드);
     }
 
     /** 평일 공휴일(2025-10-09 목, 한글날)도 넘겨 받으면 주말과 같다. */
@@ -413,8 +413,10 @@ class RuleCardLoaderRealCardsTest {
             거래("가맹점", 카테고리, 25_000), 인적용역, List.of(), load());
 
         assertThat(judgment.verdict()).isEqualTo(Verdict.NEEDS_REVIEW);
-        assertThat(judgment.attributes()).doesNotContainKey("휴일결제");
+        assertThat(judgment.appliedRuleIds()).doesNotContainAnyElementsOf(휴일카드);
     }
+
+    private static final Set<String> 휴일카드 = Set.of("R-311", "R-312", "R-313", "R-314");
 
     private static TransactionInput 주말거래(String 카테고리) {
         return new TransactionInput(UUID.randomUUID(), LocalDate.of(2025, 3, 15), "가맹점", 카테고리, 25_000);

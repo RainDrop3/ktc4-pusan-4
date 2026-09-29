@@ -28,8 +28,6 @@ match:
 verdict: 불가
 citations:
   - { id: 소득세법-33-1-5, verified: true }
-attributes:
-  휴일결제: true
 question:
   code: WEEKEND_RESTAURANT_PURPOSE
   text: "주말·공휴일 식사라 개인 식사로 보고 제외했어요. 거래처 미팅이었다면 알려주세요."

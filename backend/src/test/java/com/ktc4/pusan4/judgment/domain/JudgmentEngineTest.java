@@ -848,7 +848,7 @@ class JudgmentEngineTest {
         RuleCard weekend = new RuleCard(
             "R-061", 1, Gate.G5, 500,
             new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), true),
-            null, null, List.of(), Map.of("휴일결제", true), List.of()
+            null, null, List.of(), Map.of("matched", true), List.of()
         );
         RuleSet rules = new RuleSet(List.of(g2Available(), weekend));
         UserContext context = new UserContext("940909", false, null);
@@ -858,8 +858,8 @@ class JudgmentEngineTest {
         Judgment wednesday = JudgmentEngine.judge(
             onDate(LocalDate.of(2025, 3, 12)), context, List.of(), rules);
 
-        assertThat(saturday.attributes()).containsEntry("휴일결제", true);
-        assertThat(wednesday.attributes()).doesNotContainKey("휴일결제");
+        assertThat(saturday.attributes()).containsEntry("matched", true);
+        assertThat(wednesday.attributes()).doesNotContainKey("matched");
     }
 
     // 2025-10-09(목) 한글날: 평일이지만 공휴일로 넘기면 휴일 카드가 붙는다.
@@ -868,7 +868,7 @@ class JudgmentEngineTest {
         RuleCard holiday = new RuleCard(
             "R-061", 1, Gate.G5, 500,
             new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), true),
-            null, null, List.of(), Map.of("휴일결제", true), List.of()
+            null, null, List.of(), Map.of("matched", true), List.of()
         );
         RuleSet rules = new RuleSet(List.of(g2Available(), holiday));
         UserContext context = new UserContext("940909", false, null);
@@ -878,8 +878,8 @@ class JudgmentEngineTest {
             onDate(hangulDay), context, List.of(), rules, Set.of(hangulDay));
         Judgment notGiven = JudgmentEngine.judge(onDate(hangulDay), context, List.of(), rules);
 
-        assertThat(given.attributes()).containsEntry("휴일결제", true);
-        assertThat(notGiven.attributes()).doesNotContainKey("휴일결제");
+        assertThat(given.attributes()).containsEntry("matched", true);
+        assertThat(notGiven.attributes()).doesNotContainKey("matched");
     }
 
     private static TransactionInput onDate(LocalDate approvedAt) {

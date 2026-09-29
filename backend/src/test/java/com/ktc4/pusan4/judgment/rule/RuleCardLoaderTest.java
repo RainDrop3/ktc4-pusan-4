@@ -512,8 +512,6 @@ class RuleCardLoaderTest {
             match:
               category: [음식점]
               holiday: %s
-            attributes:
-              휴일결제: true
             review: { by: 외부자문, date: 2026-09-26 }
             """.formatted(holiday) + extra;
     }

@@ -21,8 +21,6 @@ match:
 verdict: 불가
 citations:
   - { id: 소득세법-33-1-5, verified: true }
-attributes:
-  휴일결제: true
 question:
   code: HOLIDAY_TRAVEL_PURPOSE
   text: "주말·공휴일 이동이라 개인 용도로 보고 제외했어요. 업무 출장이었다면 알려주세요."
