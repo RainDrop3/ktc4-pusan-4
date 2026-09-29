@@ -229,6 +229,21 @@ def _keyword_rows(
                 return
 
 
+def _case_body(oc: str, target: str, doc_id: str) -> dict | None:
+    """사례 본문. 한 문서가 계속 응답하지 않으면(판례 104905) 건너뛴다.
+
+    불변 문서라 --resume 이 다음 런에 다시 시도한다. 법령·행정규칙은 건너뛰면
+    sweep 이 그 조문을 폐지로 닫으므로 여기를 쓰지 않는다.
+    """
+    try:
+        return service(oc, target, ID=doc_id)
+    except NotApproved:
+        raise
+    except RuntimeError as exc:
+        print(f"{target:<8} ⚠️ {doc_id} 건너뜀 — {str(exc).splitlines()[0]}", flush=True)
+        return None
+
+
 def collect(
     oc: str, target: str, limit: int | None, laws: list[str], known: set[str],
     pages: list | None = None,
@@ -248,13 +263,14 @@ def collect(
 
     elif target == "expc":
         for row in _keyword_rows(oc, "expc", "expc", "법령해석례일련번호", limit, known):
-            body = service(oc, "expc", ID=row["법령해석례일련번호"])
-            yield from parse_expc(body, row)
+            if body := _case_body(oc, "expc", row["법령해석례일련번호"]):
+                yield from parse_expc(body, row)
 
     elif target == "decc":
         field = "특별행정심판재결례일련번호"
         for row in _keyword_rows(oc, "ttSpecialDecc", "decc", field, limit, known):
-            yield from parse_decc(service(oc, "ttSpecialDecc", ID=row[field]), row)
+            if body := _case_body(oc, "ttSpecialDecc", row[field]):
+                yield from parse_decc(body, row)
 
     elif target == "prec":
         rows = _keyword_rows(oc, "prec", "prec", "판례일련번호", limit, known, datSrcNm="대법원")
@@ -262,7 +278,8 @@ def collect(
             # 본문 조회 전에 거른다. 민사·형사가 절반이 넘는다.
             if row.get("사건종류명") not in PREC_CASE_TYPES:
                 continue
-            yield from parse_prec(service(oc, "prec", ID=row["판례일련번호"]), row)
+            if body := _case_body(oc, "prec", row["판례일련번호"]):
+                yield from parse_prec(body, row)
 
 
 def main() -> int:
