@@ -16,7 +16,6 @@ import com.ktc4.pusan4.judgment.domain.Verdict;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -27,12 +26,6 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 public final class RuleCardLoader {
-
-    private static final Map<String, DayOfWeek> WEEKDAYS = Map.of(
-        "월", DayOfWeek.MONDAY, "화", DayOfWeek.TUESDAY, "수", DayOfWeek.WEDNESDAY,
-        "목", DayOfWeek.THURSDAY, "금", DayOfWeek.FRIDAY, "토", DayOfWeek.SATURDAY,
-        "일", DayOfWeek.SUNDAY
-    );
 
     private static final Comparator<RuleCard> ORDER = Comparator
         .comparingInt(RuleCard::priority).reversed()
@@ -103,6 +96,13 @@ public final class RuleCardLoader {
         if (match.isMissingNode()) {
             throw new RuleCardValidationException(id + ": match is required");
         }
+        if (match.has("weekday")) {
+            throw new RuleCardValidationException(id + ": match.weekday is replaced by holiday: true");
+        }
+        JsonNode holidayNode = match.path("holiday");
+        if (!holidayNode.isMissingNode() && !holidayNode.isBoolean()) {
+            throw new RuleCardValidationException(id + ": holiday must be a boolean");
+        }
         RuleMatch ruleMatch = new RuleMatch(
             strings(match, "category"),
             strings(match, "exclude_category"),
@@ -110,7 +110,7 @@ public final class RuleCardLoader {
             optionalLong(match, "amount_min"),
             optionalLong(match, "amount_max"),
             strings(match, "industry"),
-            weekdays(id, match)
+            holidayNode.booleanValue()
         );
         validateCategories(id, ruleMatch);
 
@@ -148,8 +148,8 @@ public final class RuleCardLoader {
         if (hasUncitedFinalEffect && citations.isEmpty()) {
             throw new RuleCardValidationException(id + ": effect verdict requires citation");
         }
-        if (!ruleMatch.weekdays().isEmpty()) {
-            validateWeekdayVerdict(id, verdict, questions);
+        if (ruleMatch.holiday()) {
+            validateHolidayVerdict(id, verdict, questions);
         }
 
         JsonNode review = root.path("review");
@@ -164,26 +164,26 @@ public final class RuleCardLoader {
         );
     }
 
-    // 요일은 조문이 아니라 추정의 근거다(요일로 경비를 막는 조문은 없다). 그래서 요일 카드가
-    // 낼 수 있는 판정은 '소명하면 풀리는 불가' 하나다. 풀 길이 없으면 "주말 = 무조건 불가"가 되어
+    // 휴일(주말·공휴일)은 조문이 아니라 추정의 근거다(요일로 경비를 막는 조문은 없다). 그래서 휴일
+    // 카드가 낼 수 있는 판정은 '소명하면 풀리는 불가' 하나다. 풀 길이 없으면 "주말 = 무조건 불가"가 되어
     // 토요일 거래처 미팅이 되묻기 없이 제외되고, 확인필요는 이미 확정된 거래를 새 정보 없이 끌어내린다.
-    private static void validateWeekdayVerdict(String id, Verdict verdict, List<QuestionSpec> questions) {
+    private static void validateHolidayVerdict(String id, Verdict verdict, List<QuestionSpec> questions) {
         if (verdict == null) {
             boolean hasEffectVerdict = questions.stream()
                 .flatMap(question -> question.effects().values().stream())
                 .anyMatch(effect -> effect.verdict() != null);
             if (hasEffectVerdict) {
                 throw new RuleCardValidationException(
-                    id + ": weekday card without verdict must not decide one through options");
+                    id + ": holiday card without verdict must not decide one through options");
             }
             return;
         }
         if (verdict != Verdict.UNAVAILABLE) {
-            throw new RuleCardValidationException(id + ": weekday card may only presume 불가");
+            throw new RuleCardValidationException(id + ": holiday card may only presume 불가");
         }
         if (questions.stream().noneMatch(QuestionSpec::canLiftUnavailable)) {
             throw new RuleCardValidationException(
-                id + ": weekday 불가 needs a question whose answer can lift it");
+                id + ": holiday 불가 needs a question whose answer can lift it");
         }
     }
 
@@ -423,18 +423,6 @@ public final class RuleCardLoader {
         List<String> result = new ArrayList<>();
         values.forEach(value -> result.add(value.asText()));
         return List.copyOf(result);
-    }
-
-    private static Set<DayOfWeek> weekdays(String id, JsonNode match) {
-        Set<DayOfWeek> result = new HashSet<>();
-        for (String value : strings(match, "weekday")) {
-            DayOfWeek day = WEEKDAYS.get(value);
-            if (day == null) {
-                throw new RuleCardValidationException(id + ": unknown weekday '" + value + "'");
-            }
-            result.add(day);
-        }
-        return result;
     }
 
     private static <T extends Enum<T>> T enumValue(Class<T> type, String value, String field) {

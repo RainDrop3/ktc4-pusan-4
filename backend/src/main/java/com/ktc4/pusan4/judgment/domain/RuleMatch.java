@@ -1,8 +1,6 @@
 package com.ktc4.pusan4.judgment.domain;
 
-import java.time.DayOfWeek;
 import java.util.List;
-import java.util.Set;
 
 public record RuleMatch(
     List<String> categories,
@@ -11,22 +9,21 @@ public record RuleMatch(
     Long amountMin,
     Long amountMax,
     List<String> industries,
-    Set<DayOfWeek> weekdays
+    boolean holiday
 ) {
     public RuleMatch {
         categories = copy(categories);
         excludedCategories = copy(excludedCategories);
         keywords = copy(keywords);
         industries = copy(industries);
-        weekdays = weekdays == null ? Set.of() : Set.copyOf(weekdays);
     }
 
     public static RuleMatch categories(String... categories) {
-        return new RuleMatch(List.of(categories), List.of(), List.of(), null, null, List.of(), Set.of());
+        return new RuleMatch(List.of(categories), List.of(), List.of(), null, null, List.of(), false);
     }
 
     public static RuleMatch any() {
-        return new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), Set.of());
+        return new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), false);
     }
 
     // 같은 priority에서 더 구체적인 match가 이긴다: 조건별 가중치의 합.

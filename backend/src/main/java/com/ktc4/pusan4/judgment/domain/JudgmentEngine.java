@@ -1,5 +1,7 @@
 package com.ktc4.pusan4.judgment.domain;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -20,9 +22,20 @@ public final class JudgmentEngine {
         List<UserFact> facts,
         RuleSet rules
     ) {
+        return judge(transaction, context, facts, rules, Set.of());
+    }
+
+    // publicHolidays: 평일 공휴일(대체·임시공휴일 포함). 토·일은 요일로 판단하므로 넣지 않아도 된다.
+    public static Judgment judge(
+        TransactionInput transaction,
+        UserContext context,
+        List<UserFact> facts,
+        RuleSet rules,
+        Set<LocalDate> publicHolidays
+    ) {
         Judgment blocked = rules.get(Gate.G1).stream()
             .filter(rule -> rule.isEffectiveOn(transaction.approvedAt()))
-            .filter(rule -> matches(rule.match(), transaction, context))
+            .filter(rule -> matches(rule.match(), transaction, context, publicHolidays))
             .findFirst()
             .map(rule -> new Judgment(
                 Verdict.UNAVAILABLE,
@@ -44,7 +57,7 @@ public final class JudgmentEngine {
 
         RuleCard winner = rules.get(Gate.G2).stream()
             .filter(rule -> rule.isEffectiveOn(transaction.approvedAt()))
-            .filter(rule -> matches(rule.match(), transaction, context))
+            .filter(rule -> matches(rule.match(), transaction, context, publicHolidays))
             .findFirst()
             .orElse(null);
         if (winner == null) {
@@ -72,7 +85,7 @@ public final class JudgmentEngine {
         for (Gate gate : List.of(Gate.G3, Gate.G4, Gate.G5, Gate.G6)) {
             rules.get(gate).stream()
                 .filter(rule -> rule.isEffectiveOn(transaction.approvedAt()))
-                .filter(rule -> matches(rule.match(), transaction, context))
+                .filter(rule -> matches(rule.match(), transaction, context, publicHolidays))
                 .forEach(pipeline::add);
         }
 
@@ -139,7 +152,12 @@ public final class JudgmentEngine {
         );
     }
 
-    static boolean matches(RuleMatch match, TransactionInput transaction, UserContext context) {
+    static boolean matches(
+        RuleMatch match,
+        TransactionInput transaction,
+        UserContext context,
+        Set<LocalDate> publicHolidays
+    ) {
         if (!match.categories().isEmpty()
             && !match.categories().contains(transaction.merchantCategory())) {
             return false;
@@ -157,11 +175,15 @@ public final class JudgmentEngine {
         if (match.amountMax() != null && transaction.amount() > match.amountMax()) {
             return false;
         }
-        if (!match.weekdays().isEmpty()
-            && !match.weekdays().contains(transaction.approvedAt().getDayOfWeek())) {
+        if (match.holiday() && !isHoliday(transaction.approvedAt(), publicHolidays)) {
             return false;
         }
         return match.industries().isEmpty() || match.industries().contains(context.industryCode());
+    }
+
+    private static boolean isHoliday(LocalDate date, Set<LocalDate> publicHolidays) {
+        DayOfWeek day = date.getDayOfWeek();
+        return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY || publicHolidays.contains(date);
     }
 
     private static void mergeAttributes(

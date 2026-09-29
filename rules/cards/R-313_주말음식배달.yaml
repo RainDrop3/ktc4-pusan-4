@@ -10,7 +10,7 @@ effective_period: { start: 2024-01-01, end: null }
 match:
   category: [음식배달]
   industry: ["940909"]
-  weekday: [토, 일]
+  holiday: true
 verdict: 불가
 citations:
   - { id: 소득세법-33-1-5, verified: true }

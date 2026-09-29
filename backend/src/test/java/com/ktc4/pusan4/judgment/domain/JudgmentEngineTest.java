@@ -2,7 +2,6 @@ package com.ktc4.pusan4.judgment.domain;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +62,7 @@ class JudgmentEngineTest {
         );
         RuleCard specific = new RuleCard(
             "R-091", 1, Gate.G1, 500,
-            new RuleMatch(List.of("카페"), List.of(), List.of("커피"), null, null, List.of(), Set.of()),
+            new RuleMatch(List.of("카페"), List.of(), List.of("커피"), null, null, List.of(), false),
             Verdict.UNAVAILABLE, null,
             List.of(new Citation("근거-구체")),
             Map.of(), List.of()
@@ -101,7 +100,7 @@ class JudgmentEngineTest {
             "R-027", 1, Gate.G2, 500,
             new RuleMatch(
                 List.of("카페"), List.of(), List.of("스타벅스"),
-                null, 30_000L, List.of(), Set.of()
+                null, 30_000L, List.of(), false
             ),
             Verdict.AVAILABLE, "소모품비",
             List.of(new Citation("소득세법-27-1")),
@@ -845,12 +844,11 @@ class JudgmentEngineTest {
     }
 
     @Test
-    void weekday_match_uses_approved_date_day_of_week() {
+    void holiday_match_uses_approved_date_day_of_week() {
         RuleCard weekend = new RuleCard(
             "R-061", 1, Gate.G5, 500,
-            new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(),
-                Set.of(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)),
-            null, null, List.of(), Map.of("주말결제", true), List.of()
+            new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), true),
+            null, null, List.of(), Map.of("휴일결제", true), List.of()
         );
         RuleSet rules = new RuleSet(List.of(g2Available(), weekend));
         UserContext context = new UserContext("940909", false, null);
@@ -860,8 +858,28 @@ class JudgmentEngineTest {
         Judgment wednesday = JudgmentEngine.judge(
             onDate(LocalDate.of(2025, 3, 12)), context, List.of(), rules);
 
-        assertThat(saturday.attributes()).containsEntry("주말결제", true);
-        assertThat(wednesday.attributes()).doesNotContainKey("주말결제");
+        assertThat(saturday.attributes()).containsEntry("휴일결제", true);
+        assertThat(wednesday.attributes()).doesNotContainKey("휴일결제");
+    }
+
+    // 2025-10-09(목) 한글날: 평일이지만 공휴일로 넘기면 휴일 카드가 붙는다.
+    @Test
+    void holiday_match_includes_given_weekday_public_holidays() {
+        RuleCard holiday = new RuleCard(
+            "R-061", 1, Gate.G5, 500,
+            new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), true),
+            null, null, List.of(), Map.of("휴일결제", true), List.of()
+        );
+        RuleSet rules = new RuleSet(List.of(g2Available(), holiday));
+        UserContext context = new UserContext("940909", false, null);
+        LocalDate hangulDay = LocalDate.of(2025, 10, 9);
+
+        Judgment given = JudgmentEngine.judge(
+            onDate(hangulDay), context, List.of(), rules, Set.of(hangulDay));
+        Judgment notGiven = JudgmentEngine.judge(onDate(hangulDay), context, List.of(), rules);
+
+        assertThat(given.attributes()).containsEntry("휴일결제", true);
+        assertThat(notGiven.attributes()).doesNotContainKey("휴일결제");
     }
 
     private static TransactionInput onDate(LocalDate approvedAt) {
@@ -877,7 +895,7 @@ class JudgmentEngineTest {
     private static RuleCard g2Available() {
         return new RuleCard(
             "R-020", 1, Gate.G2, 500,
-            new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), Set.of()),
+            new RuleMatch(List.of(), List.of(), List.of(), null, null, List.of(), false),
             Verdict.AVAILABLE, "소모품비",
             List.of(new Citation("소득세법-27-1")),
             Map.of(), List.of()
@@ -900,7 +918,7 @@ class JudgmentEngineTest {
         );
         return new RuleCard(
             "R-051", 1, Gate.G4, 500,
-            new RuleMatch(List.of(), List.of("소모품", "식음료", "카페"), List.of(), 1_000_001L, null, List.of(), Set.of()),
+            new RuleMatch(List.of(), List.of("소모품", "식음료", "카페"), List.of(), 1_000_001L, null, List.of(), false),
             null, null,
             List.of(new Citation("소득세법시행령-67-4")),
             Map.of(), List.of(assetQuestion)

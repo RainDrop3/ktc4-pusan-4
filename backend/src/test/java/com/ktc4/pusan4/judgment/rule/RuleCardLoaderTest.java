@@ -11,7 +11,6 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.DayOfWeek;
 import java.util.List;
 import java.util.Map;
 
@@ -384,31 +383,20 @@ class RuleCardLoaderTest {
     }
 
     @Test
-    void loads_weekday_match_as_days_of_week() throws IOException {
+    void loads_holiday_match_flag() throws IOException {
         Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토, 일]", ""));
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("true", ""));
 
         RuleCard card = new RuleCardLoader().load(root).get(Gate.G5).getFirst();
 
-        assertThat(card.match().weekdays())
-            .containsExactlyInAnyOrder(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY);
+        assertThat(card.match().holiday()).isTrue();
     }
 
+    // 휴일은 조문이 아니라 추정의 근거다. 휴일 카드가 낼 수 있는 판정은 소명으로 풀리는 불가뿐이다.
     @Test
-    void rejects_unknown_weekday_value() throws IOException {
+    void loads_holiday_unavailable_with_rebuttal_question() throws IOException {
         Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토요일]", ""));
-
-        assertThatThrownBy(() -> new RuleCardLoader().load(root))
-            .isInstanceOf(RuleCardValidationException.class)
-            .hasMessageContaining("토요일");
-    }
-
-    // 요일은 조문이 아니라 추정의 근거다. 요일 카드가 낼 수 있는 판정은 소명으로 풀리는 불가뿐이다.
-    @Test
-    void loads_weekday_unavailable_with_rebuttal_question() throws IOException {
-        Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토, 일]", """
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("true", """
             verdict: 불가
             citations: [소득세법-33-1-5]
             question:
@@ -425,24 +413,24 @@ class RuleCardLoaderTest {
         assertThat(card.verdict()).isEqualTo(Verdict.UNAVAILABLE);
     }
 
-    // 소명할 길이 없는 요일 불가는 "주말 = 무조건 불가"다.
+    // 소명할 길이 없는 휴일 불가는 "주말 = 무조건 불가"다.
     @Test
-    void rejects_weekday_unavailable_without_question() throws IOException {
+    void rejects_holiday_unavailable_without_question() throws IOException {
         Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토, 일]", """
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("true", """
             verdict: 불가
             citations: [소득세법-33-1-5]
             """));
 
         assertThatThrownBy(() -> new RuleCardLoader().load(root))
             .isInstanceOf(RuleCardValidationException.class)
-            .hasMessageContaining("weekday");
+            .hasMessageContaining("holiday");
     }
 
     @Test
-    void rejects_weekday_unavailable_whose_options_cannot_lift_it() throws IOException {
+    void rejects_holiday_unavailable_whose_options_cannot_lift_it() throws IOException {
         Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토, 일]", """
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("true", """
             verdict: 불가
             citations: [소득세법-33-1-5]
             question:
@@ -456,25 +444,25 @@ class RuleCardLoaderTest {
 
         assertThatThrownBy(() -> new RuleCardLoader().load(root))
             .isInstanceOf(RuleCardValidationException.class)
-            .hasMessageContaining("weekday");
+            .hasMessageContaining("holiday");
     }
 
     @Test
-    void rejects_weekday_card_with_verdict() throws IOException {
+    void rejects_holiday_card_with_verdict() throws IOException {
         Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토, 일]", """
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("true", """
             verdict: 확인필요
             """));
 
         assertThatThrownBy(() -> new RuleCardLoader().load(root))
             .isInstanceOf(RuleCardValidationException.class)
-            .hasMessageContaining("weekday");
+            .hasMessageContaining("holiday");
     }
 
     @Test
-    void rejects_weekday_card_with_option_verdict() throws IOException {
+    void rejects_holiday_card_with_option_verdict() throws IOException {
         Files.createDirectories(root.resolve("cards"));
-        Files.writeString(root.resolve("cards/R-061.yaml"), weekdayCardYaml("[토, 일]", """
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("true", """
             citations: [소득세법-33-1-5]
             question:
               text: 주말 결제입니다. 어떤 용도였나요?
@@ -486,10 +474,35 @@ class RuleCardLoaderTest {
 
         assertThatThrownBy(() -> new RuleCardLoader().load(root))
             .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("holiday");
+    }
+
+    // 문자열 "true" 가 조용히 false 로 떨어지면 휴일 조건이 사라져 모든 날에 카드가 붙는다.
+    @Test
+    void rejects_non_boolean_holiday() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-061.yaml"), holidayCardYaml("\"true\"", ""));
+
+        assertThatThrownBy(() -> new RuleCardLoader().load(root))
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("R-061")
+            .hasMessageContaining("holiday must be a boolean");
+    }
+
+    // weekday 는 holiday 로 대체됐다. 남아 있으면 조용히 무시되어 요일 조건이 사라진다.
+    @Test
+    void rejects_removed_weekday_match_key() throws IOException {
+        Files.createDirectories(root.resolve("cards"));
+        Files.writeString(root.resolve("cards/R-061.yaml"),
+            holidayCardYaml("true", "").replace("  holiday: true\n", "  weekday: [토, 일]\n"));
+
+        assertThatThrownBy(() -> new RuleCardLoader().load(root))
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("R-061")
             .hasMessageContaining("weekday");
     }
 
-    private static String weekdayCardYaml(String weekdays, String extra) {
+    private static String holidayCardYaml(String holiday, String extra) {
         return """
             id: R-061
             version: 1
@@ -498,11 +511,11 @@ class RuleCardLoaderTest {
             effective_period: { start: 2025-01-01, end: null }
             match:
               category: [음식점]
-              weekday: %s
+              holiday: %s
             attributes:
-              주말결제: true
+              휴일결제: true
             review: { by: 외부자문, date: 2026-09-26 }
-            """.formatted(weekdays) + extra;
+            """.formatted(holiday) + extra;
     }
 
     private static String cardYaml(String id, int priority) {
