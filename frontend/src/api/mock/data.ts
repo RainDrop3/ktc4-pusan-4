@@ -25,6 +25,9 @@ export const UPLOAD_BATCH: UploadBatch = {
 
 export const JUDGMENT_RUN: JudgmentRun = {
   id: '0199e5b2-0000-7000-8000-000000000001',
+  batchId: '0199c8f2-0000-7000-8000-000000000001',
+  contextId: '0199d3a1-0000-7000-8000-000000000001',
+  contextVersion: 4,
   status: {
     code: 'COMPLETED',
     label: '완료'

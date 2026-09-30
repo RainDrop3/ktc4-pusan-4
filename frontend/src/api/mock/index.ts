@@ -8,6 +8,7 @@ import type {
   EffectiveStatus,
   Judgment,
   JudgmentRun,
+  JudgmentRunFailure,
   Page,
   Question,
   QuestionPage,
@@ -98,7 +99,11 @@ const store = {
   answers: new Map<string, string>(),
   /** 사용자 수정 이력 (집계 보정용) */
   overrides: [] as { from: Verdict; to: Verdict; amount: number }[],
-  reviews: CLASSIFICATION_REVIEWS.map((r) => ({ ...r })) as ClassificationReview[]
+  reviews: CLASSIFICATION_REVIEWS.map((r) => ({ ...r })) as ClassificationReview[],
+  /** 다음 Run 에서 기술적으로 실패시킬 거래 수 (개발용) */
+  failNext: 0,
+  /** runId → 실패 목록 */
+  failures: new Map<string, JudgmentRunFailure[]>()
 };
 
 const latestOf = (transactionId: string) =>
@@ -258,12 +263,15 @@ export const mockApi: Api = {
   },
 
   runs: {
-    create: ({ batchId }) => {
+    create: ({ batchId, contextId }) => {
       const total =
       store.transactions.filter((t) => t.batchId === batchId && t.effectiveStatus.code === 'JUDGEABLE').length ||
       JUDGMENT_RUN.totalCount;
       const run: JudgmentRun = {
         id: nextId('0199e5b2'),
+        batchId,
+        contextId,
+        contextVersion: store.contexts.at(-1)?.version ?? 4,
         status: { code: 'QUEUED', label: '대기' },
         totalCount: total,
         processedCount: 0,
@@ -272,8 +280,34 @@ export const mockApi: Api = {
         completedAt: null
       };
       store.runs.set(run.id, run);
+
+      // 기술적 실패 예약이 있으면 이 Run 의 실패 목록을 만든다
+      const failCount = Math.min(store.failNext, total);
+      store.failNext = 0;
+      if (failCount > 0) {
+        const targets = store.transactions.
+        filter((t) => t.batchId === batchId && t.effectiveStatus.code === 'JUDGEABLE').
+        slice(0, failCount);
+        store.failures.set(
+          run.id,
+          targets.map((t) => ({
+            transactionId: t.id,
+            errorCode: 'RULE_PROCESSING_FAILED',
+            message: '판정 처리 중 오류가 발생했습니다.',
+            failedAt: now()
+          }))
+        );
+      }
+
       // 진행률 흉내: 폴링할 때마다 조금씩 진행
-      return delay({ id: run.id, status: run.status, totalCount: run.totalCount });
+      return delay({
+        id: run.id,
+        batchId: run.batchId,
+        contextId: run.contextId,
+        contextVersion: run.contextVersion,
+        status: run.status,
+        totalCount: run.totalCount
+      });
     },
     get: (runId) => {
       const run = store.runs.get(runId);
@@ -282,9 +316,20 @@ export const mockApi: Api = {
         run.status = { code: 'RUNNING', label: '진행' };
         run.startedAt = now();
       } else if (run.status.code === 'RUNNING') {
-        run.processedCount = Math.min(run.totalCount, run.processedCount + Math.ceil(run.totalCount / 8));
-        if (run.processedCount >= run.totalCount) {
-          run.status = { code: 'COMPLETED', label: '완료' };
+        const failed = store.failures.get(run.id)?.length ?? 0;
+        const succeedable = run.totalCount - failed;
+        run.processedCount = Math.min(
+          succeedable,
+          run.processedCount + Math.ceil(run.totalCount / 8)
+        );
+        if (run.processedCount >= succeedable) {
+          run.failedCount = failed;
+          run.status =
+          failed === 0 ?
+          { code: 'COMPLETED', label: '완료' } :
+          failed >= run.totalCount ?
+          { code: 'FAILED', label: '전체 실패' } :
+          { code: 'PARTIAL_FAILED', label: '부분 실패' };
           run.completedAt = now();
         }
       }
@@ -293,8 +338,8 @@ export const mockApi: Api = {
     failures: (runId, q) => {
       const run = store.runs.get(runId);
       if (!run) return notFound('JUDGMENT_RUN_NOT_FOUND', '판정 실행을 찾을 수 없습니다.');
-      // 목업에서는 기술적 실패를 만들지 않는다. NEEDS_REVIEW 는 실패가 아니다
-      return delay(paginate([], q?.page, q?.size));
+      // NEEDS_REVIEW 는 실패가 아니다. 기술적 실패만 여기 온다
+      return delay(paginate(store.failures.get(runId) ?? [], q?.page, q?.size));
     }
   },
 
@@ -410,6 +455,9 @@ export const mockApi: Api = {
       );
       const run: JudgmentRun = {
         id: nextId('0199g7d4'),
+        batchId: UPLOAD_BATCH.id,
+        contextId: store.contexts.at(-1)?.id ?? mockSeedSession.contextRef.id,
+        contextVersion: store.contexts.at(-1)?.version ?? 4,
         status: { code: 'COMPLETED', label: '완료' },
         totalCount: group.count,
         processedCount: group.count,
@@ -507,6 +555,17 @@ export const mockApi: Api = {
  * 목업 전용 — 흐름을 거치지 않고 화면에 바로 들어와도 보이도록 세션 초기값을 준다.
  * http 구현에서는 null. 화면 코드가 이 값을 직접 알면 안 된다.
  */
+/**
+ * 개발용 스위치. 실패 화면을 보려면 콘솔에서:
+ *   (await import('/src/api/index.ts')).mockControls.failNextRun(2)
+ * 그다음 판정을 실행하면 그 Run 이 부분 실패로 끝난다.
+ */
+export const mockControls = {
+  failNextRun(count: number) {
+    store.failNext = Math.max(0, count);
+  }
+};
+
 export const mockSeedSession = {
   batchId: UPLOAD_BATCH.id,
   contextRef: { id: '0199d3a1-0000-7000-8000-000000000001', version: 1 },

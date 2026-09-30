@@ -10,7 +10,9 @@ import {
 import { AppShell } from '../components/AppShell';
 import { useSession } from '../contexts/SessionContext';
 import { api } from '../api';
-import type { JudgmentRun } from '../types/domain';
+import type { JudgmentRun, JudgmentRunFailure, Transaction } from '../types/domain';
+import { Badge, Button, Card } from '../components/ui';
+import { formatWon } from '../utils/format';
 import { formatNumber } from '../utils/format';
 
 const GATES = [
@@ -23,13 +25,6 @@ const GATES = [
 { id: 'G6', label: '근거 부착 검증', detail: '조문 ID 실재 확인 · 0건이면 저장 거부' }];
 
 
-const CALL_LOG = [
-{ at: 12, text: '가맹점 사전 조회 292건 · 미해결 6건' },
-{ at: 26, text: '가맹점 분류 배치 호출 1회 (건별 호출 없음)' },
-{ at: 44, text: '법령 조문 캐시 적중 41건' },
-{ at: 58, text: '국가법령정보 API 호출 6건 · 실패 0건' },
-{ at: 76, text: '속성 추출 배치 호출 1회 · 타임아웃 0건' },
-{ at: 92, text: '조문 ID 실재 검증 통과 · 근거 0건 저장 거부 0건' }];
 
 
 export function Run() {
@@ -37,6 +32,9 @@ export function Run() {
   const { runId, batchId, contextRef, setRunId } = useSession();
   const [run, setRun] = useState<JudgmentRun | null>(null);
   const [counts, setCounts] = useState({ available: 0, needsReview: 0, unavailable: 0 });
+  const [failures, setFailures] = useState<JudgmentRunFailure[]>([]);
+  const [failedTx, setFailedTx] = useState<Map<string, Transaction>>(new Map());
+  const [retrying, setRetrying] = useState(false);
   const timer = useRef<number | null>(null);
 
   // runId 가 없으면 여기서 실행을 만든다 (확인 화면을 거치지 않고 진입한 경우)
@@ -51,15 +49,27 @@ export function Run() {
     const poll = () =>
     void api.runs.get(runId).then((next) => {
       setRun(next);
-      if (next.status.code === 'COMPLETED' || next.status.code === 'FAILED' || next.status.code === 'PARTIAL_FAILED') {
-        if (timer.current) window.clearInterval(timer.current);
-        void api.judgments.summary({ runId }).then((summary) =>
-        setCounts({
-          available: summary.byVerdict.AVAILABLE.count,
-          needsReview: summary.byVerdict.NEEDS_REVIEW.count,
-          unavailable: summary.byVerdict.UNAVAILABLE.count
-        })
-        );
+      const finished =
+      next.status.code === 'COMPLETED' ||
+      next.status.code === 'PARTIAL_FAILED' ||
+      next.status.code === 'FAILED';
+      if (!finished) return;
+
+      if (timer.current) window.clearInterval(timer.current);
+      void api.judgments.summary({ runId }).then((summary) =>
+      setCounts({
+        available: summary.byVerdict.AVAILABLE.count,
+        needsReview: summary.byVerdict.NEEDS_REVIEW.count,
+        unavailable: summary.byVerdict.UNAVAILABLE.count
+      })
+      );
+      if (next.failedCount > 0) {
+        void api.runs.failures(runId, { size: 100 }).then(async (page) => {
+          setFailures(page.items);
+          // 실패 목록은 transactionId 만 준다. 사람이 알아볼 이름을 붙인다
+          const list = await api.transactions.list({ batchId: next.batchId, size: 100 });
+          setFailedTx(new Map(list.items.map((t) => [t.id, t])));
+        });
       }
     });
     poll();
@@ -72,12 +82,25 @@ export function Run() {
   const total = run?.totalCount ?? 0;
   const processed = run?.processedCount ?? 0;
   const progress = total ? Math.round(processed / total * 100) : 0;
-  const done = run?.status.code === 'COMPLETED';
+  const status = run?.status.code;
+  const done = status === 'COMPLETED' || status === 'PARTIAL_FAILED' || status === 'FAILED';
+  const failed = status === 'FAILED';
+  const partial = status === 'PARTIAL_FAILED';
+
+  /** 재시도는 같은 배치·문진으로 새 Run 을 만드는 것이다 (api.md 3.6 재실행) */
+  const retry = async () => {
+    if (!run) return;
+    setRetrying(true);
+    setFailures([]);
+    setRun(null);
+    const created = await api.runs.create({ batchId: run.batchId, contextId: run.contextId });
+    setRunId(created.id);
+    setRetrying(false);
+  };
   const activeGate = Math.min(
     GATES.length - 1,
     Math.floor(progress / 100 * GATES.length)
   );
-  const visibleLogs = CALL_LOG.filter((entry) => entry.at <= progress);
 
   return (
     <AppShell>
@@ -86,7 +109,13 @@ export function Run() {
           <div>
             <p className="text-[13px] font-semibold text-accent">2단계 · 계획</p>
             <h1 className="mt-1.5 text-[28px] font-bold tracking-tight text-ink">
-              {done ? '판정을 마쳤습니다' : '판정하고 있습니다'}
+              {failed ?
+              '판정하지 못했습니다' :
+              partial ?
+              '일부를 판정하지 못했습니다' :
+              done ?
+              '판정을 마쳤습니다' :
+              '판정하고 있습니다'}
             </h1>
           </div>
           <p className="flex items-center gap-1.5 text-[12px] tabular-nums text-muted">
@@ -105,7 +134,7 @@ export function Run() {
               </span>
             </p>
             <p className="text-[13px] tabular-nums text-muted">
-              {done ? '완료' : '예상 남은 시간 약 40초'}
+              {done ? run?.status.label : '예상 남은 시간 약 40초'}
             </p>
           </div>
           <div
@@ -124,7 +153,7 @@ export function Run() {
 
           <ol className="mt-6 space-y-1">
             {GATES.map((gate, index) => {
-              const gateDone = done || index < activeGate;
+              const gateDone = done && !partial && !failed || index < activeGate;
               const running = !done && index === activeGate;
               return (
                 <li key={gate.id}>
@@ -176,37 +205,103 @@ export function Run() {
 
             })}
           </ol>
+          {(partial || failed) &&
+          <p className="mt-3 rounded-xl bg-deny-bg px-3.5 py-2.5 text-small leading-6 text-deny">
+              일부 거래가 이 경로를 끝까지 통과하지 못했습니다. 아래에서 확인하세요.
+            </p>
+          }
         </section>
 
-        <section className="mt-4 rounded-2xl border border-line bg-surface p-5">
-          <h2 className="text-sm font-semibold text-ink">거쳐온 경로</h2>
-          <p className="mt-1 text-[13px] text-muted">
-            답이 맞아도 붙여둔 API를 부르지 않았다면 실패로 봅니다. 호출 이력을 판정에
-            함께 저장합니다.
+        <Card as="section" padding="sm" className="mt-4">
+          <h2 className="text-body font-semibold text-ink">이 판정의 조건</h2>
+          <dl className="mt-3 grid gap-x-6 gap-y-2 text-small sm:grid-cols-2">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">문진 버전</dt>
+              <dd className="tabular-nums text-ink2">v{run?.contextVersion ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">판정 대상</dt>
+              <dd className="tabular-nums text-ink2">{formatNumber(total)}건</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">시작</dt>
+              <dd className="tabular-nums text-ink2">
+                {run?.startedAt ? run.startedAt.slice(11, 16) : '—'}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">실패</dt>
+              <dd className="tabular-nums text-ink2">
+                {formatNumber(run?.failedCount ?? 0)}건
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-caption leading-5 text-muted">
+            미분류·취소상계·대상제외 거래는 판정 대상에 넣지 않습니다. 「확인 필요」는
+            정상 판정이라 실패로 세지 않습니다.
           </p>
-          <ul className="mt-3 space-y-1.5">
-            {visibleLogs.map((entry) =>
-            <motion.li
-              key={entry.text}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.18 }}
-              className="flex items-center gap-2 text-[13px] tabular-nums text-ink2">
-              
-                <CheckIcon
-                className="h-3.5 w-3.5 shrink-0 text-ok"
-                aria-hidden="true" />
-              
-                {entry.text}
-              </motion.li>
-            )}
-            {visibleLogs.length === 0 &&
-            <li className="text-[13px] text-muted">호출 대기 중…</li>
-            }
-          </ul>
-        </section>
+        </Card>
 
-        {done &&
+        {done && failures.length > 0 &&
+        <Card as="section" padding="md" className="mt-4 border-l-[3px] border-l-deny">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-h4 font-bold text-ink">
+                  {formatNumber(failures.length)}건을 처리하지 못했습니다
+                </h2>
+                <p className="mt-1.5 max-w-xl text-small leading-6 text-muted">
+                  판정 규칙을 실행하다 오류가 났습니다. 「확인 필요」와는 다른
+                  기술적 실패라 결과가 아직 없습니다. 나머지{' '}
+                  {formatNumber(run?.processedCount ?? 0)}건은 정상 판정됐습니다.
+                </p>
+              </div>
+              <Button
+              variant="secondary"
+              size="sm"
+              disabled={retrying}
+              onClick={() => void retry()}>
+              
+                {retrying ? '다시 실행 중…' : '다시 판정하기'}
+              </Button>
+            </div>
+
+            <ul className="mt-4 divide-y divide-line2 rounded-xl border border-line2 bg-canvas">
+              {failures.slice(0, 5).map((failure) => {
+              const transaction = failedTx.get(failure.transactionId);
+              return (
+                <li
+                  key={failure.transactionId}
+                  className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-3.5 py-2.5">
+                  
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-small font-medium text-ink">
+                        {transaction?.merchantNorm ?? '거래 ' + failure.transactionId.slice(0, 8)}
+                      </span>
+                      <span className="block truncate text-caption text-muted">
+                        {failure.message}
+                      </span>
+                    </span>
+                    {transaction &&
+                  <span className="shrink-0 text-small tabular-nums text-ink2">
+                        {formatWon(transaction.amount)}
+                      </span>
+                  }
+                    <Badge tone="deny" className="shrink-0">
+                      {failure.errorCode}
+                    </Badge>
+                  </li>);
+
+            })}
+              {failures.length > 5 &&
+            <li className="px-3.5 py-2 text-caption text-muted">
+                  외 {formatNumber(failures.length - 5)}건
+                </li>
+            }
+            </ul>
+          </Card>
+        }
+
+        {done && !failed &&
         <motion.section
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
