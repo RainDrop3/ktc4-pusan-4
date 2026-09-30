@@ -112,33 +112,41 @@ public final class ProfileCardGenerator {
     private static Map<String, Template> templates(Path templatesDirectory) throws IOException {
         Map<String, Template> templates = new HashMap<>();
         for (Path file : yamlFiles(templatesDirectory)) {
-            JsonNode root = YAML.readTree(file.toFile());
-            String id = root.path("id").asText();
-            Matcher idMatch = TEMPLATE_ID.matcher(id);
-            if (!idMatch.matches()) {
-                throw new RuleCardValidationException(file + ": template id must look like R-102");
-            }
-            if (root.path("version").asInt() < 1) {
-                throw new RuleCardValidationException(id + ": template version must be >= 1");
-            }
-            if (!root.path("verdict").asText().equals("가능")) {
-                throw new RuleCardValidationException(id + ": 통상 템플릿의 verdict 는 가능이어야 한다");
-            }
-            JsonNode match = root.path("match");
-            if (match.has("industry")) {
-                throw new RuleCardValidationException(id + ": template must not set match.industry");
-            }
-            JsonNode categories = match.path("category");
-            if (!categories.isArray() || categories.size() != 1) {
-                throw new RuleCardValidationException(id + ": template needs exactly one match.category");
-            }
-            Template previous = templates.put(categories.get(0).asText(),
-                new Template(id, idMatch.group(1), file.getFileName().toString(), root));
+            Template template = template(file);
+            Template previous = templates.put(template.category(), template);
             if (previous != null) {
-                throw new RuleCardValidationException(id + " and " + previous.id() + ": same category");
+                throw new RuleCardValidationException(template.id() + " and " + previous.id() + ": same category");
             }
         }
         return templates;
+    }
+
+    private static Template template(Path file) throws IOException {
+        JsonNode root = YAML.readTree(file.toFile());
+        String id = root.path("id").asText();
+        Matcher idMatch = TEMPLATE_ID.matcher(id);
+        if (!idMatch.matches()) {
+            throw new RuleCardValidationException(file + ": template id must look like R-102");
+        }
+        if (root.path("version").asInt() < 1) {
+            throw new RuleCardValidationException(id + ": template version must be >= 1");
+        }
+        if (!root.path("verdict").asText().equals("가능")) {
+            throw new RuleCardValidationException(id + ": 통상 템플릿의 verdict 는 가능이어야 한다");
+        }
+        String category = category(id, root.path("match"));
+        return new Template(id, idMatch.group(1), category, file.getFileName().toString(), root);
+    }
+
+    private static String category(String id, JsonNode match) {
+        if (match.has("industry")) {
+            throw new RuleCardValidationException(id + ": template must not set match.industry");
+        }
+        JsonNode categories = match.path("category");
+        if (!categories.isArray() || categories.size() != 1) {
+            throw new RuleCardValidationException(id + ": template needs exactly one match.category");
+        }
+        return categories.get(0).asText();
     }
 
     private static ObjectNode card(JsonNode template, String cardId, Profile profile) {
@@ -176,6 +184,6 @@ public final class ProfileCardGenerator {
     record Profile(String industryCode, int version, Map<String, String> cells) {
     }
 
-    private record Template(String id, String number, String fileName, JsonNode root) {
+    private record Template(String id, String number, String category, String fileName, JsonNode root) {
     }
 }

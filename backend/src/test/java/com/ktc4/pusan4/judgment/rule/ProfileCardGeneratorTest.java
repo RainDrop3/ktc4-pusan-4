@@ -89,6 +89,70 @@ class ProfileCardGeneratorTest {
     }
 
     @Test
+    void 템플릿_ID는_세_자리_번호여야_한다() throws IOException {
+        writeTemplate("R-1020_교육.yaml", EDUCATION_TEMPLATE.replace("id: R-102", "id: R-1020"));
+        writeProfile("940909", 1, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("R-1020_교육.yaml");
+    }
+
+    // 업종은 생성기가 프로파일에서 채운다.
+    @Test
+    void 템플릿은_업종을_정하지_않는다() throws IOException {
+        writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE.replace(
+            "  category: [교육]", "  category: [교육]\n  industry: [\"940909\"]"));
+        writeProfile("940909", 1, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("match.industry");
+    }
+
+    @Test
+    void 템플릿은_카테고리를_하나만_가진다() throws IOException {
+        writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE.replace("category: [교육]", "category: [교육, 도서]"));
+        writeProfile("940909", 1, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("match.category");
+    }
+
+    @Test
+    void 같은_카테고리의_템플릿은_하나뿐이다() throws IOException {
+        writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE);
+        writeTemplate("R-103_교육.yaml", EDUCATION_TEMPLATE.replace("id: R-102", "id: R-103"));
+        writeProfile("940909", 1, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("same category");
+    }
+
+    @Test
+    void 프로파일_업종_코드는_여섯_자리다() throws IOException {
+        writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE);
+        writeProfile("94090", 1, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("industry_code");
+    }
+
+    // 프로파일 version 은 카드 version 의 끝 두 자리다.
+    @Test
+    void 프로파일_version은_1부터_99까지다() throws IOException {
+        writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE);
+        writeProfile("940909", 100, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("version");
+    }
+
+    @Test
     void 업종마다_ID와_파일_이름이_따로_생긴다() throws IOException {
         writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE);
         writeProfile("940909", 1, "교육: 통상");
