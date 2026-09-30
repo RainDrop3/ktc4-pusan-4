@@ -9,6 +9,9 @@ import {
   ChoiceGroup,
   Container,
   Empty,
+  FilterBar,
+  Pagination,
+  Table,
   Field,
   Input,
   SectionHeading,
@@ -75,6 +78,8 @@ function Block({
 
 export function Styleguide() {
   const [industry, setIndustry] = useState('62010');
+  const [verdictFilter, setVerdictFilter] = useState('ALL');
+  const [tablePage, setTablePage] = useState(0);
   return (
     <div className="min-h-full bg-surface">
       <Container className="py-16">
@@ -227,6 +232,49 @@ export function Styleguide() {
               } />
             
           </div>
+        </Block>
+
+        <Block title="Table · Pagination" note="정렬·페이지네이션은 서버가 한다. hideBelow 로 좁은 화면에서 숨길 열을 고르되 핵심 정보에는 쓰지 않는다.">
+          <Table
+            caption="표 예시"
+            rowKey={(row) => row.id}
+            rows={[
+            { id: 'a', date: '2026. 01. 31', name: 'Amazon Web Services', memo: 'AWS APN1', amount: 137_000 },
+            { id: 'b', date: '2026. 01. 28', name: 'GitHub', memo: 'GITHUB INC', amount: 27_500 }]
+            }
+            columns={[
+            { header: '승인일', width: 'w-[7.5rem]', cell: (row) => <span className="whitespace-nowrap tabular-nums text-ink2">{row.date}</span> },
+            { header: '가맹점', cell: (row) =>
+              <span className="block">
+                    <span className="block font-medium text-ink">{row.name}</span>
+                    <span className="block text-small text-muted">{row.memo}</span>
+                  </span> },
+            { header: '금액', align: 'right', width: 'w-32', cell: (row) => <span className="font-semibold text-ink">{row.amount.toLocaleString('ko-KR')}원</span> }]
+            } />
+          
+          <Pagination
+            page={{
+              number: tablePage,
+              totalPages: 3,
+              totalElements: 52,
+              hasNext: tablePage < 2
+            }}
+            onChange={setTablePage} />
+          
+        </Block>
+
+        <Block title="FilterBar" note="선택지가 5개 안쪽이고 서로 배타적일 때. 그보다 많거나 축이 여럿이면 Select 를 쓴다.">
+          <FilterBar
+            name="판정 결과"
+            value={verdictFilter}
+            onChange={setVerdictFilter}
+            options={[
+            { value: 'ALL', label: '전체', count: 292 },
+            { value: 'AVAILABLE', label: '가능', count: 168 },
+            { value: 'NEEDS_REVIEW', label: '확인 필요', count: 71 },
+            { value: 'UNAVAILABLE', label: '불가', count: 53 }]
+            } />
+          
         </Block>
 
         <Block title="Empty" note="「없음」이 아니라 「왜 없는지」를 말한다. 비어 있는 게 좋은 결과면 tone=ok.">

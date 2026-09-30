@@ -10,7 +10,7 @@
 | 층 | 어디에 | 무엇 |
 |---|---|---|
 | 토큰 | `tailwind.config.js` | 색·타이포·폭·그림자·이징. 화면에서는 이름으로만 쓴다 |
-| 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field, ChoiceGroup, Empty |
+| 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field, ChoiceGroup, Empty, Table/Pagination, FilterBar |
 | 도메인 부품 | `src/components/` | VerdictBadge, StatuteCitation, AgentPreview — ui 부품 위에 도메인 의미를 얹은 것 |
 | 타입 | `src/types/domain.ts` | API 명세와 1:1. 화면 편의 필드를 여기 추가하지 않는다 |
 | 데이터 | `src/api/` | 화면은 `api.*`만 호출. 서버 상태를 화면·Context에 두지 않는다 |
@@ -107,6 +107,16 @@
 - **있지만 아직 동작하지 않는 선택지는 `disabled: true`** — 흐리게 보이고 눌리지 않으며 '준비 중'이 붙는다. 다른 직종처럼 "보여는 주되 IT만 동작"할 때 쓴다.
 - 눌리는데 아무 일도 일어나지 않는 버튼은 만들지 않는다. 사용자는 그걸 고장으로 읽는다.
 
+### Table · Pagination
+- 목록 표. 정렬·페이지네이션은 **서버가** 하고 부품은 그리기만 한다 (`page` 는 0-based).
+- `hideBelow` 로 좁은 화면에서 숨길 열을 고른다. 금액·상태처럼 **핵심 정보에는 쓰지 않는다**.
+- 행 클릭이 필요하면 `onRowClick`. 행 안에 버튼이 함께 있으면 클릭 대상이 겹치므로 둘 중 하나만 쓴다.
+- `loading` 이면 골격 5줄을 보여준다. 첫 로딩에만 쓰고 필터 전환에는 이전 결과를 유지한다.
+
+### FilterBar
+- 선택지 5개 안쪽, 서로 배타적일 때. 그보다 많거나 축이 여럿이면 `Select`.
+- 건수를 함께 보여줄 수 있다(`count`). 서버가 준 값만 쓰고 화면에서 세지 않는다.
+
 ### Empty
 - 목록이 비었을 때. **"없음"이 아니라 "왜 없는지"** 를 말하고, 다음에 할 행동이 있으면 `action` 에 버튼 하나만 둔다.
 - `tone="ok"` 는 비어 있는 것이 좋은 결과일 때만 (확인할 항목을 다 처리한 경우).
@@ -131,5 +141,5 @@
 
 ## 아직 없는 것 (앱 화면 명세 뒤 추가 예정)
 
-Table, Tabs, Toast/알림, Modal, 진행 표시(Stepper·Progress), 파일 드롭존, FilterBar, Drawer, StatTile, Timeline.
+Tabs, Toast/알림, Modal, 진행 표시(Stepper·Progress), 파일 드롭존, Drawer, StatTile, Timeline.
 지금 앱 페이지(`Upload`, `Interview`, `Results` 등)는 아직 옛 클래스 그대로이며, 명세 확정 후 치오님과 나눠 교체한다.
