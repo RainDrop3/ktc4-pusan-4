@@ -16,7 +16,6 @@ priority: 500
 effective_period: { start: 2024-01-01, end: null }
 match:
   category: [교육]
-  industry: ["940909"]
 verdict: 가능
 account: 교육훈련비
 citations:
