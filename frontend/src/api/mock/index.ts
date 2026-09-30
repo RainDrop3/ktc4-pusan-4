@@ -156,10 +156,19 @@ const rejudge = (transactionId: string, groupKey: string, answer: string): Judgm
   return next;
 };
 
+/** 배치가 지워지면 그 거래에 걸린 질문도 함께 사라진다 (api.md 3.3) */
+const liveGroups = () =>
+QUESTION_GROUPS.filter((g) =>
+(QUESTION_TRANSACTIONS[g.groupKey] ?? []).some((id) =>
+store.transactions.some((t) => t.id === id)
+)
+);
+
 const pendingGroups = (status?: string) => {
-  if (status === 'PENDING') return QUESTION_GROUPS.filter((g) => !store.answers.has(g.groupKey));
-  if (status === 'ANSWERED') return QUESTION_GROUPS.filter((g) => store.answers.has(g.groupKey));
-  return QUESTION_GROUPS;
+  const groups = liveGroups();
+  if (status === 'PENDING') return groups.filter((g) => !store.answers.has(g.groupKey));
+  if (status === 'ANSWERED') return groups.filter((g) => store.answers.has(g.groupKey));
+  return groups;
 };
 
 const filterReviews = (status?: string) =>
@@ -167,7 +176,7 @@ status ? store.reviews.filter((r) => r.status.code === status) : store.reviews;
 
 /** 페이지네이션과 무관한 미해소 집계 (3.9) */
 const withUnresolved = <T,>(page: Page<T>): QuestionPage<T> => {
-  const pending = QUESTION_GROUPS.filter((g) => !store.answers.has(g.groupKey));
+  const pending = liveGroups().filter((g) => !store.answers.has(g.groupKey));
   return {
     ...page,
     unresolved: {
@@ -221,7 +230,24 @@ export const mockApi: Api = {
       return b ? delay(b) : notFound('UPLOAD_BATCH_NOT_FOUND', '업로드를 찾을 수 없습니다.');
     },
     remove: (id) => {
+      if (!store.batches.some((x) => x.id === id))
+      return notFound('BATCH_NOT_FOUND', '업로드를 찾을 수 없습니다.');
+      // 계약대로 파생 데이터까지 함께 지운다 (api.md 3.3)
+      const txIds = new Set(
+        store.transactions.filter((t) => t.batchId === id).map((t) => t.id)
+      );
       store.batches = store.batches.filter((x) => x.id !== id);
+      store.transactions = store.transactions.filter((t) => t.batchId !== id);
+      store.judgments = store.judgments.filter((j) => !txIds.has(j.transactionId));
+      store.reviews = store.reviews.filter((r) => r.batchId !== id);
+      [...store.runs].forEach(([runId, run]) => {
+        if (run.batchId === id) {
+          store.runs.delete(runId);
+          store.failures.delete(runId);
+        }
+      });
+      store.answers.clear();
+      store.overrides = [];
       return delay(undefined);
     }
   },
@@ -345,6 +371,20 @@ export const mockApi: Api = {
 
   judgments: {
     summary: (scope) => {
+      const type = scope.batchId ? 'BATCH' : scope.year ? 'YEAR' : 'RUN';
+      const id = String(scope.batchId ?? scope.year ?? scope.runId);
+      // 배치가 지워져 판정이 남아 있지 않으면 집계도 비어야 한다
+      if (store.judgments.length === 0)
+      return delay({
+        scope: { type, id },
+        totalCount: 0,
+        byVerdict: {
+          AVAILABLE: { count: 0, finalAmount: 0 },
+          UNAVAILABLE: { count: 0, finalAmount: 0 },
+          NEEDS_REVIEW: { count: 0, finalAmount: 0 }
+        },
+        byAccount: []
+      });
       // 목업 데이터는 292건 중 24건 샘플이라, 집계는 기준값에 답변·수정으로 생긴 이동만 더한다
       const by: Record<Verdict, { count: number; finalAmount: number }> = {
         AVAILABLE: { ...JUDGMENT_SUMMARY.byVerdict.AVAILABLE },
@@ -369,8 +409,6 @@ export const mockApi: Api = {
         if (o.from === 'AVAILABLE') by.AVAILABLE.finalAmount -= o.amount;
         if (o.to === 'AVAILABLE') by.AVAILABLE.finalAmount += o.amount;
       }
-      const type = scope.batchId ? 'BATCH' : scope.year ? 'YEAR' : 'RUN';
-      const id = String(scope.batchId ?? scope.year ?? scope.runId);
       return delay({ ...JUDGMENT_SUMMARY, scope: { type, id }, byVerdict: by });
     },
     list: (q) => {

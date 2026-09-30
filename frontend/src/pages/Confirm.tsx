@@ -13,13 +13,23 @@ export function Confirm() {
   const [starting, setStarting] = useState(false);
   const resolved = context ?? DEFAULT_CONTEXT;
 
-  /** POST /judgment-runs — batchId·contextId 둘 다 필요하다 */
+  /** POST /judgment-runs — batchId·contextId 둘 다 있어야 실행할 수 있다 */
+  const missing = !batchId ?
+  '올린 카드내역이 없습니다. 파일을 먼저 올려 주세요.' :
+  !contextRef ?
+  '사업자 문진을 먼저 마쳐 주세요.' :
+  null;
+
   const start = async () => {
-    setStarting(true);
     if (!batchId || !contextRef) return;
-    const created = await api.runs.create({ batchId, contextId: contextRef.id });
-    setRunId(created.id);
-    navigate('/run');
+    setStarting(true);
+    try {
+      const created = await api.runs.create({ batchId, contextId: contextRef.id });
+      setRunId(created.id);
+      navigate('/run');
+    } finally {
+      setStarting(false);
+    }
   };
 
   const batchRows = [
@@ -163,14 +173,23 @@ export function Confirm() {
             </span>
           </label>
 
+          {missing &&
+          <p
+            role="alert"
+            className="mt-4 rounded-xl border border-warn-line bg-warn-bg px-4 py-3 text-[13px] leading-6 text-warn">
+            
+              {missing}
+            </p>
+          }
+
           <button
             type="button"
-            disabled={!agreed || starting}
+            disabled={!agreed || starting || missing !== null}
             onClick={() => void start()}
             className="mt-4 inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-[15px] font-semibold text-white transition-colors duration-150 ease-snap hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-muted">
             
             <PlayIcon className="h-4 w-4" aria-hidden="true" />
-            판정 시작
+            {starting ? '판정을 시작하는 중…' : '판정 시작'}
           </button>
         </section>
       </div>

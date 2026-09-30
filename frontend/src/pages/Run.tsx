@@ -9,7 +9,7 @@ import {
 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { useSession } from '../contexts/SessionContext';
-import { api } from '../api';
+import { api, ApiRequestError } from '../api';
 import type { JudgmentRun, JudgmentRunFailure, Transaction } from '../types/domain';
 import { Badge, Button, Card } from '../components/ui';
 import { formatWon } from '../utils/format';
@@ -35,6 +35,7 @@ export function Run() {
   const [failures, setFailures] = useState<JudgmentRunFailure[]>([]);
   const [failedTx, setFailedTx] = useState<Map<string, Transaction>>(new Map());
   const [retrying, setRetrying] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
 
   // runId 가 없으면 여기서 실행을 만든다 (확인 화면을 거치지 않고 진입한 경우)
@@ -47,7 +48,16 @@ export function Run() {
   useEffect(() => {
     if (!runId) return;
     const poll = () =>
-    void api.runs.get(runId).then((next) => {
+    void api.runs.get(runId).catch((caught: Error) => {
+      if (timer.current) window.clearInterval(timer.current);
+      setLoadError(
+        caught instanceof ApiRequestError && caught.status === 404 ?
+        '이 판정 실행을 찾을 수 없습니다. 업로드가 지워졌을 수 있습니다.' :
+        '판정 상태를 읽지 못했습니다.'
+      );
+      return null;
+    }).then((next) => {
+      if (!next) return;
       setRun(next);
       const finished =
       next.status.code === 'COMPLETED' ||
@@ -124,6 +134,18 @@ export function Run() {
           </p>
         </header>
 
+        {loadError &&
+        <Card as="section" padding="md" className="mt-6 border-l-[3px] border-l-deny">
+            <p role="alert" className="text-body text-deny">{loadError}</p>
+            <div className="mt-4 flex gap-2">
+              <Button to="/upload" size="sm">카드내역 올리기</Button>
+              <Button to="/uploads" variant="secondary" size="sm">업로드 이력</Button>
+            </div>
+          </Card>
+        }
+
+        {!loadError &&
+        <>
         <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
           <div className="flex items-end justify-between gap-4">
             <p className="text-[32px] font-bold leading-none tabular-nums text-ink">
@@ -337,6 +359,8 @@ export function Run() {
               <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
             </button>
           </motion.section>
+        }
+        </>
         }
       </div>
     </AppShell>);

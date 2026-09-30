@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRightIcon, CheckIcon, SparklesIcon } from 'lucide-react';
+import { ArrowRightIcon, CheckIcon, SparklesIcon, UploadIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { api, useApi } from '../api';
 import { useSession } from '../contexts/SessionContext';
@@ -68,6 +68,8 @@ export function ClassificationPreview() {
   const classified = Math.max(0, total - pendingCount);
   const coverage = total ? classified / total * 100 : 100;
   const done = groups.length === 0;
+  /** 올린 배치 자체가 없으면 「다 분류했다」가 아니라 「올린 게 없다」다 */
+  const noBatch = !batchId || (!batchQ.loading && batch === null);
 
   const resolve = async (groupKey: string, reviewIds: string[], category: string) => {
     setResolving((prev) => ({ ...prev, [groupKey]: true }));
@@ -92,15 +94,34 @@ export function ClassificationPreview() {
         <header>
           <p className="text-small font-semibold text-accent">2단계 · 분류 확인</p>
           <h1 className="mt-1.5 text-h2 font-bold tracking-tight text-ink">
-            {done ? '모든 거래를 분류했습니다' : '읽지 못한 가맹점만 확인합니다'}
+            {noBatch ?
+            '올린 카드내역이 없습니다' :
+            done ?
+            '모든 거래를 분류했습니다' :
+            '읽지 못한 가맹점만 확인합니다'}
           </h1>
           <p className="mt-2 max-w-2xl text-body leading-6 text-ink2">
-            {done ?
+            {noBatch ?
+            '카드내역을 먼저 올리면 분류 결과를 여기서 확인할 수 있습니다.' :
+            done ?
             '모든 거래에 업종이 붙었습니다. 판정은 이제 규칙이 순서대로 실행하며 내립니다.' :
             '가맹점 이름을 업종으로 바꾸는 일까지는 AI가 합니다. 확신이 없는 건만 남겨 두었으니 여기서 골라 주세요. 판정은 그다음에 규칙이 합니다.'}
           </p>
         </header>
 
+        {noBatch ?
+        <Empty
+          className="mt-8"
+          icon={<UploadIcon className="h-5 w-5" />}
+          title="아직 올린 카드내역이 없습니다"
+          description="국민·기업카드 이용내역을 올리면 분류 결과를 여기서 확인합니다."
+          action={
+          <Button to="/upload" size="md">
+                카드내역 올리기
+              </Button>
+          } /> :
+
+        <>
         {/* 분류 진척 */}
         <Card tone="canvas" padding="md" className="mt-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -298,6 +319,8 @@ export function ClassificationPreview() {
               </Button>
             </div>
           </div>
+        }
+        </>
         }
       </div>
     </AppShell>);
