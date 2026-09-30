@@ -28,3 +28,9 @@
 - 목 서버가 두 개다. NestJS(`mock-server/`)는 상태를 들고 재판정·revision 을 흉내 내지만 PR #55 에서 제거 예정이고, Spring 쪽은 고정 응답이라 상태가 변하지 않는다. 그동안 프론트 데모는 자체 목업으로 돈다.
 - `npm run lint` 경고 11건이 남아 있다. `Button.tsx` 의 구조분해 버림값(`_v`·`_s`)과 `SessionContext`·`Results` 의 react-refresh·exhaustive-deps 경고다. 오류는 0건이라 CI 는 통과한다.
 - 이 브랜치가 fe 도메인 첫 worklog 다. 앞선 PR #32·#39 는 worklog 규칙이 생기기 전이거나 빠뜨렸다.
+
+## 09-30 리뷰 반영
+
+- `MERCHANT_CATEGORIES` 가 27종이었다. `rules/categories.yaml` 의 32종 중 T4 추가분 5종(임차료·전자기기·전문가수수료·보험·수리비)이 빠져 있었다. 원본 파일을 앞부분만 읽고 옮겨 적은 실수다. 의도한 제외가 아니다.
+- 손으로 옮겨 적는 한 원본이 늘면 또 갈라진다. `frontend/scripts/check-categories.mjs` 를 추가해 `npm run build` 앞에 붙였다. 목록·개수·순서가 다르면 빌드가 멈춘다. CI 가 `npm run build` 를 돌리므로 PR 에서 걸린다.
+- 의존성은 늘리지 않았다. YAML 파서 대신 이 파일의 단순한 구조(`  - 값`)만 읽는다. 순서까지 보는 이유는 `docs/categories.md` 가 이 순서로 생성되기 때문이다.
