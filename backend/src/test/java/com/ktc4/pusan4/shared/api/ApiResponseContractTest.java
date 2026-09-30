@@ -184,4 +184,26 @@ class ApiResponseContractTest {
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REQUIRED"));
     }
+
+    @ParameterizedTest(name = "summary{0}")
+    @MethodSource("invalidSummaryScopes")
+    void summary_without_exactly_one_scope_returns_invalid_summary_scope(String query) throws Exception {
+        // when / then: api.md 3.7 — batchId, year, runId 중 정확히 하나
+        mockMvc.perform(get("/api/v1/judgments/summary" + query))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INVALID_SUMMARY_SCOPE"));
+    }
+
+    @Test
+    void unknown_path_returns_common_not_found_code() throws Exception {
+        // when / then: api.md 1.3 — 전용 *_NOT_FOUND 가 없는 경로는 NOT_FOUND
+        mockMvc.perform(get("/api/v1/no-such-resource"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+            .andExpect(jsonPath("$.traceId").isNotEmpty());
+    }
+
+    static Stream<String> invalidSummaryScopes() {
+        return Stream.of("", "?batchId=" + ID + "&year=2026", "?batchId=" + ID + "&year=2026&runId=" + ID);
+    }
 }

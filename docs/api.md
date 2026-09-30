@@ -223,7 +223,9 @@ ID      "0199c8f2-1a2b-7c3d-8e4f-5a6b7c8d9e0f"
 | 400 | VALIDATION_ERROR | 필수 필드 누락·타입 불일치 등 문서화되지 않은 요청 검증 실패 |
 | 401 | UNAUTHORIZED | `Authorization` 헤더 누락 |
 | 404 | NOT_FOUND | 전용 `*_NOT_FOUND`가 없는 경로의 리소스 없음 |
+| 405 | METHOD_NOT_ALLOWED | 경로는 있으나 지원하지 않는 HTTP 메서드 |
 | 409 | CONFLICT | 전용 코드가 없는 상태 충돌 |
+| 415 | UNSUPPORTED_MEDIA_TYPE | 지원하지 않는 `Content-Type` |
 | 422 | UNPROCESSABLE_ENTITY | 전용 코드가 없는 처리 불가 |
 | 500 | INTERNAL_ERROR | 그 외 서버 오류 |
 
@@ -993,6 +995,12 @@ approvedAt DESC, id DESC
 }
 ```
 
+에러:
+
+```
+404 TRANSACTION_NOT_FOUND
+```
+
 ---
 
 ## `POST /api/v1/transactions/{transactionId}/exclude`
@@ -1019,6 +1027,12 @@ userInclusion = EXCLUDED
 기존 Judgment는 이력 보존을 위해 삭제하지 않는다.
 
 단, `batchId`, `year`를 이용한 현재 결과 및 summary에서는 해당 Transaction을 제외한다.
+
+에러:
+
+```
+404 TRANSACTION_NOT_FOUND
+```
 
 ---
 
@@ -1056,6 +1070,7 @@ sourceStatus = CANCELED_OFFSET
 에러:
 
 ```
+404 TRANSACTION_NOT_FOUND
 409 CANCELED_TRANSACTION_NOT_INCLUDABLE
 ```
 
