@@ -449,9 +449,12 @@ export const mockApi: Api = {
   classificationReviews: {
     list: (q) => delay(paginate(filterReviews(q?.status), q?.page, q?.size ?? 100)),
     grouped: (q) => {
+      // 서버는 카드사 트랙(사업자번호/문자열)까지 섞어 묶으므로 같은 merchantNorm 이
+      // 다른 그룹으로 갈릴 수 있다. 목업도 그 상황을 만들어 둔다 (#63 리뷰).
       const byMerchant = new Map<string, ClassificationReview[]>();
       filterReviews(q?.status).forEach((r) => {
-        const key = `merchant:${r.merchantNorm}`;
+        const track = r.merchantRaw.startsWith('PADDLE.NET* CURSOR') ? ':bizno' : '';
+        const key = `merchant:${r.merchantNorm}${track}`;
         byMerchant.set(key, [...(byMerchant.get(key) ?? []), r]);
       });
       const items: ClassificationReviewGroup[] = [...byMerchant].map(([groupKey, rows]) => ({
