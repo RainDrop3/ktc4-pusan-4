@@ -167,3 +167,28 @@
 - 카드를 로더로 비교했다. 두 카드에 업종 조건 `[940909]` 가 붙은 것 외에 달라진 필드가 없다(51장).
 - 평가셋에서 이 카테고리를 쓰는 케이스는 E-044(940909) 하나다. 리포트는 같다.
 - 백엔드 전체, AI 100개 테스트 통과. `validate_rules.py` 오류 0.
+
+## 16:55 템플릿 version 검사를 넣고 생성기 복잡도를 PMD 기준 아래로 내린다
+
+- 커밋: e229aed..efb16ff (2개)
+- 주요파일: ProfileCardGenerator.java, ProfileCardGeneratorTest.java
+
+### 한 일
+
+- 템플릿 version 이 1 미만이면 생성을 거부한다. 없으면 `asInt()` 가 0 이라 카드 version 이 프로파일 version(1~99)만 남고 에러도 없었다.
+- `templates()` 에서 템플릿 한 장 검증을 `template(file)` 로, match 검증을 `category(id, match)` 로 떼어냈다.
+- 테스트가 없던 거부 분기(템플릿 ID 형식, match.industry, 카테고리 개수·중복, 프로파일 업종 코드·version)마다 테스트를 달았다.
+
+### 왜 이렇게 했나
+
+- 템플릿은 카드 version 의 앞자리라 상한이 필요 없다. 프로파일은 끝 두 자리라 1..99 그대로 둔다.
+- PR #68 코드 건강도 리포트에서 늘어난 PMD 이슈 1개가 `templates()` 의 순환 복잡도 13(기준 10)이었다. PMD 7 은 `throw` 도 세서, 한 번만 떼어내면 `template()` 이 12 였다. 그래서 match 검증을 한 번 더 나눴다.
+- Attention 의 RuleCardLoader·JudgmentEngine 3건은 base 에도 있던 것이라 건드리지 않았다.
+
+### 확인한 것
+
+- 백엔드 테스트 171개 통과. 로컬 PMD 이슈 11 → 10(base 와 같음), ProfileCardGenerator 항목 0.
+
+### 남은 것 · 아는 문제
+
+- 라인 커버리지 −1.0pp 가 얼마나 회복됐는지는 로컬에서 재지 않았다. push 후 PR 리포트로 확인한다. `main()` 은 테스트하지 않는다.
