@@ -175,7 +175,7 @@ class RuleCardLoaderRealCardsTest {
 
         assertThat(judgment.verdict()).isEqualTo(Verdict.AVAILABLE);
         assertThat(judgment.account()).isEqualTo("지급수수료");
-        assertThat(judgment.appliedRuleIds()).contains("R-100");
+        assertThat(judgment.appliedRuleIds()).contains("R-940909100");
         assertThat(인용조문(judgment)).contains("소득세법-27-1");
     }
 

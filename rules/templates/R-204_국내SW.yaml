@@ -10,7 +10,6 @@ priority: 500
 effective_period: { start: 2024-01-01, end: null }
 match:
   category: [국내SW]
-  industry: ["940909"]
   amount_max: 99999
 verdict: 가능
 account: 지급수수료

@@ -11,12 +11,17 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ProfileCardGeneratorTest {
+
+    private static final Path REPO_RULES = Path.of("..", "rules");
+    private static final Path REPO_PROFILES = Path.of("..", "profiles");
 
     @TempDir
     Path root;
@@ -81,6 +86,47 @@ class ProfileCardGeneratorTest {
 
         assertThat(generated).containsOnlyKeys("R-940100102_교육.yaml", "R-940909102_교육.yaml");
         assertThat(generated.get("R-940100102_교육.yaml")).contains("version: 103");
+    }
+
+    // 템플릿이나 프로파일을 고치고 다시 만들지 않으면 여기서 막힌다. 백엔드 CI 는 rules/·profiles/ 변경에도 돈다.
+    @Test
+    void 저장된_생성_카드는_템플릿과_프로파일로_다시_만든_결과와_같다() throws IOException {
+        Map<String, String> expected = ProfileCardGenerator.generate(REPO_RULES.resolve("templates"), REPO_PROFILES);
+
+        Map<String, String> stored = new TreeMap<>();
+        for (Path file : ProfileCardGenerator.generatedFiles(REPO_RULES.resolve("cards"))) {
+            stored.put(file.getFileName().toString(), Files.readString(file).replace("\r\n", "\n"));
+        }
+
+        assertThat(stored)
+            .as("rules/cards 의 생성 카드가 낡았다. ./backend/gradlew -p backend generateRuleCards 로 다시 만든다")
+            .isEqualTo(expected);
+    }
+
+    // 조건부·비통상 칸은 사람이 쓴 카드가 맡는다. 카드가 없으면 질문 없이 확인필요(RULE_NOT_FOUND)로
+    // 떨어지고, 조건부인데 카드가 가능·불가로 확정하면 프로파일과 카드가 어긋난 것이다.
+    @Test
+    void 조건부와_비통상_칸마다_사람이_쓴_카드가_있다() throws IOException {
+        RuleSet rules = new RuleCardLoader().load(REPO_RULES);
+
+        for (ProfileCardGenerator.Profile profile : ProfileCardGenerator.profiles(REPO_PROFILES)) {
+            profile.cells().forEach((category, value) -> {
+                if (value.equals(ProfileCardGenerator.ORDINARY)) {
+                    return;
+                }
+                List<RuleCard> cards = rules.get(Gate.G2).stream()
+                    .filter(card -> !card.match().holiday()
+                        && card.match().categories().equals(List.of(category))
+                        && card.match().industries().contains(profile.industryCode()))
+                    .toList();
+                String cell = "profiles/%s.yaml %s=%s".formatted(profile.industryCode(), category, value);
+                assertThat(cards).as(cell + " 를 맡는 카드").isNotEmpty();
+                if (value.equals("조건부")) {
+                    assertThat(cards).as(cell).allSatisfy(card ->
+                        assertThat(card.verdict()).as(card.id()).isEqualTo(Verdict.NEEDS_REVIEW));
+                }
+            });
+        }
     }
 
     private static final String EDUCATION_TEMPLATE = """
