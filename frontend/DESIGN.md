@@ -10,7 +10,7 @@
 | 층 | 어디에 | 무엇 |
 |---|---|---|
 | 토큰 | `tailwind.config.js` | 색·타이포·폭·그림자·이징. 화면에서는 이름으로만 쓴다 |
-| 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field, ChoiceGroup, Empty, Table/Pagination, FilterBar |
+| 부품 | `src/components/ui/` | Button, Card, Badge, SectionHeading, Container, Input/Select/Field, ChoiceGroup, Empty, Table/Pagination, FilterBar, Modal |
 | 도메인 부품 | `src/components/` | VerdictBadge, StatuteCitation, AgentPreview — ui 부품 위에 도메인 의미를 얹은 것 |
 | 타입 | `src/types/domain.ts` | API 명세와 1:1. 화면 편의 필드를 여기 추가하지 않는다 |
 | 데이터 | `src/api/` | 화면은 `api.*`만 호출. 서버 상태를 화면·Context에 두지 않는다 |
@@ -78,7 +78,8 @@
 <Button href="#system" variant="ghost" size="inline">보기 →</Button>  // 앵커
 <Button type="submit" variant="secondary" size="md">저장</Button>   // 버튼
 ```
-- `variant`: `primary`(파랑) · `secondary`(테두리) · `soft`(연파랑) · `ghost`(텍스트)
+- `variant`: `primary`(파랑) · `secondary`(테두리) · `soft`(연파랑) · `ghost`(텍스트) · `danger`(빨강)
+- `danger` 는 **되돌릴 수 없는 동작에만**, 한 화면에 하나. 그런 동작은 항상 `Modal` 로 한 번 더 묻는다.
 - `size`: `sm` 헤더·표 안 · `md` 폼 · `lg` 랜딩 CTA · `inline` 문장 속 링크(ghost 전용)
 - 한 뷰포트 안에 `primary`는 하나. 나머지 행동은 `secondary`/`soft`. 예외: 랜딩 끝의 CTA가 히어로 CTA와 같은 목적지를 반복하는 것은 허용 (스크롤로 떨어져 있고 행동이 하나이므로).
 - 되돌릴 수 없는 동작(제출·삭제·외부 발송) 버튼은 이 서비스에 없다. 그런 버튼이 필요해지면 이 문서를 먼저 고친다.
@@ -106,6 +107,11 @@
 - 단일 선택지 3~6개 (문진, 질문 응답). `value`는 문자열 또는 불리언.
 - **있지만 아직 동작하지 않는 선택지는 `disabled: true`** — 흐리게 보이고 눌리지 않으며 '준비 중'이 붙는다. 다른 직종처럼 "보여는 주되 IT만 동작"할 때 쓴다.
 - 눌리는데 아무 일도 일어나지 않는 버튼은 만들지 않는다. 사용자는 그걸 고장으로 읽는다.
+
+### Modal
+- **되돌릴 수 없는 동작 앞에서만** 쓴다. 단순 안내나 부가 정보에는 쓰지 않는다.
+- `description` 에 **무엇이 함께 사라지는지** 적는다. "정말 삭제하시겠습니까?" 만으로는 부족하다.
+- Esc·바깥 클릭으로 닫히고, 열릴 때 대화상자로 초점이 간다. 확인 버튼은 `variant="danger"`.
 
 ### Table · Pagination
 - 목록 표. 정렬·페이지네이션은 **서버가** 하고 부품은 그리기만 한다 (`page` 는 0-based).
@@ -141,5 +147,5 @@
 
 ## 아직 없는 것 (앱 화면 명세 뒤 추가 예정)
 
-Tabs, Toast/알림, Modal, 진행 표시(Stepper·Progress), 파일 드롭존, Drawer, StatTile, Timeline.
+Tabs, Toast/알림, 진행 표시(Stepper·Progress), 파일 드롭존, Drawer, StatTile, Timeline.
 지금 앱 페이지(`Upload`, `Interview`, `Results` 등)는 아직 옛 클래스 그대로이며, 명세 확정 후 치오님과 나눠 교체한다.

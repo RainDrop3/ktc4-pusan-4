@@ -11,6 +11,7 @@ export { Empty } from './Empty';
 export { Table, Pagination } from './Table';
 export type { Column } from './Table';
 export { FilterBar } from './FilterBar';
+export { Modal } from './Modal';
 export type { FilterOption } from './FilterBar';
 export type { ChoiceOption } from './ChoiceGroup';
 export { cn } from './cn';

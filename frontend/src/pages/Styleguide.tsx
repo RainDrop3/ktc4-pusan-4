@@ -10,6 +10,7 @@ import {
   Container,
   Empty,
   FilterBar,
+  Modal,
   Pagination,
   Table,
   Field,
@@ -51,7 +52,7 @@ const TYPE: { token: string; cls: string; spec: string; use: string }[] = [
 { token: 'caption', cls: 'text-caption', spec: '12/18', use: '메타 정보, 칩' }];
 
 
-const BUTTON_VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'soft', 'ghost'];
+const BUTTON_VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'soft', 'ghost', 'danger'];
 const BUTTON_SIZES: ButtonSize[] = ['sm', 'md', 'lg'];
 const BADGE_TONES: BadgeTone[] = ['ok', 'warn', 'deny', 'neutral', 'ink'];
 
@@ -80,6 +81,7 @@ export function Styleguide() {
   const [industry, setIndustry] = useState('62010');
   const [verdictFilter, setVerdictFilter] = useState('ALL');
   const [tablePage, setTablePage] = useState(0);
+  const [modalOpen, setModalOpen] = useState(false);
   return (
     <div className="min-h-full bg-surface">
       <Container className="py-16">
@@ -273,6 +275,29 @@ export function Styleguide() {
             { value: 'AVAILABLE', label: '가능', count: 168 },
             { value: 'NEEDS_REVIEW', label: '확인 필요', count: 71 },
             { value: 'UNAVAILABLE', label: '불가', count: 53 }]
+            } />
+          
+        </Block>
+
+        <Block title="Modal" note="되돌릴 수 없는 동작 앞에서만. 무엇이 함께 사라지는지 description 에 적는다. Esc·바깥 클릭으로 닫힌다.">
+          <Button variant="danger" size="md" onClick={() => setModalOpen(true)}>
+            삭제 확인 열기
+          </Button>
+          <Modal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            tone="danger"
+            title="이 업로드를 지울까요?"
+            description="되돌릴 수 없습니다. 이 파일에서 나온 거래와 판정 결과, 되묻기 답변까지 함께 사라집니다."
+            footer={
+            <>
+                <Button variant="secondary" size="md" onClick={() => setModalOpen(false)}>
+                  취소
+                </Button>
+                <Button variant="danger" size="md" onClick={() => setModalOpen(false)}>
+                  지우기
+                </Button>
+              </>
             } />
           
         </Block>
