@@ -76,6 +76,18 @@ class ProfileCardGeneratorTest {
             .hasMessageContaining("가능");
     }
 
+    // version 이 없으면 0 으로 읽혀 카드 version 이 프로파일 version 만 남는다.
+    @Test
+    void 템플릿에_version이_없으면_생성을_거부한다() throws IOException {
+        writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE.replace("version: 1\n", ""));
+        writeProfile("940909", 1, "교육: 통상");
+
+        assertThatThrownBy(this::generate)
+            .isInstanceOf(RuleCardValidationException.class)
+            .hasMessageContaining("R-102")
+            .hasMessageContaining("version");
+    }
+
     @Test
     void 업종마다_ID와_파일_이름이_따로_생긴다() throws IOException {
         writeTemplate("R-102_교육.yaml", EDUCATION_TEMPLATE);

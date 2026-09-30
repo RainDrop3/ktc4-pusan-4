@@ -118,6 +118,9 @@ public final class ProfileCardGenerator {
             if (!idMatch.matches()) {
                 throw new RuleCardValidationException(file + ": template id must look like R-102");
             }
+            if (root.path("version").asInt() < 1) {
+                throw new RuleCardValidationException(id + ": template version must be >= 1");
+            }
             if (!root.path("verdict").asText().equals("가능")) {
                 throw new RuleCardValidationException(id + ": 통상 템플릿의 verdict 는 가능이어야 한다");
             }
