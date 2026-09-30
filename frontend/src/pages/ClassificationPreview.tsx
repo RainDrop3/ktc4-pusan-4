@@ -42,10 +42,20 @@ export function ClassificationPreview() {
   );
 
   const txById = new Map((txQ.data?.items ?? []).map((t) => [t.id, t]));
-  /** groupKey → 그 그룹에 묶인 거래들 (승인일 오름차순) */
-  const rowsOf = (groupKey: string) =>
-  (reviewsQ.data?.items ?? []).
-  filter((review) => `merchant:${review.merchantNorm}` === groupKey).
+  const reviewById = new Map((reviewsQ.data?.items ?? []).map((r) => [r.id, r]));
+
+  /**
+   * 그룹에 묶인 리뷰. `reviewIds` 로만 찾는다 —
+   * merchantNorm 으로 맞추면 같은 가게가 카드사 트랙에 따라 다른 그룹으로 갈릴 때 섞인다.
+   */
+  const reviewsOf = (group: { reviewIds: string[] }) =>
+  group.reviewIds.
+  map((id) => reviewById.get(id)).
+  filter((r): r is NonNullable<typeof r> => Boolean(r));
+
+  /** 그룹에 묶인 거래 (승인일 오름차순) */
+  const rowsOf = (group: { reviewIds: string[] }) =>
+  reviewsOf(group).
   map((review) => txById.get(review.transactionId)).
   filter((t): t is NonNullable<typeof t> => Boolean(t)).
   sort((a, b) => a.approvedAt.localeCompare(b.approvedAt));
@@ -154,13 +164,13 @@ export function ClassificationPreview() {
 
           <ul className="mt-4 space-y-3">
               {groups.map((group) => {
-              const rows = rowsOf(group.groupKey);
-              // 한 가맹점이 카드사에서 여러 표기로 찍힌 경우, 제목은 정규화된 이름을 쓴다
+              const rows = rowsOf(group);
+              // 한 가맹점이 카드사에서 여러 표기로 찍힌 경우 제목은 정규화된 이름을 쓴다.
+              // groupKey 문자열 형식은 계약이 보장하지 않으므로 리뷰의 merchantNorm 을 읽는다.
               const rawVariants = new Set(rows.map((row) => row.merchantRaw)).size;
+              const merchantNorm = reviewsOf(group)[0]?.merchantNorm;
               const title =
-              rawVariants > 1 ?
-              group.groupKey.replace(/^merchant:/, '') :
-              group.merchantRaw;
+              rawVariants > 1 && merchantNorm ? merchantNorm : group.merchantRaw;
               return (
                 <Card
               key={group.groupKey}
