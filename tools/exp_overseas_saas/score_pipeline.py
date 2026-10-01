@@ -1,7 +1,7 @@
 """분류 흐름 전체로 채점: rules/keyword_rules.yaml 먼저, 못 잡으면 사전 매칭(match.py).
 
 비교: A 키워드룰만(develop 현재) / B 키워드룰 + 사전 / C 사전만.
-자동 확정 = 되묻기 없이 카테고리가 정해진 건(구독서비스·PG_미상은 되묻기라 제외).
+자동 확정 = 사용자 분류 없이 카테고리가 정해진 건(미분류·PG_미상은 사용자에게 가서 제외).
 """
 import json, re, yaml
 from pathlib import Path
@@ -11,7 +11,7 @@ HERE = Path(__file__).resolve().parent
 RULES = [r for r in yaml.safe_load(open(HERE.parents[1] / "rules" / "keyword_rules.yaml", encoding="utf-8"))["rules"]]
 for i, r in enumerate(RULES):
     r["i"], r["rx"] = i, re.compile(r["match"], re.I)
-ASK = {"구독서비스", "PG_미상"}  # 되묻기로 가는 카테고리
+ASK = {"미분류", "PG_미상"}  # 사용자에게 가는 것
 
 
 def keyword(desc):  # tools/keyword_rules.py 와 같은 승자 기준

@@ -1,8 +1,10 @@
-"""해외 결제 문자열 → 카테고리 (해외SaaS / 구독서비스 / 게임 / PG_미상).
+"""해외 결제 문자열 → 카테고리 (해외SaaS / 구독서비스 / 게임 / PG_미상 / 미분류).
 
 1. 은행 문구·결제대행 접두어를 떼고 브랜드 부분을 찾는다
 2. 사전(dict.csv) 조회: 도메인형(NAME.COM) 은 강한 증거, 토큰형은 흔한 영단어면 '브랜드 첫 토큰'일 때만 인정
-3. 못 찾으면: 결제대행·앱스토어만 보이면 PG_미상, 아니면 기본값 구독서비스(조건부 → 되묻기)
+3. 못 찾으면: 결제대행·앱스토어만 보이면 PG_미상, 아니면 미분류
+   (api.md 2.4 — 미분류는 분류 확인으로 가서 사용자가 후보 중 카테고리를 고른다.
+    구독서비스로 넘겨짚으면 게임·개인 결제가 엉뚱한 질문을 받는다)
 """
 import csv, json, re, sys, collections
 from pathlib import Path
@@ -58,7 +60,7 @@ def classify(desc):
                 return hit[0], "token:" + a, had_proc
     if had_proc or re.search(r"구글플레이|APPLE\.COM/BILL|ITUNES", desc, re.I):
         return "PG_미상", "processor-only", had_proc
-    return "구독서비스", "default", had_proc
+    return "미분류", "unknown", had_proc
 
 if __name__ == "__main__":
     ev = json.load(open(HERE / "eval_set.json", encoding="utf-8"))
