@@ -31,8 +31,8 @@ const DEPRECIATION = [
 
 
 export function Summary() {
-  const { runId } = useSession();
-  const summaryQ = useApi(() => runId ? api.judgments.summary({ runId }) : Promise.resolve(null), [runId]);
+  const { batchId } = useSession();
+  const summaryQ = useApi(() => batchId ? api.judgments.summary({ batchId }) : Promise.resolve(null), [batchId]);
   const questionsQ = useApi(() => api.questions.grouped({ status: 'PENDING' }), []);
   const JUDGMENT_SUMMARY = summaryQ.data;
   const counts = {
