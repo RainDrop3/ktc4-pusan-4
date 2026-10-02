@@ -28,23 +28,59 @@ export function Modal({
   tone = 'neutral'
 }: ModalProps) {
   const titleId = useId();
+  const descriptionId = useId();
   const panel = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
+    // 닫은 뒤 원래 누른 버튼으로 초점을 돌려준다
+    const opener = document.activeElement as HTMLElement | null;
+
+    const focusable = () =>
+    Array.from(
+      panel.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? []
+    );
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      // aria-modal 이라고 적었으면 Tab 이 뒤 화면으로 빠져나가지 않아야 한다
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        panel.current?.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && (active === first || active === panel.current)) {
+        event.preventDefault();
+        last.focus();
+      }
     };
+
     document.addEventListener('keydown', onKey);
-    panel.current?.focus();
+    (focusable()[0] ?? panel.current)?.focus();
     // 뒤 목록이 같이 스크롤되지 않게 한다
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = previous;
+      opener?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -59,6 +95,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
         className="relative w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-panel outline-none motion-safe:animate-rise">
@@ -73,7 +110,9 @@ export function Modal({
           {title}
         </h2>
         {description &&
-        <p className="mt-2.5 text-body leading-6 text-ink2">{description}</p>
+        <p id={descriptionId} className="mt-2.5 text-body leading-6 text-ink2">
+            {description}
+          </p>
         }
         {children && <div className="mt-4">{children}</div>}
         <div className="mt-6 flex justify-end gap-2">{footer}</div>
