@@ -1615,133 +1615,99 @@ export const JUDGMENTS: Judgment[] = [
   }
 ];
 
+/**
+ * 룰엔진 확인 질문 (3.9). 질문 문구·factType·선택지는 rules/cards 의 카드를 그대로 옮겼다.
+ * group_by 가 transaction 인 카드는 거래마다, merchant_norm 인 카드는 가맹점마다 한 그룹이다.
+ * count·totalAmount 는 목업이 거래에서 다시 센다. 미분류 거래는 엔진에 넘기지 않으므로
+ * 질문이 없다 — 분류 확인(3.5)에서 묻는다.
+ */
 export const QUESTION_GROUPS: QuestionGroup[] = [
   {
-    groupKey: 'merchant:카페 · 편의점',
+    // R-300_카페
+    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001005',
     factType: '용도',
-    questionIds: [
-      '0199a1b2-0000-7000-8000-00000000001005',
-      '0199a1b2-0000-7000-8000-00000000001017'
-    ],
-    count: 24,
-    totalAmount: 287_400,
-    questionText: '이 가맹점에서 쓴 비용은 주로 어떤 목적이었나요?',
-    options: [
-      '업무 목적',
-      '개인 목적',
-      '섞여 있음'
-    ]
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001005'],
+    count: 1,
+    totalAmount: 0,
+    questionText: '이 카페 결제는 어떤 용도였나요?',
+    options: ['업무미팅', '개인', '혼자작업']
   },
   {
-    groupKey: 'merchant:택시 · 대중교통',
+    // R-303_편의점
+    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001017',
     factType: '용도',
-    questionIds: [
-      '0199a1b2-0000-7000-8000-00000000001006'
-    ],
-    count: 18,
-    totalAmount: 214_800,
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001017'],
+    count: 1,
+    totalAmount: 0,
+    questionText: '이 편의점 결제에서 산 물품은 업무용인가요?',
+    options: ['업무용', '개인']
+  },
+  {
+    // R-208_여비교통
+    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001006',
+    factType: '용도',
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001006'],
+    count: 1,
+    totalAmount: 0,
     questionText: '이 이동은 업무 목적이었나요?',
-    options: [
-      '업무 이동',
-      '개인 이동',
-      '섞여 있음'
-    ]
+    options: ['업무출장', '개인']
   },
   {
-    groupKey: 'merchant:통신비 · 자택 관리비',
-    factType: '용도',
-    questionIds: [
-      '0199a1b2-0000-7000-8000-00000000001007',
-      '0199a1b2-0000-7000-8000-00000000001008'
-    ],
-    count: 14,
-    totalAmount: 1_642_000,
-    questionText: '업무용으로 쓰는 비율은 몇 %인가요?',
-    options: [
-      '20%',
-      '50%',
-      '80%'
-    ]
+    // R-205_통신
+    groupKey: 'merchant:SK텔레콤',
+    factType: '전용여부',
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001007'],
+    count: 1,
+    totalAmount: 0,
+    questionText: '이 회선은 업무 전용인가요?',
+    options: ['전용', '공용', '개인']
   },
   {
-    groupKey: 'merchant:연간 구독 결제',
-    factType: '용도',
-    questionIds: [
-      '0199a1b2-0000-7000-8000-00000000001004'
-    ],
-    count: 9,
-    totalAmount: 1_884_000,
-    questionText: '이 결제가 커버하는 서비스 기간은 어떻게 되나요?',
-    options: [
-      '올해 안에 끝남',
-      '다음 해까지 걸침',
-      '모르겠음'
-    ]
+    // R-103_수도광열
+    groupKey: 'merchant:자택 관리비',
+    factType: '공간전용여부',
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001008'],
+    count: 1,
+    totalAmount: 0,
+    questionText: '이 요금이 나오는 공간을 사업 전용으로만 쓰나요?',
+    options: ['사업 전용', '자택 겸용']
   },
   {
-    groupKey: 'merchant:분류하지 못한 가맹점',
-    factType: '용도',
-    questionIds: [
-      '0199a1b2-0000-7000-8000-00000000001023'
-    ],
-    count: 6,
-    totalAmount: 284_200,
-    questionText: '이 가맹점은 어떤 업종인가요?',
-    options: [
-      '소프트웨어 · 개발 도구',
-      '광고 · 마케팅',
-      '그 외'
-    ]
+    // R-242_소프트웨어
+    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001004',
+    factType: '결제유형',
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001004'],
+    count: 1,
+    totalAmount: 0,
+    questionText: '이 결제는 영구 라이선스 구매인가요, 기간 구독 선결제인가요?',
+    options: ['영구 라이선스', '기간 구독 선결제', '월 단위 결제']
   }
 ];
 
-/** 목업 전용: 질문 그룹 → 해당 거래. 서버에서는 questionId로 이어진다. */
+/** 목업 전용: 질문 그룹 → 해당 거래. questionIds 와 같은 순서다. */
 export const QUESTION_TRANSACTIONS: Record<string, string[]> = {
-  'merchant:카페 · 편의점': [
-    '0199c8f2-0000-7000-8000-00000000001005',
-    '0199c8f2-0000-7000-8000-00000000001017'
-  ],
-  'merchant:택시 · 대중교통': [
-    '0199c8f2-0000-7000-8000-00000000001006'
-  ],
-  'merchant:통신비 · 자택 관리비': [
-    '0199c8f2-0000-7000-8000-00000000001007',
-    '0199c8f2-0000-7000-8000-00000000001008'
-  ],
-  'merchant:연간 구독 결제': [
-    '0199c8f2-0000-7000-8000-00000000001004'
-  ],
-  'merchant:분류하지 못한 가맹점': [
-    '0199c8f2-0000-7000-8000-00000000001023'
-  ]
+  'transaction:0199c8f2-0000-7000-8000-00000000001005': ['0199c8f2-0000-7000-8000-00000000001005'],
+  'transaction:0199c8f2-0000-7000-8000-00000000001017': ['0199c8f2-0000-7000-8000-00000000001017'],
+  'transaction:0199c8f2-0000-7000-8000-00000000001006': ['0199c8f2-0000-7000-8000-00000000001006'],
+  'merchant:SK텔레콤': ['0199c8f2-0000-7000-8000-00000000001007'],
+  'merchant:자택 관리비': ['0199c8f2-0000-7000-8000-00000000001008'],
+  'transaction:0199c8f2-0000-7000-8000-00000000001004': ['0199c8f2-0000-7000-8000-00000000001004']
 };
 
-/** 목업 전용: 답변 라벨 → 재판정 결과. 서버 룰엔진이 하는 일을 흉내 낸다. */
+/**
+ * 목업 전용: 답변 → 재판정 결과. 서버 룰엔진이 하는 일을 흉내 낸다.
+ * 카드에 verdict 가 없는 선택지(혼자작업·공용 등)는 다음 관문으로 넘어가는데, 목업은 가능으로 둔다.
+ */
 export const QUESTION_ANSWER_VERDICT: Record<string, Record<string, Verdict>> = {
-  'merchant:카페 · 편의점': {
-    '업무 목적': 'AVAILABLE',
-    '개인 목적': 'UNAVAILABLE',
-    '섞여 있음': 'NEEDS_REVIEW'
-  },
-  'merchant:택시 · 대중교통': {
-    '업무 이동': 'AVAILABLE',
-    '개인 이동': 'UNAVAILABLE',
-    '섞여 있음': 'NEEDS_REVIEW'
-  },
-  'merchant:통신비 · 자택 관리비': {
-    '20%': 'AVAILABLE',
-    '50%': 'AVAILABLE',
-    '80%': 'AVAILABLE'
-  },
-  'merchant:연간 구독 결제': {
-    '올해 안에 끝남': 'AVAILABLE',
-    '다음 해까지 걸침': 'AVAILABLE',
-    '모르겠음': 'NEEDS_REVIEW'
-  },
-  'merchant:분류하지 못한 가맹점': {
-    '소프트웨어 · 개발 도구': 'AVAILABLE',
-    '광고 · 마케팅': 'AVAILABLE',
-    '그 외': 'AVAILABLE'
+  'transaction:0199c8f2-0000-7000-8000-00000000001005': { 업무미팅: 'AVAILABLE', 개인: 'UNAVAILABLE', 혼자작업: 'AVAILABLE' },
+  'transaction:0199c8f2-0000-7000-8000-00000000001017': { 업무용: 'AVAILABLE', 개인: 'UNAVAILABLE' },
+  'transaction:0199c8f2-0000-7000-8000-00000000001006': { 업무출장: 'AVAILABLE', 개인: 'UNAVAILABLE' },
+  'merchant:SK텔레콤': { 전용: 'AVAILABLE', 공용: 'AVAILABLE', 개인: 'UNAVAILABLE' },
+  'merchant:자택 관리비': { '사업 전용': 'AVAILABLE', '자택 겸용': 'AVAILABLE' },
+  'transaction:0199c8f2-0000-7000-8000-00000000001004': {
+    '영구 라이선스': 'AVAILABLE',
+    '기간 구독 선결제': 'AVAILABLE',
+    '월 단위 결제': 'AVAILABLE'
   }
 };
 

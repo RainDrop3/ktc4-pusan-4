@@ -321,12 +321,18 @@ export interface OverrideRequest {
 
 export interface Question {
   id: string;
+  batchId: string;
   transactionId: string;
+  /** 형식을 보장하지 않는다. 화면에서 파싱하지 않는다 */
+  groupKey: string;
   factType: string;
-  status: Coded<QuestionStatus>;
   questionText: string;
   options: string[];
+  status: Coded<QuestionStatus>;
+  /** 답한 UserFact. 답한 값 자체는 응답에 없다 */
+  answeredFactId: string | null;
   createdAt: string;
+  answeredAt: string | null;
 }
 
 export interface QuestionGroup {
