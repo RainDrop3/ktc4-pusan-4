@@ -321,17 +321,17 @@ def selftest_detail():
     assert km2["split"] == {} and km2["n_track"] == 0 and km2["n_bizno"] == 0
     print("selftest_key_split ok")
 
-    # 같은 raw_merchant 가 사업자번호 있는 행 + 없는 행 -> 트랙이 달라 두 행 모두 남아야 한다.
+    # 같은 raw_merchant 가 사업자번호 있는 행 + 없는 행 -> 키가 하나로 모여 한 행이 된다.
+    # norm_key 는 사업자번호와 무관하게 문자열이다(#22 A안). 예전에는 트랙이 달라 두 행으로 갈렸다.
     # 실제 정규화·키워드룰을 쓰되 상호는 합성이다(어느 룰에도 안 걸려 미분류로 남는다).
     norm_, pg_, rules_ = nz.load(), pg_block.load(), kw.load()
     syn = "가나다테스트합성상점"
     rows_ = [{"raw_merchant": syn, "biz_no": "123-45-67890", "amount": "1000", "source_card": "ibk"},
              {"raw_merchant": syn, "biz_no": "", "amount": "2000", "source_card": "kb"}]
     dr = detail_rows(rows_, rows_, norm_, pg_, rules_)
-    assert len(dr) == 2, dr
-    assert {d["track"] for d in dr} == {"bizno", "string"}
-    # 건수·금액은 행별로 나뉘어야 한다(한 행이 전체를 들고 나오면 이중 집계)
-    assert sorted((d["거래건수"], d["합계금액"]) for d in dr) == [(1, 1000), (1, 2000)]
+    assert len(dr) == 1, dr
+    # 건수·금액은 합쳐져야 한다(두 행이 한 키로 모였으므로)
+    assert (dr[0]["거래건수"], dr[0]["합계금액"]) == (2, 3000), dr
     print("selftest_dedup_track ok")
     print("selftest_detail ok")
 
