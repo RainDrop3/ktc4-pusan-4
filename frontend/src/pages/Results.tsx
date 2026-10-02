@@ -130,6 +130,7 @@ export function Results() {
   {
     header: '승인일',
     width: 'w-[7.5rem]',
+    hideBelow: 'sm',
     cell: (row) => {
       const transaction = transactions.get(row.transactionId);
       if (!transaction) return missing(row) ? '—' : pending('w-20');
@@ -142,6 +143,8 @@ export function Results() {
   },
   {
     header: '가맹점',
+    // 남는 폭을 가맹점이 갖고 넘치면 말줄임한다. 금액·판정은 좁은 화면에서도 보여야 한다
+    width: 'w-full max-w-0',
     cell: (row) => {
       const transaction = transactions.get(row.transactionId);
       if (!transaction)
@@ -152,6 +155,8 @@ export function Results() {
         <span className="block min-w-0">
             <span className="block truncate font-medium text-ink">{transaction.merchantNorm}</span>
             <span className="block truncate text-small text-muted">
+              {/* 승인일 열은 좁은 화면에서 숨기므로, 그 정보를 여기로 옮긴다 */}
+              <span className="sm:hidden">{formatFullDate(transaction.approvedAt)} · </span>
               {transaction.merchantRaw} · {transaction.merchantCategory}
               {transaction.installmentMonths > 0 &&
             ` · ${transaction.installmentMonths}개월 할부`}
@@ -163,7 +168,6 @@ export function Results() {
   {
     header: '금액',
     align: 'right',
-    width: 'w-36',
     cell: (row) => {
       const transaction = transactions.get(row.transactionId);
       if (!transaction) return missing(row) ? '—' : pending('ml-auto w-20');
@@ -187,7 +191,6 @@ export function Results() {
   {
     header: '판정',
     align: 'right',
-    width: 'w-28',
     cell: (row) =>
     <span className="inline-flex flex-col items-end gap-1">
           <VerdictBadge verdict={row.verdict} />
@@ -310,7 +313,7 @@ export function Results() {
       }
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <section>
+        <section className="min-w-0">
           <FilterBar
             name="판정 결과"
             value={filter}
