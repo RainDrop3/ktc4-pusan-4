@@ -349,7 +349,8 @@ export interface QuestionResponseRequest {
 
 export interface QuestionResponseResult {
   answeredCount: number;
-  runId: string;
+  factId: string;
+  rejudgedTransactionCount: number;
 }
 
 export interface BulkAnswerRequest {
@@ -362,4 +363,6 @@ export interface BulkAnswerResult {
   answeredCount: number;
   skippedCount: number;
   factIds: string[];
+  rejudgedTransactionCount: number;
+  unresolved: UnresolvedSummary;
 }

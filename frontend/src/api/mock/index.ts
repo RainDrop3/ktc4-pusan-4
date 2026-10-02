@@ -21,7 +21,6 @@ import {
   CLASSIFICATION_REVIEWS,
   JUDGMENTS,
   JUDGMENT_RUN,
-  JUDGMENT_SUMMARY,
   QUESTION_ANSWER_VERDICT,
   QUESTION_GROUPS,
   QUESTION_TRANSACTIONS,
@@ -89,8 +88,29 @@ const paginate = <T,>(items: T[], page = 0, size = 20): Page<T> => {
 // ── 상태 ────────────────────────────────────────────
 
 const store = {
-  contexts: [] as (BusinessContext & BusinessContextRef)[],
-  batches: [UPLOAD_BATCH] as UploadBatch[],
+  // mockSeedSession 이 "문진을 이미 마쳤다"고 말하므로, 그 문진이 실제로 있어야 한다.
+  // 비워 두면 그 세션으로 만든 판정 실행이 CONTEXT_NOT_FOUND 로 막힌다.
+  contexts: [
+  {
+    id: '0199d3a1-0000-7000-8000-000000000001',
+    version: 1,
+    industryCode: '62010',
+    prevYearRevenue: 83_000_000,
+    businessOpenDate: '2024-03-01',
+    bookkeepingDuty: '복식부기',
+    hasEmployee: false,
+    homeOfficeRatio: 20
+  }] as
+  (BusinessContext & BusinessContextRef)[],
+  batches: [
+  {
+    ...UPLOAD_BATCH,
+    transactionCount: TRANSACTIONS.length,
+    classificationPendingCount: CLASSIFICATION_REVIEWS.filter(
+      (r) => r.status.code === 'PENDING'
+    ).length
+  }] as
+  UploadBatch[],
   transactions: TRANSACTIONS.map((t) => ({ ...t })) as Transaction[],
   runs: new Map<string, JudgmentRun>([[JUDGMENT_RUN.id, { ...JUDGMENT_RUN }]]),
   /** 모든 Revision. 최신은 revision 최댓값 */
@@ -227,7 +247,7 @@ export const mockApi: Api = {
     list: (q) => delay(paginate(store.batches, q?.page, q?.size)),
     get: (id) => {
       const b = store.batches.find((x) => x.id === id);
-      return b ? delay(b) : notFound('UPLOAD_BATCH_NOT_FOUND', '업로드를 찾을 수 없습니다.');
+      return b ? delay(b) : notFound('BATCH_NOT_FOUND', '업로드를 찾을 수 없습니다.');
     },
     remove: (id) => {
       if (!store.batches.some((x) => x.id === id))
@@ -290,9 +310,17 @@ export const mockApi: Api = {
 
   runs: {
     create: ({ batchId, contextId }) => {
-      const total =
-      store.transactions.filter((t) => t.batchId === batchId && t.effectiveStatus.code === 'JUDGEABLE').length ||
-      JUDGMENT_RUN.totalCount;
+      if (!store.batches.some((b) => b.id === batchId))
+      return notFound('BATCH_NOT_FOUND', '업로드를 찾을 수 없습니다.');
+      if (!store.contexts.some((c) => c.id === contextId))
+      return notFound('CONTEXT_NOT_FOUND', '사업자 문진을 찾을 수 없습니다.');
+      // 판정 대상은 JUDGEABLE 이면서 분류가 끝난 거래다. 미분류는 엔진에 넘기지 않는다(api.md 3.3)
+      const judgeable = (t: Transaction) =>
+      t.batchId === batchId &&
+      t.effectiveStatus.code === 'JUDGEABLE' &&
+      t.classificationStatus.code === 'CLASSIFIED';
+      // 비어 있으면 0 이다. 시드 숫자로 가짜 Run 을 만들지 않는다
+      const total = store.transactions.filter(judgeable).length;
       const run: JudgmentRun = {
         id: nextId('0199e5b2'),
         batchId,
@@ -311,9 +339,7 @@ export const mockApi: Api = {
       const failCount = Math.min(store.failNext, total);
       store.failNext = 0;
       if (failCount > 0) {
-        const targets = store.transactions.
-        filter((t) => t.batchId === batchId && t.effectiveStatus.code === 'JUDGEABLE').
-        slice(0, failCount);
+        const targets = store.transactions.filter(judgeable).slice(0, failCount);
         store.failures.set(
           run.id,
           targets.map((t) => ({
@@ -339,7 +365,7 @@ export const mockApi: Api = {
       const run = store.runs.get(runId);
       if (!run) return notFound('JUDGMENT_RUN_NOT_FOUND', '판정 실행을 찾을 수 없습니다.');
       if (run.status.code === 'QUEUED') {
-        run.status = { code: 'RUNNING', label: '진행' };
+        run.status = { code: 'RUNNING', label: '실행 중' };
         run.startedAt = now();
       } else if (run.status.code === 'RUNNING') {
         const failed = store.failures.get(run.id)?.length ?? 0;
@@ -371,45 +397,57 @@ export const mockApi: Api = {
 
   judgments: {
     summary: (scope) => {
+      // 스코프는 batchId·year·runId 중 정확히 하나다 (api.md 3.7)
+      const given = [scope.batchId, scope.year, scope.runId].filter(
+        (v) => v !== undefined && v !== null
+      );
+      if (given.length !== 1)
+      return Promise.reject(
+        new ApiRequestError(400, 'INVALID_SUMMARY_SCOPE', 'batchId·year·runId 중 하나만 지정해야 합니다.')
+      );
       const type = scope.batchId ? 'BATCH' : scope.year ? 'YEAR' : 'RUN';
       const id = String(scope.batchId ?? scope.year ?? scope.runId);
-      // 배치가 지워져 판정이 남아 있지 않으면 집계도 비어야 한다
-      if (store.judgments.length === 0)
+
+      /**
+       * 실제 판정에서 계산한다. 전에는 292건 규모의 고정값에 답변·수정 이동만
+       * 더했는데, 거래 시드는 31건이라 /uploads·/transactions 와 숫자가 어긋났다.
+       */
+      const batchOfScope =
+      scope.batchId ??
+      (scope.runId ? store.runs.get(scope.runId)?.batchId : undefined);
+      const rows = latestAll().filter((j) => {
+        const t = transactionOf(j.transactionId);
+        if (!t) return false;
+        if (batchOfScope && t.batchId !== batchOfScope) return false;
+        if (scope.year && !t.approvedAt.startsWith(String(scope.year))) return false;
+        return true;
+      });
+
+      const by: Record<Verdict, { count: number; finalAmount: number }> = {
+        AVAILABLE: { count: 0, finalAmount: 0 },
+        UNAVAILABLE: { count: 0, finalAmount: 0 },
+        NEEDS_REVIEW: { count: 0, finalAmount: 0 }
+      };
+      const accounts = new Map<string, { count: number; finalAmount: number }>();
+      for (const j of rows) {
+        const slot = by[j.verdict.code];
+        slot.count += 1;
+        slot.finalAmount += j.finalAmount ?? 0;
+        if (j.verdict.code !== 'AVAILABLE' || !j.account) continue;
+        const acc = accounts.get(j.account) ?? { count: 0, finalAmount: 0 };
+        acc.count += 1;
+        acc.finalAmount += j.finalAmount ?? 0;
+        accounts.set(j.account, acc);
+      }
+
       return delay({
         scope: { type, id },
-        totalCount: 0,
-        byVerdict: {
-          AVAILABLE: { count: 0, finalAmount: 0 },
-          UNAVAILABLE: { count: 0, finalAmount: 0 },
-          NEEDS_REVIEW: { count: 0, finalAmount: 0 }
-        },
-        byAccount: []
+        totalCount: rows.length,
+        byVerdict: by,
+        byAccount: [...accounts].
+        map(([account, v]) => ({ account, ...v })).
+        sort((a, b) => b.finalAmount - a.finalAmount)
       });
-      // 목업 데이터는 292건 중 24건 샘플이라, 집계는 기준값에 답변·수정으로 생긴 이동만 더한다
-      const by: Record<Verdict, { count: number; finalAmount: number }> = {
-        AVAILABLE: { ...JUDGMENT_SUMMARY.byVerdict.AVAILABLE },
-        UNAVAILABLE: { ...JUDGMENT_SUMMARY.byVerdict.UNAVAILABLE },
-        NEEDS_REVIEW: { ...JUDGMENT_SUMMARY.byVerdict.NEEDS_REVIEW }
-      };
-      for (const group of QUESTION_GROUPS) {
-        const answer = store.answers.get(group.groupKey);
-        if (!answer) continue;
-        const verdict = QUESTION_ANSWER_VERDICT[group.groupKey]?.[answer];
-        if (!verdict || verdict === 'NEEDS_REVIEW') continue;
-        by.NEEDS_REVIEW.count -= group.count;
-        by[verdict].count += group.count;
-        if (verdict === 'AVAILABLE') {
-          const ratio = ratioOf(answer);
-          by.AVAILABLE.finalAmount += ratio !== null ? Math.floor(group.totalAmount * ratio / 100) : group.totalAmount;
-        }
-      }
-      for (const o of store.overrides) {
-        by[o.from].count -= 1;
-        by[o.to].count += 1;
-        if (o.from === 'AVAILABLE') by.AVAILABLE.finalAmount -= o.amount;
-        if (o.to === 'AVAILABLE') by.AVAILABLE.finalAmount += o.amount;
-      }
-      return delay({ ...JUDGMENT_SUMMARY, scope: { type, id }, byVerdict: by });
     },
     list: (q) => {
       // transactionId 지정은 이력 전체, 그 외는 거래별 현재 판정
@@ -420,7 +458,7 @@ export const mockApi: Api = {
       if (q?.batchId)
       items = items.filter((j) => transactionOf(j.transactionId)?.batchId === q.batchId);
       items.sort((a, b) => b.computedAt.localeCompare(a.computedAt) || b.id.localeCompare(a.id));
-      return delay(paginate(items, q?.page, q?.size ?? 100));
+      return delay(paginate(items, q?.page, q?.size ?? 20));
     },
     get: (id) => {
       const j = store.judgments.find((x) => x.id === id);
@@ -478,33 +516,25 @@ export const mockApi: Api = {
         createdAt: '2026-09-12T14:05:00+09:00'
       }))
       );
-      return delay(withUnresolved(paginate(items, q?.page, q?.size ?? 100)));
+      return delay(withUnresolved(paginate(items, q?.page, q?.size ?? 20)));
     },
     grouped: (q) =>
-    delay(withUnresolved(paginate(pendingGroups(q?.status), q?.page, q?.size ?? 100))),
+    delay(withUnresolved(paginate(pendingGroups(q?.status), q?.page, q?.size ?? 20))),
     respond: ({ questionIds, answer }) => {
-      const group = QUESTION_GROUPS.find((g) => g.questionIds.some((id) => questionIds.includes(id)));
+      // 살아 있는 그룹에서 찾는다. 배치를 지운 뒤에는 404 여야 한다 (정적 배열을 보면 TypeError 가 난다)
+      const group = liveGroups().find((g) => g.questionIds.some((id) => questionIds.includes(id)));
       if (!group) return notFound('QUESTION_NOT_FOUND', '질문을 찾을 수 없습니다.');
       if (!group.options.includes(answer.value))
       return Promise.reject(new ApiRequestError(422, 'INVALID_ANSWER_VALUE', '선택지에 없는 값입니다.'));
       store.answers.set(group.groupKey, answer.value);
-      (QUESTION_TRANSACTIONS[group.groupKey] ?? []).forEach((tid) =>
-      rejudge(tid, group.groupKey, answer.value)
-      );
-      const run: JudgmentRun = {
-        id: nextId('0199g7d4'),
-        batchId: UPLOAD_BATCH.id,
-        contextId: store.contexts.at(-1)?.id ?? mockSeedSession.contextRef.id,
-        contextVersion: store.contexts.at(-1)?.version ?? 4,
-        status: { code: 'COMPLETED', label: '완료' },
-        totalCount: group.count,
-        processedCount: group.count,
-        failedCount: 0,
-        startedAt: now(),
-        completedAt: now()
-      };
-      store.runs.set(run.id, run);
-      return delay({ answeredCount: group.count, runId: run.id });
+      const rejudged = QUESTION_TRANSACTIONS[group.groupKey] ?? [];
+      rejudged.forEach((tid) => rejudge(tid, group.groupKey, answer.value));
+      // 명세 3.10: 새 JudgmentRun 은 만들지 않는다. runId 는 응답에서 제거됐다
+      return delay({
+        answeredCount: group.count,
+        factId: `fact-${group.groupKey}`,
+        rejudgedTransactionCount: rejudged.length
+      });
     },
     bulkAnswer: ({ factType, answer }) => {
       // factType 이 같은 PENDING 질문을 한 번에 닫는다. 새 Run 은 만들지 않는다
@@ -517,23 +547,31 @@ export const mockApi: Api = {
         new ApiRequestError(422, 'INVALID_ANSWER_VALUE', '모든 대상 질문이 허용하는 값이 아닙니다.')
       );
       let answered = 0;
+      const rejudged = new Set<string>();
       allowed.forEach((group) => {
         store.answers.set(group.groupKey, answer.value);
-        (QUESTION_TRANSACTIONS[group.groupKey] ?? []).forEach((tid) =>
-        rejudge(tid, group.groupKey, answer.value)
-        );
+        (QUESTION_TRANSACTIONS[group.groupKey] ?? []).forEach((tid) => {
+          rejudge(tid, group.groupKey, answer.value);
+          rejudged.add(tid);
+        });
         answered += group.count;
       });
+      const pending = liveGroups().filter((g) => !store.answers.has(g.groupKey));
       return delay({
         answeredCount: answered,
-        skippedCount: 0,
-        factIds: allowed.map((g) => `fact-${g.groupKey}`)
+        skippedCount: targets.length - allowed.length,
+        factIds: allowed.map((g) => `fact-${g.groupKey}`),
+        rejudgedTransactionCount: rejudged.size,
+        unresolved: {
+          count: pending.reduce((sum, g) => sum + g.count, 0),
+          amount: pending.reduce((sum, g) => sum + g.totalAmount, 0)
+        }
       });
     }
   },
 
   classificationReviews: {
-    list: (q) => delay(paginate(filterReviews(q?.status), q?.page, q?.size ?? 100)),
+    list: (q) => delay(paginate(filterReviews(q?.status), q?.page, q?.size ?? 20)),
     grouped: (q) => {
       // 서버는 카드사 트랙(사업자번호/문자열)까지 섞어 묶으므로 같은 merchantNorm 이
       // 다른 그룹으로 갈릴 수 있다. 목업도 그 상황을 만들어 둔다 (#63 리뷰).
@@ -551,7 +589,7 @@ export const mockApi: Api = {
         merchantRaw: rows[0].merchantRaw,
         suggestedCategories: rows[0].suggestedCategories
       }));
-      return delay(paginate(items, q?.page, q?.size ?? 100));
+      return delay(paginate(items, q?.page, q?.size ?? 20));
     },
     respond: ({ reviewIds, merchantCategory }) => {
       if (merchantCategory === '미분류')
