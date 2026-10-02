@@ -53,6 +53,14 @@ const TYPE: { token: string; cls: string; spec: string; use: string }[] = [
 
 
 const BUTTON_VARIANTS: ButtonVariant[] = ['primary', 'secondary', 'soft', 'ghost', 'danger'];
+
+/** FilterBar 예시용. 고른 값이 아래 목록에 실제로 반영되는 것을 보여주기 위한 것 */
+const FILTER_ROWS = [
+{ name: 'Amazon Web Services', verdict: 'AVAILABLE', amount: 137_000 },
+{ name: 'GitHub', verdict: 'AVAILABLE', amount: 27_500 },
+{ name: '스타벅스 서면점', verdict: 'NEEDS_REVIEW', amount: 12_800 },
+{ name: 'SKT 이용요금', verdict: 'NEEDS_REVIEW', amount: 78_000 },
+{ name: '국세청 국세납부', verdict: 'UNAVAILABLE', amount: 1_240_000 }];
 const BUTTON_SIZES: ButtonSize[] = ['sm', 'md', 'lg'];
 const BADGE_TONES: BadgeTone[] = ['ok', 'warn', 'deny', 'neutral', 'ink'];
 
@@ -81,6 +89,7 @@ export function Styleguide() {
   const [industry, setIndustry] = useState('62010');
   const [verdictFilter, setVerdictFilter] = useState('ALL');
   const [tablePage, setTablePage] = useState(0);
+  const [pickedRow, setPickedRow] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   return (
     <div className="min-h-full bg-surface">
@@ -251,9 +260,29 @@ export function Styleguide() {
                     <span className="block font-medium text-ink">{row.name}</span>
                     <span className="block text-small text-muted">{row.memo}</span>
                   </span> },
+            { header: '메모', hideBelow: 'sm', width: 'w-28', cell: (row) => <span className="text-small text-muted">{row.memo}</span> },
             { header: '금액', align: 'right', width: 'w-32', cell: (row) => <span className="font-semibold text-ink">{row.amount.toLocaleString('ko-KR')}원</span> }]
+            }
+            selectedKey={pickedRow ?? undefined}
+            onRowClick={(row) => setPickedRow(row.id === pickedRow ? null : row.id)} />
+
+          <p className="text-small text-muted">
+            행을 누르면 선택됩니다 — 지금 선택: {pickedRow ?? '없음'}. 행 클릭과 행 안
+            버튼은 함께 쓰지 않습니다.
+          </p>
+
+          <p className="mt-4 text-small font-semibold text-ink">loading (첫 로딩 골격)</p>
+          <Table
+            caption="로딩 예시"
+            loading
+            rowKey={(row: { id: string }) => row.id}
+            rows={[]}
+            columns={[
+            { header: '승인일', width: 'w-[7.5rem]', cell: () => null },
+            { header: '가맹점', cell: () => null },
+            { header: '금액', align: 'right', width: 'w-32', cell: () => null }]
             } />
-          
+
           <Pagination
             page={{
               number: tablePage,
@@ -265,22 +294,37 @@ export function Styleguide() {
           
         </Block>
 
-        <Block title="FilterBar" note="선택지가 5개 안쪽이고 서로 배타적일 때. 그보다 많거나 축이 여럿이면 Select 를 쓴다.">
+        <Block title="FilterBar" note="선택지가 5개 안쪽이고 서로 배타적일 때. role=group + aria-pressed 버튼 묶음이며 탭이 아니다. 건수는 서버가 준 값만 쓴다.">
           <FilterBar
             name="판정 결과"
             value={verdictFilter}
             onChange={setVerdictFilter}
             options={[
-            { value: 'ALL', label: '전체', count: 292 },
-            { value: 'AVAILABLE', label: '가능', count: 168 },
-            { value: 'NEEDS_REVIEW', label: '확인 필요', count: 71 },
-            { value: 'UNAVAILABLE', label: '불가', count: 53 }]
+            { value: 'ALL', label: '전체', count: FILTER_ROWS.length },
+            { value: 'AVAILABLE', label: '가능', count: FILTER_ROWS.filter((r) => r.verdict === 'AVAILABLE').length },
+            { value: 'NEEDS_REVIEW', label: '확인 필요', count: FILTER_ROWS.filter((r) => r.verdict === 'NEEDS_REVIEW').length },
+            { value: 'UNAVAILABLE', label: '불가', count: FILTER_ROWS.filter((r) => r.verdict === 'UNAVAILABLE').length }]
             } />
-          
+
+          <ul className="mt-3 divide-y divide-line2 rounded-xl border border-line bg-surface">
+            {FILTER_ROWS.filter(
+              (row) => verdictFilter === 'ALL' || row.verdict === verdictFilter
+            ).map((row) =>
+            <li
+              key={row.name}
+              className="flex items-center justify-between px-4 py-2.5 text-small">
+
+                <span className="text-ink">{row.name}</span>
+                <span className="tabular-nums text-muted">
+                  {row.amount.toLocaleString('ko-KR')}원
+                </span>
+              </li>
+            )}
+          </ul>
         </Block>
 
-        <Block title="Modal" note="되돌릴 수 없는 동작 앞에서만. 무엇이 함께 사라지는지 description 에 적는다. Esc·바깥 클릭으로 닫힌다.">
-          <Button variant="danger" size="md" onClick={() => setModalOpen(true)}>
+        <Block title="Modal" note="되돌릴 수 없는 동작 앞에서만. 무엇이 함께 사라지는지 description 에 적는다. Esc·바깥 클릭으로 닫히고, Tab 은 대화상자 안에서만 돌며, 닫으면 열었던 버튼으로 초점이 돌아온다.">
+          <Button variant="secondary" size="md" onClick={() => setModalOpen(true)}>
             삭제 확인 열기
           </Button>
           <Modal
@@ -313,7 +357,12 @@ export function Styleguide() {
               tone="ok"
               title="확인할 가맹점이 없습니다"
               description="모든 거래에 업종이 붙었습니다." />
-            
+
+            <Empty
+              title="거래를 불러오지 못했습니다"
+              description="조회 실패를 「없습니다」로 그리지 않는다. useApi 의 error 를 먼저 보고 다시 시도를 준다."
+              action={<Button size="sm" variant="secondary">다시 시도</Button>} />
+
           </div>
         </Block>
 
