@@ -1,48 +1,144 @@
-import { Link } from 'react-router-dom';
-import { ArrowRightIcon, CopyIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRightIcon, CopyCheckIcon, CopyIcon, SearchXIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
+import { Button, Empty, Table, type Column } from '../components/ui';
 import { useSession } from '../contexts/SessionContext';
 import { api, useApi } from '../api';
-import { formatNumber, formatWon } from '../utils/format';
+import type { BusinessContext, JudgmentSummary, UploadBatch, UnresolvedSummary } from '../types/domain';
+import { formatNumber, formatPeriod, formatWon } from '../utils/format';
 
-const LIMIT_BUCKETS = [
+type AccountRow = JudgmentSummary['byAccount'][number];
+
+/** 한 달 배치면 「2026년 1월」, 아니면 기간 그대로 */
+const periodLabel = (batch: UploadBatch) => {
+  const [startYear, startMonth] = batch.periodStart.split('-');
+  const [endYear, endMonth] = batch.periodEnd.split('-');
+  return startYear === endYear && startMonth === endMonth ?
+  `${startYear}년 ${Number(startMonth)}월` :
+  formatPeriod(batch.periodStart, batch.periodEnd);
+};
+
+/**
+ * 세무대리인에게 넘길 문장. 화면에 보이는 숫자와 문진 응답만으로 만든다.
+ * 판정하지 않은 것을 판정한 것처럼 말하지 않는다.
+ */
+const handoffText = (
+period: string | null,
+summary: JudgmentSummary,
+unresolved: UnresolvedSummary | undefined,
+context: BusinessContext | null | undefined) =>
 {
-  code: '접대비',
-  tagged: 3_200_000,
-  allowed: 2_500_000,
-  state: '잠정',
-  basis: '직전연도 수입금액 기준 잠정 한도. 연말 소득 확정 후 재계산합니다.'
-},
-{
-  code: '기부금',
-  tagged: 900_000,
-  allowed: 900_000,
-  state: '잠정',
-  basis: '소득금액 확정 전이라 전액 잠정 인정 상태입니다.'
-}];
+  const { AVAILABLE, UNAVAILABLE, NEEDS_REVIEW } = summary.byVerdict;
+  const lines = [
+  `${period ? `${period} ` : ''}카드내역 ${formatNumber(summary.totalCount)}건을 규칙으로 판정했습니다.`,
+  `필요경비로 볼 수 있는 것 ${formatNumber(AVAILABLE.count)}건(${formatWon(AVAILABLE.finalAmount)}), 볼 수 없는 것 ${formatNumber(UNAVAILABLE.count)}건, 근거를 확정하지 못한 것 ${formatNumber(NEEDS_REVIEW.count)}건입니다.`];
 
+  if (unresolved && unresolved.count > 0)
+  lines.push(
+    `확정하지 못한 것 중 ${formatNumber(unresolved.count)}건(${formatWon(unresolved.amount)})은 사용 목적 등을 아직 답하지 않았습니다.`
+  );
+  if (context)
+  lines.push(
+    `문진 응답: 업종코드 ${context.industryCode}, ${context.bookkeepingDuty} 대상, 직원 ${
+    context.hasEmployee ? '있음' : '없음'}, 자택 작업공간 비율 ${
+    context.homeOfficeRatio ? `${context.homeOfficeRatio}%` : '해당 없음'}.`
+  );
+  return lines.join(' ');
+};
 
-const DEPRECIATION = [
-{ year: 2026, limit: 640_166, claimed: 640_166, state: '잠정' },
-{ year: 2027, limit: 698_000, claimed: 0, state: '예정' },
-{ year: 2028, limit: 698_000, claimed: 0, state: '예정' },
-{ year: 2029, limit: 698_000, claimed: 0, state: '예정' },
-{ year: 2030, limit: 755_834, claimed: 0, state: '예정' }];
-
-
+/**
+ * 3.7 판정 결과 요약.
+ * batchId 로 거래별 현재 판정을 집계한다. 한도 잔량·감가상각 스케줄은 API 가 없어
+ * 보여주지 않는다 — 응답에 없는 숫자를 화면에 두지 않는다.
+ */
 export function Summary() {
   const { batchId } = useSession();
-  const summaryQ = useApi(() => batchId ? api.judgments.summary({ batchId }) : Promise.resolve(null), [batchId]);
-  const questionsQ = useApi(() => api.questions.grouped({ status: 'PENDING' }), []);
-  const JUDGMENT_SUMMARY = summaryQ.data;
+  const [copy, setCopy] = useState<'idle' | 'done' | 'failed'>('idle');
+
+  const batchQ = useApi(
+    () => batchId ? api.uploads.get(batchId) : Promise.resolve(null),
+    [batchId]
+  );
+  const summaryQ = useApi(
+    () => batchId ? api.judgments.summary({ batchId }) : Promise.resolve(null),
+    [batchId]
+  );
+  const questionsQ = useApi(
+    () =>
+    batchId ?
+    api.questions.grouped({ batchId, status: 'PENDING', size: 1 }) :
+    Promise.resolve(null),
+    [batchId]
+  );
+  const contextQ = useApi(() => api.contexts.current(), []);
+
+  // 「복사했습니다」는 잠깐만 보여준다
+  useEffect(() => {
+    if (copy === 'idle') return;
+    const timer = window.setTimeout(() => setCopy('idle'), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copy]);
+
+  const summary = summaryQ.data;
+  const unresolved = questionsQ.data?.unresolved;
+  const period = batchQ.data ? periodLabel(batchQ.data) : null;
+
+  const header =
+  <header>
+      <p className="text-small font-semibold text-accent">4단계 · 반영</p>
+      <h1 className="mt-1.5 text-h2 font-bold tracking-tight text-ink">
+        {period ? `${period} 요약` : '판정 요약'}
+      </h1>
+    </header>;
+
+
+  if (!batchId || summaryQ.error || summary?.totalCount === 0) {
+    return (
+      <AppShell>
+        {header}
+        <Empty
+          className="mt-6"
+          icon={<SearchXIcon className="h-5 w-5" />}
+          {...!batchId ?
+          {
+            title: '올린 카드내역이 없습니다',
+            description: '카드내역을 올리고 판정을 마치면 요약이 여기에 나옵니다.',
+            action:
+            <Button to="/upload" size="sm" variant="secondary">
+                    카드내역 올리기
+                  </Button>
+
+          } :
+          summaryQ.error ?
+          {
+            title: '요약을 불러오지 못했습니다',
+            description: '잠시 후 다시 시도해 주세요. 계속 안 되면 새로고침해 주세요.',
+            action:
+            <Button size="sm" variant="secondary" onClick={summaryQ.reload}>
+                    다시 시도
+                  </Button>
+
+          } :
+          {
+            title: '아직 판정한 거래가 없습니다',
+            description: '분류 확인과 사업자 문진을 마친 뒤 판정을 실행하면 요약이 나옵니다.',
+            action:
+            <Button to="/confirm" size="sm" variant="secondary">
+                    판정하러 가기
+                  </Button>
+
+          }} />
+
+      </AppShell>);
+
+  }
+
   const counts = {
-    available: JUDGMENT_SUMMARY?.byVerdict.AVAILABLE.count ?? 0,
-    needsReview: JUDGMENT_SUMMARY?.byVerdict.NEEDS_REVIEW.count ?? 0,
-    unavailable: JUDGMENT_SUMMARY?.byVerdict.UNAVAILABLE.count ?? 0
+    available: summary?.byVerdict.AVAILABLE.count ?? 0,
+    needsReview: summary?.byVerdict.NEEDS_REVIEW.count ?? 0,
+    unavailable: summary?.byVerdict.UNAVAILABLE.count ?? 0
   };
-  const recognizedAmount = JUDGMENT_SUMMARY?.byVerdict.AVAILABLE.finalAmount ?? 0;
-  const pendingQuestionCount = questionsQ.data?.page.totalElements ?? 0;
-  const total = counts.available + counts.needsReview + counts.unavailable;
+  const total = summary?.totalCount ?? 0;
 
   const distribution = [
   { label: '가능', value: counts.available, bar: 'bg-ok' },
@@ -50,178 +146,142 @@ export function Summary() {
   { label: '불가', value: counts.unavailable, bar: 'bg-deny' }];
 
 
+  const accountColumns: Column<AccountRow>[] = [
+  {
+    header: '계정과목',
+    cell: (row) => <span className="font-medium text-ink">{row.account}</span>
+  },
+  {
+    header: '건수',
+    align: 'right',
+    width: 'w-20',
+    cell: (row) => <span className="text-ink2">{formatNumber(row.count)}건</span>
+  },
+  {
+    header: '인정 금액',
+    align: 'right',
+    width: 'w-36',
+    cell: (row) =>
+    <span className="whitespace-nowrap font-semibold text-ink">
+          {formatWon(row.finalAmount)}
+        </span>
+
+  }];
+
+
+  const text = summary ? handoffText(period, summary, unresolved, contextQ.data) : '';
+
+  const copyText = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopy('done');
+    } catch {
+      setCopy('failed');
+    }
+  };
+
   return (
     <AppShell>
-      <header>
-        <p className="text-[13px] font-semibold text-accent">4단계 · 반영</p>
-        <h1 className="mt-1.5 text-[28px] font-bold tracking-tight text-ink">
-          2026년 1월 요약
-        </h1>
-      </header>
+      {header}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <section className="rounded-2xl border border-line bg-surface p-6">
-          <p className="text-[13px] text-muted">현재까지 인정된 필요경비</p>
-          <p className="mt-1.5 text-[40px] font-bold leading-none tabular-nums text-ink">
-            {formatWon(recognizedAmount)}
-          </p>
-          <p className="mt-2 text-[13px] tabular-nums text-muted">
-            확인 필요 {formatNumber(counts.needsReview)}건은 아직 합계에 넣지
-            않았습니다. (전체 {formatNumber(JUDGMENT_SUMMARY?.totalCount ?? 0)}건)
-          </p>
+      <section className="mt-6 rounded-2xl border border-line bg-surface p-6">
+        <p className="text-small text-muted">현재까지 인정된 필요경비</p>
+        {summary ?
+        <p className="mt-1.5 text-stat font-bold tabular-nums text-ink">
+            {formatWon(summary.byVerdict.AVAILABLE.finalAmount)}
+          </p> :
 
-          <div className="mt-6" aria-hidden="true">
-            <div className="flex h-2.5 overflow-hidden rounded-full bg-line2">
-              {distribution.map((item) =>
-              <div
-                key={item.label}
-                className={item.bar}
-                style={{ width: `${total ? item.value / total * 100 : 0}%` }} />
-
-              )}
-            </div>
-          </div>
-          <dl className="mt-4 grid grid-cols-3 gap-4">
-            {distribution.map((item) =>
-            <div key={item.label}>
-                <dt className="flex items-center gap-1.5 text-[12px] text-muted">
-                  <span
-                  className={`h-2 w-2 rounded-full ${item.bar}`}
-                  aria-hidden="true" />
-                
-                  {item.label}
-                </dt>
-                <dd className="mt-1 text-[18px] font-semibold tabular-nums text-ink">
-                  {formatNumber(item.value)}건
-                </dd>
-              </div>
-            )}
-          </dl>
-        </section>
-
-        <section className="rounded-2xl border border-line bg-surface p-6">
-          <h2 className="text-sm font-semibold text-ink">한도 잔량</h2>
-          <ul className="mt-4 space-y-5">
-            {LIMIT_BUCKETS.map((bucket) => {
-              const usage = Math.min(100, bucket.tagged / bucket.allowed * 100);
-              const over = bucket.tagged > bucket.allowed;
-              return (
-                <li key={bucket.code}>
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-ink">
-                      {bucket.code}
-                    </span>
-                    <span className="text-[12px] tabular-nums text-muted">
-                      {formatWon(bucket.tagged)} / {formatWon(bucket.allowed)}
-                    </span>
-                  </div>
-                  <div
-                    className="mt-2 h-2 overflow-hidden rounded-full bg-line2"
-                    role="progressbar"
-                    aria-valuenow={Math.round(usage)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${bucket.code} 한도 사용률`}>
-                    
-                    <div
-                      className={`h-full rounded-full ${over ? 'bg-deny' : 'bg-accent'}`}
-                      style={{ width: `${usage}%` }} />
-                    
-                  </div>
-                  <p className="mt-1.5 text-[12px] leading-5 text-muted">
-                    {over ?
-                    `한도 초과 ${formatWon(bucket.tagged - bucket.allowed)} · ${bucket.basis}` :
-                    bucket.basis}
-                  </p>
-                </li>);
-
-            })}
-          </ul>
-        </section>
-      </div>
-
-      <section className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-        <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
-          <h2 className="text-sm font-semibold text-ink">
-            감가상각 스케줄 · MacBook Pro
-          </h2>
-          <p className="text-[12px] tabular-nums text-muted">
-            취득 3,490,000원 · 내용연수 5년 · 정액법
-          </p>
-        </header>
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-line2 text-left text-[12px] text-muted">
-              <th scope="col" className="px-5 py-2.5 font-medium">
-                귀속연도
-              </th>
-              <th scope="col" className="px-5 py-2.5 text-right font-medium">
-                상각범위액
-              </th>
-              <th scope="col" className="px-5 py-2.5 text-right font-medium">
-                산입 예정액
-              </th>
-              <th scope="col" className="px-5 py-2.5 text-right font-medium">
-                상태
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line2">
-            {DEPRECIATION.map((row) =>
-            <tr key={row.year}>
-                <th
-                scope="row"
-                className="px-5 py-3 text-left font-medium tabular-nums text-ink">
-                
-                  {row.year}
-                </th>
-                <td className="px-5 py-3 text-right tabular-nums text-ink2">
-                  {formatWon(row.limit)}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums text-ink2">
-                  {row.claimed > 0 ? formatWon(row.claimed) : '—'}
-                </td>
-                <td className="px-5 py-3 text-right text-muted">{row.state}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <p className="border-t border-line bg-canvas px-5 py-3 text-[12px] leading-5 text-muted">
-          소득이 적은 해에는 상각범위액보다 적게 넣을 수 있습니다. 산입액은 연말에
-          확정합니다.
+        <span className="mt-1.5 block h-9 w-48 animate-pulse rounded bg-line2" />
+        }
+        <p className="mt-2 text-small tabular-nums text-muted">
+          전체 {formatNumber(total)}건 중 가능으로 판정한 것만 더했습니다.
         </p>
+
+        {unresolved && unresolved.count > 0 &&
+        <p className="mt-4 rounded-xl border border-warn-line bg-warn-bg px-4 py-3 text-small text-ink2">
+            <strong className="font-semibold text-warn">
+              미확정 {formatNumber(unresolved.count)}건 · {formatWon(unresolved.amount)}
+            </strong>{' '}
+            — 질문에 답하기 전이라 위 합계에 넣지 않았습니다.
+          </p>
+        }
+
+        <div className="mt-6" aria-hidden="true">
+          <div className="flex h-2.5 overflow-hidden rounded-full bg-line2">
+            {distribution.map((item) =>
+            <div
+              key={item.label}
+              className={item.bar}
+              style={{ width: `${total ? item.value / total * 100 : 0}%` }} />
+
+            )}
+          </div>
+        </div>
+        <dl className="mt-4 grid grid-cols-3 gap-4">
+          {distribution.map((item) =>
+          <div key={item.label}>
+              <dt className="flex items-center gap-1.5 text-caption text-muted">
+                <span className={`h-2 w-2 rounded-full ${item.bar}`} aria-hidden="true" />
+                {item.label}
+              </dt>
+              <dd className="mt-1 text-h4 font-semibold tabular-nums text-ink">
+                {formatNumber(item.value)}건
+              </dd>
+            </div>
+          )}
+        </dl>
+      </section>
+
+      <section className="mt-4">
+        <h2 className="text-body font-semibold text-ink">계정과목별 인정 경비</h2>
+        <Table
+          className="mt-3"
+          caption="계정과목별 인정 경비"
+          columns={accountColumns}
+          rows={summary?.byAccount ?? []}
+          rowKey={(row) => row.account}
+          loading={summaryQ.loading}
+          empty={
+          <Empty
+            title="가능으로 판정한 거래가 아직 없습니다"
+            description="가능으로 판정되면 계정과목별로 여기에 모입니다." />
+
+          } />
+
       </section>
 
       <section className="mt-4 rounded-2xl border border-line bg-surface p-6">
-        <h2 className="text-sm font-semibold text-ink">
-          세무대리인에게 넘길 문장
-        </h2>
-        <p className="mt-1.5 text-[13px] text-muted">
-          판정하지 않고 남긴 건을 상담용 문장으로 정리했습니다.
+        <h2 className="text-body font-semibold text-ink">세무대리인에게 넘길 문장</h2>
+        <p className="mt-1.5 text-small text-muted">
+          판정 결과와 문진 응답을 상담용 문장으로 정리했습니다. 판정하지 못한 것은
+          그대로 적습니다.
         </p>
-        <blockquote className="mt-4 rounded-xl bg-canvas p-4 text-[13px] leading-6 text-ink2">
-          2026년 1월 사업용카드 {formatNumber(total)}건 중 {formatNumber(counts.needsReview)}건은 근거를
-          확정하지 못했습니다. 주요 항목은 단독 카페 이용{' '}
-          {pendingQuestionCount > 0 ? '(용도 확인 필요)' : '(사용자 응답 반영)'},
-          통신비·자택 관리비 안분율, 연간 구독의 서비스 기간입니다. 자택 작업공간
-          면적 비율은 20%로 응답했으며 사업용 차량은 없습니다.
+        <blockquote className="mt-4 rounded-xl bg-canvas p-4 text-small leading-6 text-ink2">
+          {text}
         </blockquote>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors duration-150 ease-snap hover:bg-line2">
-            
-            <CopyIcon className="h-4 w-4" aria-hidden="true" />
-            문장 복사
-          </button>
-          <Link
-            to="/results"
-            className="inline-flex items-center gap-2 rounded-xl border border-line px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors duration-150 ease-snap hover:bg-line2">
-            
-            판정 목록 다시 보기
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button variant="secondary" size="sm" disabled={!text} onClick={() => void copyText()}>
+            {copy === 'done' ?
+            <CopyCheckIcon className="h-4 w-4" aria-hidden="true" /> :
+            <CopyIcon className="h-4 w-4" aria-hidden="true" />}
+            {copy === 'done' ? '복사했습니다' : '문장 복사'}
+          </Button>
+          {unresolved && unresolved.count > 0 &&
+          <Button to="/questions" variant="secondary" size="sm">
+              질문에 답하기
+              <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          }
+          <Button to="/results" variant="ghost" size="sm">
+            판정 목록 보기
             <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          </Button>
         </div>
+        {copy === 'failed' &&
+        <p role="alert" className="mt-3 text-small text-deny">
+            복사하지 못했습니다. 문장을 직접 선택해 복사해 주세요.
+          </p>
+        }
       </section>
     </AppShell>);
 
