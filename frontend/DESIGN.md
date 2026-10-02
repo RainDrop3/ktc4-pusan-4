@@ -100,7 +100,9 @@
 
 ### StatuteCitation
 - `statuteVersionId`로 조문 1건. `GET /statutes/{id}` 응답(제목·시행일·버전·원문 링크)을 그대로 보여준다.
-- 법률/시행령(근거)과 기본통칙·판례(참고)의 구분은 API에 `hierarchy`가 생기면 붙인다 (명세 4.3 #8).
+- `hierarchy` 로 근거 위계를 나눠 보여준다(CONTEXT.md §6). 법률·시행령·시행규칙은 「근거」(ink 배지, 흰 바탕),
+  기본통칙·고시·예규는 「참고 해석기준」, 심판례·판례는 「참고 사례」(neutral 배지, canvas 바탕 + 구속력 없음 안내).
+  나누지 않으면 사용자가 판례·예규를 법령과 같은 무게로 읽는다.
 
 ### SectionHeading
 `eyebrow → title → description` 순서 고정. `size` lg(h1)·md(h2, 기본)·sm(h3). 다크 배경은 `inverse`.

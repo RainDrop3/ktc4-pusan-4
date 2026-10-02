@@ -293,10 +293,15 @@ export interface JudgmentSummary {
   byAccount: { account: string; count: number; finalAmount: number }[];
 }
 
+/** 근거 위계. 화면에서 근거·참고 해석기준·참고 사례로 나눠 보여준다 (CONTEXT.md §6) */
+export type StatuteHierarchy =
+'법률' | '시행령' | '시행규칙' | '기본통칙' | '고시' | '예규' | '심판례' | '판례';
+
 export interface Statute {
   statuteVersionId: number;
   statuteId: string;
   title: string;
+  hierarchy: StatuteHierarchy;
   effectiveFrom: string;
   effectiveTo: string | null;
   sourceUrl: string;
