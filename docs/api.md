@@ -1104,7 +1104,7 @@ createdAt ASC, id ASC
 
 ### grouped=false (기본)
 
-Review 개별 항목을 반환한다.
+Review 개별 항목을 반환한다. `unresolved` 집계는 grouped 여부와 무관하게 항상 최상위에 포함한다(아래 "미해소 집계" 참고).
 
 ```
 {
@@ -1128,6 +1128,10 @@ Review 개별 항목을 반환한다.
       "resolvedAt": null
     }
   ],
+  "unresolved": {
+    "count": 5,
+    "amount": 230000
+  },
   "page": {}
 }
 ```
@@ -1141,6 +1145,7 @@ Review 개별 항목을 반환한다.
   "items": [
     {
       "groupKey": "merchant:XYZ PAYMENTS",
+      "merchantNorm": "XYZ PAYMENTS",
       "reviewIds": [
         "0199c1...",
         "0199c2...",
@@ -1153,14 +1158,75 @@ Review 개별 항목을 반환한다.
         "해외SaaS",
         "온라인쇼핑",
         "기타"
+      ],
+      "transactions": [
+        {
+          "reviewId": "0199c1...",
+          "transactionId": "0199f1...",
+          "approvedAt": "2026-01-03",
+          "merchantRaw": "XYZ PAYMENTS",
+          "amount": 47000,
+          "installmentMonths": 0
+        },
+        {
+          "reviewId": "0199c2...",
+          "transactionId": "0199f2...",
+          "approvedAt": "2026-01-17",
+          "merchantRaw": "XYZ PAYMENTS",
+          "amount": 50000,
+          "installmentMonths": 0
+        },
+        {
+          "reviewId": "0199c3...",
+          "transactionId": "0199f3...",
+          "approvedAt": "2026-02-03",
+          "merchantRaw": "XYZPAY*KR",
+          "amount": 50000,
+          "installmentMonths": 0
+        }
       ]
     }
   ],
+  "unresolved": {
+    "count": 5,
+    "amount": 230000
+  },
   "page": {}
 }
 ```
 
-`count`는 `reviewIds.length`와 항상 같아야 한다.
+`count`는 `reviewIds.length`, `transactions.length`와 항상 같아야 한다.
+
+`totalAmount`는 `transactions[].amount`의 합이다.
+
+`merchantNorm`은 그룹 안 Review들이 공유하는 정규화 이름이다. 화면에서 그룹 제목은 이 값을 쓴다.
+
+`groupKey`는 그룹을 구분하는 식별 문자열이다. 형식을 보장하지 않으므로 파싱하지 않는다. 같은 `merchantNorm`이라도 분류 키(카드사 트랙 등)가 다르면 별도 그룹이 될 수 있다.
+
+`merchantRaw`는 그룹 대표 표기로, `transactions`의 첫 거래 표기다. 한 그룹에 표기가 여러 개면 `transactions[].merchantRaw`로 각 표기를 본다.
+
+`transactions`는 그룹에 묶인 Review마다 거래 요약을 하나씩 담는다. 잘라내지 않고 전부 포함한다. 필드 이름과 뜻은 `GET /transactions`와 같다.
+
+`transactions` 정렬:
+
+```
+approvedAt ASC, transactionId ASC
+```
+
+`page`, `size`는 그룹 단위로 적용한다.
+
+### 미해소 집계
+
+`items`, `page`와 별도로 응답 최상위에 미해소 집계를 포함한다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `count` | 페이지네이션 전 `PENDING` Review 수 |
+| `amount` | `PENDING` Review가 참조하는 Transaction 금액 합계(원) |
+
+집계에는 `batchId` 필터를 적용하지만 `status`, `grouped`, `page`, `size`는 적용하지 않는다. 따라서 `page.totalElements`와 `unresolved.count`는 다를 수 있다.
+
+프론트가 "확인 필요 5건 · 230,000원"을 표시하기 위한 값이다. 현재 페이지 항목의 `count`, `totalAmount`를 더하면 페이지 밖 그룹이 빠진다.
 
 ---
 
