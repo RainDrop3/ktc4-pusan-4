@@ -117,8 +117,8 @@ const store = {
   judgments: JUDGMENTS.map((j) => ({ ...j })) as Judgment[],
   /** groupKey → 답변 라벨 */
   answers: new Map<string, string>(),
-  /** 사용자 수정 이력 (집계 보정용) */
-  overrides: [] as { from: Verdict; to: Verdict; amount: number }[],
+  /** overrideId → JudgmentOverride. 해제해도 지우지 않고 active 만 끈다 (api.md 3.8) */
+  overrides: new Map<string, { transactionId: string; judgmentId: string; active: boolean }>(),
   reviews: CLASSIFICATION_REVIEWS.map((r) => ({ ...r })) as ClassificationReview[],
   /** 다음 Run 에서 기술적으로 실패시킬 거래 수 (개발용) */
   failNext: 0,
@@ -131,14 +131,29 @@ store.judgments.
 filter((j) => j.transactionId === transactionId).
 sort((a, b) => b.revision - a.revision)[0];
 
-const latestAll = () => {
-  const seen = new Map<string, Judgment>();
-  for (const j of store.judgments) {
-    const cur = seen.get(j.transactionId);
-    if (!cur || j.revision > cur.revision) seen.set(j.transactionId, j);
-  }
-  return [...seen.values()];
+/**
+ * 거래의 현재 판정 (api.md 3.7). 활성 Override 가 있으면 그 revision 이고,
+ * 없으면 Override 가 아닌 revision 중 최신이다. 그래서 수정 뒤에 답변으로 새 revision 이
+ * 생겨도 현재 결과는 수정한 값으로 남는다.
+ */
+const currentOf = (transactionId: string): Judgment | undefined => {
+  const active = [...store.overrides.values()].find(
+    (o) => o.active && o.transactionId === transactionId
+  );
+  if (active) return store.judgments.find((j) => j.id === active.judgmentId);
+  return store.judgments.
+  filter((j) => j.transactionId === transactionId && j.origin.type !== 'OVERRIDE').
+  sort((a, b) => b.revision - a.revision)[0];
 };
+
+const currentAll = () =>
+[...new Set(store.judgments.map((j) => j.transactionId))].
+map(currentOf).
+filter((j): j is Judgment => j !== undefined);
+
+/** 그 Run 이 직접 만든 판정. 이후 답변·수정으로 생긴 revision 은 포함하지 않는다 */
+const producedBy = (runId: string) =>
+store.judgments.filter((j) => j.origin.type === 'RUN' && j.origin.id === runId);
 
 const transactionOf = (id: string) => store.transactions.find((t) => t.id === id);
 
@@ -147,14 +162,18 @@ const ratioOf = (answer: string): number | null =>
 
 /** 답변 → 새 Revision. 서버 룰엔진이 하는 일을 흉내 낸다. */
 const rejudge = (transactionId: string, groupKey: string, answer: string): Judgment => {
-  const prev = latestOf(transactionId);
+  // 엔진은 사용자 수정이 아니라 자기 판정 위에서 다시 판정한다
+  const prev = store.judgments.
+  filter((j) => j.transactionId === transactionId && j.origin.type !== 'OVERRIDE').
+  sort((a, b) => b.revision - a.revision)[0];
   const verdict = QUESTION_ANSWER_VERDICT[groupKey]?.[answer] ?? 'NEEDS_REVIEW';
   const ratio = ratioOf(answer);
   const amount = transactionOf(transactionId)?.amount ?? 0;
   const next: Judgment = {
     ...prev,
     id: nextId('0199f1c3'),
-    revision: prev.revision + 1,
+    revision: latestOf(transactionId).revision + 1,
+    origin: { type: 'USER_FACT', id: `fact-${groupKey}` },
     verdict: { code: verdict, label: LABEL[verdict] },
     blockedAtGate: verdict === 'NEEDS_REVIEW' ? prev.blockedAtGate : null,
     isInference: false,
@@ -176,13 +195,23 @@ const rejudge = (transactionId: string, groupKey: string, answer: string): Judgm
   return next;
 };
 
-/** 배치가 지워지면 그 거래에 걸린 질문도 함께 사라진다 (api.md 3.3) */
+/**
+ * 배치가 지워지면 그 거래에 걸린 질문도 함께 사라진다 (api.md 3.3).
+ * count·totalAmount 는 시드 숫자를 쓰지 않고 거래에서 센다. count 는 questionIds.length 와 같아야 한다 (3.9)
+ */
 const liveGroups = () =>
 QUESTION_GROUPS.filter((g) =>
 (QUESTION_TRANSACTIONS[g.groupKey] ?? []).some((id) =>
 store.transactions.some((t) => t.id === id)
 )
-);
+).map((g) => ({
+  ...g,
+  count: g.questionIds.length,
+  totalAmount: (QUESTION_TRANSACTIONS[g.groupKey] ?? []).reduce(
+    (sum, id) => sum + (transactionOf(id)?.amount ?? 0),
+    0
+  )
+}));
 
 const pendingGroups = (status?: string) => {
   const groups = liveGroups();
@@ -267,7 +296,7 @@ export const mockApi: Api = {
         }
       });
       store.answers.clear();
-      store.overrides = [];
+      store.overrides.clear();
       return delay(undefined);
     }
   },
@@ -283,7 +312,7 @@ export const mockApi: Api = {
       if (q?.month)
       items = items.filter((t) => Number(t.approvedAt.slice(5, 7)) === q.month);
       if (q?.verdict)
-      items = items.filter((t) => latestOf(t.id)?.verdict.code === q.verdict);
+      items = items.filter((t) => currentOf(t.id)?.verdict.code === q.verdict);
       items = [...items].sort((a, b) => b.approvedAt.localeCompare(a.approvedAt) || b.id.localeCompare(a.id));
       return delay(paginate(items, q?.page, q?.size));
     },
@@ -411,16 +440,16 @@ export const mockApi: Api = {
       /**
        * 실제 판정에서 계산한다. 전에는 292건 규모의 고정값에 답변·수정 이동만
        * 더했는데, 거래 시드는 31건이라 /uploads·/transactions 와 숫자가 어긋났다.
+       * runId 는 그 Run 이 만든 판정 그대로, batchId·year 는 거래별 현재 판정이다 (api.md 3.7).
        */
-      const batchOfScope =
-      scope.batchId ??
-      (scope.runId ? store.runs.get(scope.runId)?.batchId : undefined);
-      const rows = latestAll().filter((j) => {
+      const rows = scope.runId ?
+      producedBy(scope.runId) :
+      currentAll().filter((j) => {
         const t = transactionOf(j.transactionId);
         if (!t) return false;
         // 사용자가 지금 제외한 거래는 집계하지 않는다 (api.md 3.7)
         if (t.effectiveStatus.code !== 'JUDGEABLE') return false;
-        if (batchOfScope && t.batchId !== batchOfScope) return false;
+        if (scope.batchId && t.batchId !== scope.batchId) return false;
         if (scope.year && !t.approvedAt.startsWith(String(scope.year))) return false;
         return true;
       });
@@ -452,15 +481,24 @@ export const mockApi: Api = {
       });
     },
     list: (q) => {
-      // transactionId 지정은 이력 전체, 그 외는 거래별 현재 판정
-      let items = q?.transactionId ?
-      store.judgments.filter((j) => j.transactionId === q.transactionId) :
-      latestAll();
+      // runId 는 그 Run 이 만든 판정, transactionId + latestOnly=false 는 그 거래의 이력 전체,
+      // 그 외는 거래별 현재 판정이다 (api.md 3.7)
+      const history = q?.transactionId !== undefined && q.latestOnly === false;
+      let items = q?.runId ?
+      producedBy(q.runId) :
+      history ?
+      store.judgments.filter((j) => j.transactionId === q?.transactionId) :
+      currentAll();
+      if (q?.transactionId) items = items.filter((j) => j.transactionId === q.transactionId);
       if (q?.verdict) items = items.filter((j) => j.verdict.code === q.verdict);
       if (q?.batchId)
       items = items.filter((j) => transactionOf(j.transactionId)?.batchId === q.batchId);
-      // 이력 조회(transactionId 지정)가 아니면 지금 제외된 거래는 빼낸다 (api.md 3.7)
-      if (!q?.transactionId)
+      if (q?.year)
+      items = items.filter((j) =>
+      transactionOf(j.transactionId)?.approvedAt.startsWith(String(q.year))
+      );
+      // 거래·Run 을 지정하지 않은 현재 판정 조회에서는 지금 제외된 거래를 빼낸다 (api.md 3.7)
+      if (!q?.transactionId && !q?.runId)
       items = items.filter(
         (j) => transactionOf(j.transactionId)?.effectiveStatus.code === 'JUDGEABLE'
       );
@@ -475,27 +513,34 @@ export const mockApi: Api = {
       const prev = store.judgments.find((x) => x.id === id);
       if (!prev) return notFound('JUDGMENT_NOT_FOUND', '판정을 찾을 수 없습니다.');
       const amount = transactionOf(prev.transactionId)?.amount ?? null;
+      const overrideId = nextId('0199ab12');
       const next: Judgment = {
         ...prev,
         id: nextId('0199f1c3'),
         revision: latestOf(prev.transactionId).revision + 1,
+        origin: { type: 'OVERRIDE', id: overrideId },
         verdict: { code: body.toVerdict, label: LABEL[body.toVerdict] },
         finalAmount: body.toVerdict === 'AVAILABLE' ? prev.finalAmount ?? amount : null,
-        explanation: `사용자 수정: ${body.reason}`,
         computedAt: now()
       };
       store.judgments.push(next);
-      store.overrides.push({
-        from: prev.verdict.code,
-        to: body.toVerdict,
-        amount: next.finalAmount ?? prev.finalAmount ?? 0
+      // 같은 거래의 기존 활성 Override 는 끈다. 거래마다 활성은 하나뿐이다
+      store.overrides.forEach((o) => {
+        if (o.transactionId === prev.transactionId) o.active = false;
+      });
+      store.overrides.set(overrideId, {
+        transactionId: prev.transactionId,
+        judgmentId: next.id,
+        active: true
       });
       return delay(next);
     },
     removeOverride: (overrideId) => {
-      // 목업은 마지막 수정을 되돌린다
-      void overrideId;
-      store.overrides.pop();
+      const found = store.overrides.get(overrideId);
+      if (!found)
+      return notFound('JUDGMENT_OVERRIDE_NOT_FOUND', '사용자 수정을 찾을 수 없습니다.');
+      // 이미 해제된 것도 204 다. 기록은 지우지 않고 끄기만 한다 (api.md 3.8)
+      found.active = false;
       return delay(undefined);
     }
   },
