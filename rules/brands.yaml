@@ -21,6 +21,10 @@ brands:
   - brand_key: GS25
     aliases: ["GS25", "지에스25", "지에스GS25"]
     category: null
+  # GS25 와 같은 회사의 다른 브랜드(슈퍼마켓). 사전 키는 회사가 아니라 브랜드다.
+  - brand_key: GS더프레시
+    aliases: ["GS더프레시", "지에스더프레시", "GSTHEFRESH"]
+    category: null
   - brand_key: 세븐일레븐
     aliases: ["세븐일레븐", "7-ELEVEN", "7ELEVEN"]
     category: null

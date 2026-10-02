@@ -200,9 +200,8 @@ class Normalizer:
             # 'CU' 뒤에 'TE' 가 오면 CUTE 라는 다른 단어다. 숫자 뒤 숫자는 지점 패턴이 가른다.
             if rest and _ascii_alpha(alias[-1]) and _ascii_alpha(rest[0]):
                 continue
-            if ctx.get("is_truncated") or ctx.get("truncation_suspect"):
-                # 뒤가 잘려 지점 모양인지 알 수 없다. 사전 앞부분이 맞으면 브랜드로 복원한다.
-                ctx["is_truncated"] = True
+            if ctx.get("is_truncated"):
+                # 20B·괄호 미닫힘. 뒤가 잘려 지점 모양인지 알 수 없다. 사전 앞부분이 맞으면 복원한다.
                 ctx["brand_key"] = brand
                 ctx["brand_restored"] = bool(rest)
                 ctx["branch_raw"] = rest
@@ -213,6 +212,16 @@ class Normalizer:
                 return brand
             # 뒤가 지점이 아니다(하위 업태 등). 별도 브랜드로 보고 떼지 않는다.
             return s
+        # 19B 의심: 이름이 사전 브랜드 중간에서 끝날 때(브랜드 앞부분만 일치)만 절단 확정.
+        # 브랜드 전체가 이름에 들어 있으면 위에서 일반 매칭으로 끝나고 의심으로 남는다.
+        if ctx.get("truncation_suspect"):
+            for alias, brand in brand_aliases(step):
+                if len(compact) < len(alias) and alias.startswith(compact):
+                    ctx["is_truncated"] = True
+                    ctx["brand_key"] = brand
+                    ctx["brand_restored"] = True
+                    ctx["branch_raw"] = ""
+                    return brand
         return s
 
     def step_strip_branch(self, s, ctx, step):

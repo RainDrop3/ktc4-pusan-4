@@ -266,9 +266,8 @@ public final class T1Normalizer {
             String rest = compact.substring(alias.length());
             // 'CU' 뒤에 'TE' 가 오면 CUTE 라는 다른 단어다. 숫자 뒤 숫자는 지점 패턴이 가른다.
             if (!rest.isEmpty() && asciiAlpha(alias.charAt(alias.length() - 1)) && asciiAlpha(rest.charAt(0))) continue;
-            if (ctx.isTruncated || ctx.truncationSuspect) {
-                // 뒤가 잘려 지점 모양인지 알 수 없다. 사전 앞부분이 맞으면 브랜드로 복원한다.
-                ctx.isTruncated = true;
+            if (ctx.isTruncated) {
+                // 20B·괄호 미닫힘. 뒤가 잘려 지점 모양인지 알 수 없다. 사전 앞부분이 맞으면 복원한다.
                 ctx.brandKey = brand;
                 ctx.brandRestored = !rest.isEmpty();
                 ctx.branchRaw = rest;
@@ -285,6 +284,19 @@ public final class T1Normalizer {
                 return brand;
             }
             return s;   // 뒤가 지점이 아니다(하위 업태 등). 별도 브랜드로 보고 떼지 않는다.
+        }
+        // 19B 의심: 이름이 사전 브랜드 중간에서 끝날 때(브랜드 앞부분만 일치)만 절단 확정.
+        // 브랜드 전체가 이름에 들어 있으면 위에서 일반 매칭으로 끝나고 의심으로 남는다.
+        if (ctx.truncationSuspect) {
+            for (String[] pair : brandAliases(step)) {
+                if (compact.length() < pair[0].length() && pair[0].startsWith(compact)) {
+                    ctx.isTruncated = true;
+                    ctx.brandKey = pair[1];
+                    ctx.brandRestored = true;
+                    ctx.branchRaw = "";
+                    return pair[1];
+                }
+            }
         }
         return s;
     }
