@@ -19,7 +19,7 @@ interface TableProps<T> {
   rowKey: (row: T) => string;
   /** 접근성용 표 설명 */
   caption: string;
-  /** 행 클릭. 주면 행 전체가 버튼처럼 동작한다 */
+  /** 행 클릭. 주면 행 전체가 버튼처럼 동작한다 (Enter·Space 로도 눌린다) */
   onRowClick?: (row: T) => void;
   /** 지금 선택된 행 */
   selectedKey?: string;
@@ -98,9 +98,21 @@ export function Table<T>({
               <tr
                 key={key}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-current={selected ? 'true' : undefined}
+                onKeyDown={
+                onRowClick ?
+                (event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  onRowClick(row);
+                } :
+                undefined
+                }
                 className={cn(
                   'transition-colors duration-150',
-                  onRowClick && 'cursor-pointer hover:bg-canvas',
+                  onRowClick &&
+                  'cursor-pointer hover:bg-canvas focus-visible:bg-canvas focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
                   selected && 'bg-accent-soft/50'
                 )}>
 

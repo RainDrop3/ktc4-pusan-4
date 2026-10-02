@@ -121,3 +121,19 @@ PR 올리기 전에 "정말 되는지" 다시 봤다. 별도 컨텍스트(서브
 - `Upload` · `Interview` · `Results` · `Questions` · `Summary` 는 아직 생 px 가 남아 있다.
 - `Run` 의 폴링은 1초 간격이다. 실서버에서 처리 시간이 길어질 때 버티는지는 확인하지 못했다.
 - 실패 목록과 실패 거래 조회가 100건 상한이다. 그 위는 이름 없이 id 로 보인다.
+
+## 덧붙임 — PR 올리기 직전에 두 건 더
+
+### 제외한 거래가 집계에 남아 있었다
+- 거래를 판정 대상에서 빼도 `/results` · `/summary` 숫자가 그대로였다. 명세는
+  "사용자가 현재 EXCLUDED 한 Transaction 은 제외한다"(api.md 3.7, 1435·1506행)다.
+- `judgments.summary` 와 `judgments.list` 에서 `effectiveStatus !== JUDGEABLE` 을 뺀다.
+  거래별 이력 조회(`transactionId` 지정)는 그대로 전체를 준다.
+- 확인: 「불가」거래 1건 제외 → 전체 23→22, 불가 7→6. 다시 포함 → 23/9/7/7 복구.
+
+### 내가 잠재 결함을 살려 놨다
+- `Table` 의 `onRowClick` 행은 `tabIndex` · `onKeyDown` 이 없어 마우스로만 눌렸다.
+  부품 주석에는 "행 전체가 버튼처럼 동작한다"고 적혀 있었다(거짓).
+- 쓰는 화면이 없어 잠재 결함이었는데, 이번에 스타일가이드 예시에 `onRowClick` 을
+  넣으면서 실제로 살아났다. `tabIndex` · Enter·Space · 포커스 링 · `aria-current` 를 넣었다.
+- 확인: 행에 포커스 → Enter 로 해제, Space 로 선택.

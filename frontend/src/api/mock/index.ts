@@ -418,6 +418,8 @@ export const mockApi: Api = {
       const rows = latestAll().filter((j) => {
         const t = transactionOf(j.transactionId);
         if (!t) return false;
+        // 사용자가 지금 제외한 거래는 집계하지 않는다 (api.md 3.7)
+        if (t.effectiveStatus.code !== 'JUDGEABLE') return false;
         if (batchOfScope && t.batchId !== batchOfScope) return false;
         if (scope.year && !t.approvedAt.startsWith(String(scope.year))) return false;
         return true;
@@ -457,6 +459,11 @@ export const mockApi: Api = {
       if (q?.verdict) items = items.filter((j) => j.verdict.code === q.verdict);
       if (q?.batchId)
       items = items.filter((j) => transactionOf(j.transactionId)?.batchId === q.batchId);
+      // 이력 조회(transactionId 지정)가 아니면 지금 제외된 거래는 빼낸다 (api.md 3.7)
+      if (!q?.transactionId)
+      items = items.filter(
+        (j) => transactionOf(j.transactionId)?.effectiveStatus.code === 'JUDGEABLE'
+      );
       items.sort((a, b) => b.computedAt.localeCompare(a.computedAt) || b.id.localeCompare(a.id));
       return delay(paginate(items, q?.page, q?.size ?? 20));
     },
