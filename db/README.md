@@ -24,6 +24,10 @@ docker compose exec -T postgres psql -U ktc4 -d ktc4 < db/rag.sql   # 3) legal_c
 `rag.sql`은 **initdb에 마운트하지 않는다.** `statute_version`을 FK로 걸어서, Flyway보다
 먼저 도는 initdb 단계에서는 참조 대상이 없어 `CREATE TABLE`이 실패하고 컨테이너가 죽는다.
 
+운영 배포(`deploy/deploy.sh`)는 Flyway 뒤에 두 파일을 각각 `psql -1`(한 트랜잭션)로 적용하고,
+매 배포마다 다시 실행한다. 그래서 두 파일은 재실행해도 결과가 같아야 하고(`IF NOT EXISTS`),
+`CREATE INDEX CONCURRENTLY`처럼 트랜잭션 안에서 못 도는 문을 넣으면 배포가 실패한다.
+
 백엔드를 띄우지 않고 AI 쪽만 작업할 때는 V1을 직접 넣는다.
 
 ```bash
