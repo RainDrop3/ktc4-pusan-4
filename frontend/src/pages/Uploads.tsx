@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { InboxIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { api, ApiRequestError, useApi } from '../api';
@@ -20,7 +20,7 @@ import { formatFullDate, formatNumber, formatPeriod } from '../utils/format';
  * 배치를 지우면 거래·판정·질문·사용자 수정까지 함께 사라진다(api.md 3.3). 지우기 전에 그걸 말한다.
  */
 export function Uploads() {
-  const { batchId, setBatchId } = useSession();
+  const { batchId, setBatchId, setRunId } = useSession();
   const [page, setPage] = useState(0);
   const [target, setTarget] = useState<UploadBatch | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -29,13 +29,21 @@ export function Uploads() {
   const listQ = useApi(() => api.uploads.list({ page, size: 20 }), [page]);
   const rows = listQ.data?.items ?? [];
 
+  // 마지막 행을 지우면 그 페이지가 비는데 Pagination 이 사라져 되돌아갈 수 없다
+  useEffect(() => {
+    if (page > 0 && listQ.data && listQ.data.items.length === 0) setPage(0);
+  }, [page, listQ.data]);
+
   const remove = async () => {
     if (!target) return;
     setDeleting(true);
     setError(null);
     try {
       await api.uploads.remove(target.id);
-      if (batchId === target.id) setBatchId(null);
+      if (batchId === target.id) {
+        setBatchId(null);
+        setRunId(null);
+      }
       setTarget(null);
       listQ.reload();
     } catch (caught) {
@@ -92,7 +100,6 @@ export function Uploads() {
   {
     header: '분류',
     align: 'right',
-    hideBelow: 'sm',
     width: 'w-32',
     cell: (row) =>
     row.classificationPendingCount > 0 ?
@@ -105,7 +112,12 @@ export function Uploads() {
     align: 'right',
     width: 'w-24',
     cell: (row) =>
-    <Button variant="ghost" size="sm" onClick={() => setTarget(row)}>
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-label={`${row.cardIssuer}카드 ${formatPeriod(row.periodStart, row.periodEnd)} 업로드 삭제`}
+      onClick={() => setTarget(row)}>
+
           삭제
         </Button>
 
@@ -125,15 +137,6 @@ export function Uploads() {
         </p>
       </header>
 
-      {error &&
-      <p
-        role="alert"
-        className="mt-4 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-body text-deny">
-
-          {error}
-        </p>
-      }
-
       <div className="mt-6">
         <Table
           caption="업로드 이력"
@@ -143,6 +146,17 @@ export function Uploads() {
           selectedKey={batchId ?? undefined}
           loading={listQ.loading}
           empty={
+          listQ.error ?
+          <Empty
+            icon={<InboxIcon className="h-5 w-5" />}
+            title="업로드 이력을 불러오지 못했습니다"
+            description="잠시 후 다시 시도해 주세요. 계속 안 되면 새로고침해 주세요."
+            action={
+            <Button size="sm" variant="secondary" onClick={listQ.reload}>
+                    다시 시도
+                  </Button>
+            } /> :
+
           <Empty
             icon={<InboxIcon className="h-5 w-5" />}
             title="아직 올린 파일이 없습니다"
@@ -188,6 +202,14 @@ export function Uploads() {
           </>
         }>
 
+        {error &&
+        <p
+          role="alert"
+          className="mb-4 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-body text-deny">
+
+            {error}
+          </p>
+        }
         {target &&
         <dl className="space-y-1.5 rounded-xl bg-canvas p-4 text-small">
             <div className="flex justify-between gap-3">

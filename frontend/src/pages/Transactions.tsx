@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { SearchXIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { api, ApiRequestError, useApi } from '../api';
@@ -53,7 +53,13 @@ export function Transactions() {
 
   const rows = listQ.data?.items ?? [];
 
+  // 마지막 행을 제외하면 그 페이지가 비는데 Pagination 이 사라져 되돌아갈 수 없다
+  useEffect(() => {
+    if (page > 0 && listQ.data && listQ.data.items.length === 0) setPage(0);
+  }, [page, listQ.data]);
+
   const change = async (row: Transaction, next: 'INCLUDED' | 'EXCLUDED') => {
+    if (busyId) return;
     setBusyId(row.id);
     setError(null);
     try {
@@ -92,12 +98,11 @@ export function Transactions() {
   },
   {
     header: '분류',
-    hideBelow: 'md',
     width: 'w-32',
     cell: (row) =>
     row.classificationStatus.code === 'CLASSIFIED' ?
     <span className="text-ink2">{row.merchantCategory}</span> :
-    <Badge tone="warn">확인 필요</Badge>
+    <Badge tone="warn">{row.classificationStatus.label}</Badge>
 
   },
   {
@@ -125,7 +130,7 @@ export function Transactions() {
       if (canceled) {
         return (
           <span className="inline-flex items-center gap-1.5">
-              <Badge>취소상계</Badge>
+              <Badge>{row.sourceStatus.label}</Badge>
             </span>);
 
       }
@@ -165,6 +170,7 @@ export function Transactions() {
           onChange={(next) => {
             setStatus(next);
             setPage(0);
+            setError(null);
           }}
           options={STATUS_FILTERS} />
 
@@ -203,6 +209,17 @@ export function Transactions() {
           rowKey={(row) => row.id}
           loading={listQ.loading}
           empty={
+          listQ.error ?
+          <Empty
+            icon={<SearchXIcon className="h-5 w-5" />}
+            title="거래를 불러오지 못했습니다"
+            description="잠시 후 다시 시도해 주세요. 계속 안 되면 새로고침해 주세요."
+            action={
+            <Button size="sm" variant="secondary" onClick={listQ.reload}>
+                    다시 시도
+                  </Button>
+            } /> :
+
           <Empty
             icon={<SearchXIcon className="h-5 w-5" />}
             title="이 조건에 맞는 거래가 없습니다"
