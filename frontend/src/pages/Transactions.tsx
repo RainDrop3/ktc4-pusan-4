@@ -93,11 +93,18 @@ export function Transactions() {
     <span className="block min-w-0">
           <span className="block truncate font-medium text-ink">{row.merchantNorm}</span>
           <span className="block truncate text-small text-muted">{row.merchantRaw}</span>
+          {/* 분류 열은 좁은 화면에서 숨기므로, 그 정보를 여기로 옮긴다 */}
+          <span className="mt-1 block md:hidden">
+            {row.classificationStatus.code === 'CLASSIFIED' ?
+          <span className="text-small text-muted">{row.merchantCategory}</span> :
+          <Badge tone="warn" size="sm">{row.classificationStatus.label}</Badge>}
+          </span>
         </span>
 
   },
   {
     header: '분류',
+    hideBelow: 'md',
     width: 'w-32',
     cell: (row) =>
     row.classificationStatus.code === 'CLASSIFIED' ?

@@ -77,6 +77,14 @@ export function Uploads() {
           <span className="block truncate text-small tabular-nums text-muted">
             {formatPeriod(row.periodStart, row.periodEnd)}
           </span>
+          {/* 분류 열은 좁은 화면에서 숨기므로, 그 정보를 여기로 옮긴다 */}
+          {row.classificationPendingCount > 0 &&
+      <span className="mt-1 block sm:hidden">
+              <Badge tone="warn" size="sm">
+                확인 {formatNumber(row.classificationPendingCount)}건
+              </Badge>
+            </span>
+      }
         </span>
 
   },
@@ -100,6 +108,7 @@ export function Uploads() {
   {
     header: '분류',
     align: 'right',
+    hideBelow: 'sm',
     width: 'w-32',
     cell: (row) =>
     row.classificationPendingCount > 0 ?
