@@ -10,9 +10,10 @@
 | --- | --- |
 | 인원 | 백엔드 담당자 2명이다. 트랙 A(판정)와 트랙 B(입력)로 역할을 나눈다. |
 | PR 크기 | 추가 1000줄 이하다. 테스트 코드, 마이그레이션 SQL, worklog를 모두 포함한 GitHub `+` 수치 기준이다. |
-| PR 수 | 트랙 A 11개, 트랙 B 10개다. 1인당 주 2~3개 merge를 목표로 한다. |
-| 10월 범위 | 기본 흐름과 임시 사용자를 구현하고 4주차에 인증을 도입한다. 공휴일 정적 YAML, 금액 계산 최소판, 분류 AI 연동, bulk-answer를 포함한다. |
-| 미룰 순서 | B10 분류 AI → A7 bulk-answer → A6 금액 계산 순서로 미룬다. 단, 인증 작업은 미루지 않는다. |
+| PR 수 | 트랙 A 11개, 트랙 B 11개다. 1인당 주 2~3개 merge를 목표로 한다. |
+| 10월 범위 | 기본 흐름과 임시 사용자를 구현하고 4주차에 인증을 도입한다. 리프레시 토큰 저장소로 Redis를 새로 들인다. 공휴일 정적 YAML, 금액 계산 최소판, 분류 AI 연동, bulk-answer를 포함한다. |
+| 미룰 순서 | B10 분류 AI → A7 bulk-answer → A6 금액 계산 순서로 미룬다. 단, 인증 작업(B9a, B9b)은 미루지 않는다. |
+| 저장소 | Idempotency-Key는 Postgres, 리프레시 토큰은 Redis에 둔다. 근거는 [저장소 결정](#저장소-결정)에 있다. |
 
 ### 일정
 
@@ -47,11 +48,12 @@ gantt
     B6 batch 조회·삭제           :b6, after b5, 2d
     B7 거래 조회·제외            :b7, after b6, 2d
     B8 분류 검토·응답            :b8, 2026-10-26, 1d
-    B9 인증                      :b9, after b8, 2d
-    B10 분류 AI 연동             :b10, after b9, 1d
+    B9a Redis 인프라             :b9a, after b8, 1d
+    B9b 인증·리프레시 토큰       :b9b, after b9a, 2d
+    B10 분류 AI 연동             :b10, after b9b, 1d
 
     section 함께
-    시나리오 통합 테스트         :it, 2026-10-30, 1d
+    시나리오 통합 테스트(A 주도) :it, 2026-10-30, 1d
 
     section 결정 마감
     인증 방식                    :milestone, d1, 2026-10-08, 0d
@@ -89,9 +91,10 @@ flowchart TB
         B4 --> B6["B6 batch 조회·삭제<br/>3주"]
         B4 --> B7["B7 거래<br/>3주"]
         B4 --> B8["B8 분류 검토<br/>4주"]
-        B1 --> B9["B9 인증<br/>4주"]
+        B9a["B9a Redis 인프라<br/>4주"] --> B9b["B9b 인증<br/>4주"]
+        B1 --> B9b
         B3 --> B10["B10 분류 AI<br/>4주"]
-        D1{{"인증 방식"}} -.-> B9
+        D1{{"인증 방식"}} -.-> B9b
         D3{{"AI 분류 계약"}} -.-> B10
     end
 
@@ -102,7 +105,7 @@ flowchart TB
     classDef trackB fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef decision fill:#fef3c7,stroke:#d97706,color:#78350f
     class A0,A1,A2a,A2b,A3a,A3b,A4,A5,A6,A7 trackA
-    class B1,B2,B3,B4,B5,B6,B7,B8,B9,B10 trackB
+    class B1,B2,B3,B4,B5,B6,B7,B8,B9a,B9b,B10 trackB
     class D1,D2,D3 decision
 ```
 
@@ -124,6 +127,10 @@ flowchart LR
     QA -->|rejudge| R
     Q --> O["override<br/>A5"]
     Q --> X["거래 제외<br/>B7"]
+    subgraph AUTH["모든 요청 앞단"]
+        T["Bearer 검증·토큰 재발급<br/>B9b"] --- RD[("Redis<br/>리프레시 토큰")]
+    end
+    T -.-> U
 ```
 
 ## 공통 규칙
@@ -141,7 +148,7 @@ flowchart LR
   - `integrationTest` 실행 (Docker 필요)
   - eval 리포트에 기능 회귀가 없는지 확인
   - `/worklog` 작성
-- 사용자 식별: B1에서 `CurrentUser` 리졸버를 작성하고 모든 서비스는 이를 통해 userId를 전달받는다. 초기에는 고정 임시 사용자를 반환하도록 구현하고, B9에서 구현체만 Bearer 토큰 검증 방식으로 교체한다.
+- 사용자 식별: B1에서 `CurrentUser` 리졸버를 작성하고 모든 서비스는 이를 통해 userId를 전달받는다. 초기에는 고정 임시 사용자를 반환하도록 구현하고, B9b에서 구현체만 Bearer 토큰 검증 방식으로 교체한다.
 
 ## 사전 정리 (1주차 월요일)
 
@@ -187,7 +194,7 @@ flowchart LR
 | A3a | A | `GET /judgments`(batchId, year, transactionId, runId 필터)와 `GET /judgments/{id}`를 구현한다. 현재 결과는 api.md 5절 규칙을 적용한다. 활성 상태인 override를 우선 적용하며, 없으면 override가 아닌 최신 revision을 채택한다. EXCLUDED 상태 거래는 결과에서 제외한다. |
 | A3b | A | `GET /judgments/summary`를 구현한다. verdict별, 계정별 집계를 반환한다. |
 | A4 | A | `GET /questions`(그룹화 및 미해소 집계)와 `POST /question-responses`를 구현한다. `UserFactPersistenceService.answerQuestion`을 재사용하고 UserFact는 batch scope로 관리한다. 동일 scope의 거래를 대상으로 `rejudge`를 수행하며, origin은 `trigger_user_fact_id`로 설정한다. 형제 질문 처리는 `worklog/be/2026-09-26-merge-mock-into-spring.md`에 정리된 결정을 따른다. |
-| B5 | B | `Idempotency-Key` 처리 로직을 구현한다. DB 테이블을 활용해 24시간의 유효기간을 설정한다. 현재 기술 스택에 Redis가 없으므로 사용하지 않는다. 400, 409, 410 에러를 상황에 맞게 처리한다. |
+| B5 | B | `Idempotency-Key` 처리 로직을 구현한다. Postgres 테이블에 `expires_at`을 두어 24시간 유효기간을 설정한다. 업로드 저장과 같은 트랜잭션으로 묶기 위해 Redis가 아닌 DB에 둔다. 400, 409, 410 에러를 상황에 맞게 처리한다. |
 | B6 | B | `GET /upload-batches`(목록 및 상세)와 `DELETE /upload-batches/{id}`를 구현한다. 삭제 시 batch 범위의 데이터를 연쇄 삭제(cascade)하고, idempotency 키 상태는 `DELETED`로 변경한다. |
 | B7 | B | `GET /transactions`(목록 및 상세)와 `POST /transactions/{id}/exclude`, `include`를 구현한다. |
 
@@ -199,17 +206,34 @@ flowchart LR
 | A6 | A | 금액 계산 최소판을 구현하고 한도 로직을 연결한다. G3 안분 비율을 적용한다. 100만 원 이상 자산(시행령 §67④)은 5년 정액법으로 해당 연도의 월할 금액만 계산한다. 실행 순서는 `judge → computeAmount → settleLimits(잠정)`으로 구성하고 `LimitBucketPersistenceService.replaceProvisional`을 연결한다. |
 | A7 | A | `POST /questions/bulk-answer`를 구현한다. 단건 답변 서비스를 반복해서 호출하며, 휴일 소명 질문은 일괄 답변 대상에서 제외한다. |
 | B8 | B | `GET /classification-reviews`와 `POST /classification-responses`를 구현한다. 사용자 응답 내용은 개인 scope의 `merchant_dict`에 저장하고 `rejudge`를 호출한다. |
-| B9 | B | 인증 체계를 도입한다. `CurrentUser` 리졸버 구현체를 Bearer 토큰 검증 방식으로 교체한다. |
+| B9a | B | Redis 인프라를 추가한다. 로컬 `compose.yaml`, `deploy/compose.yaml`(`maxmemory` 128MB, AOF 켜기), `deploy/deploy.sh` 헬스체크, `spring-boot-starter-data-redis`, Testcontainers Redis 설정을 포함한다. 인증과 무관하므로 B트랙에 여유가 생기면 3주차로 앞당긴다. |
+| B9b | B | 인증 체계를 도입한다. 액세스 토큰(JWT) 발급, 리프레시 토큰 재발급, 로그아웃을 구현하고 `CurrentUser` 리졸버 구현체를 Bearer 토큰 검증 방식으로 교체한다. 리프레시 토큰 저장 규칙은 [저장소 결정](#저장소-결정)을 따른다. |
 | B10 | B | 분류 AI 연동 기능을 구현한다. 사전에 등록되지 않은 가맹점이면 AI 모듈을 호출하는 HTTP 클라이언트를 작성한다. 타임아웃이나 호출 실패가 발생하면 `미분류` 상태로 둔다. |
 
 ## 미리 정해야 할 것
 
 | 마감 시점 | 결정 사항 | 대상 PR |
 | --- | --- | --- |
-| 1주차 | 인증 방식 결정 (카카오 OAuth, 자체 JWT 등) | B9 |
+| 1주차 | 인증 방식 결정 (카카오 OAuth, 자체 JWT 등). 리프레시 토큰 저장소는 Redis로 확정했다. 액세스·리프레시 토큰 만료 기간도 함께 정한다. | B9b |
 | 3주차 | 금액 계산 순서 결정: 안분 선적용 여부 또는 부가세 선적용 여부 (`CONTEXT.md` 미결정 #6) | A6 |
 | 3주차 | AI 분류 엔드포인트 요청 및 응답 규격 협의 (AI 담당자와 협의) | B10 |
 | 2주차 | 공휴일 YAML 파일에 포함할 연도 범위 확정 | A2a |
+
+## 저장소 결정
+
+| 데이터 | 저장소 | 이유 |
+| --- | --- | --- |
+| Idempotency-Key와 최초 응답 | Postgres (`idempotency_key` 테이블) | 업로드의 부작용(batch·거래 저장)이 같은 Postgres 안에서 일어난다. 키 기록을 같은 트랜잭션으로 묶으면 "키는 남았는데 batch는 없다" 같은 불일치가 생기지 않는다. batch 삭제 시 키를 `DELETED`로 바꾸는 것도 같은 트랜잭션에서 처리된다. |
+| 리프레시 토큰 | Redis | 업무 데이터와 트랜잭션으로 묶일 필요가 없다. TTL로 만료 토큰이 자동 정리되어 별도 삭제 작업이 필요 없다. 데이터를 잃어도 재로그인으로 끝나서 Redis를 처음 들이기에 위험이 작다. |
+
+리프레시 토큰 저장 규칙:
+
+- 키 구조
+  - `refresh:{tokenHash}` → userId. TTL은 리프레시 토큰 만료 기간과 같다.
+  - `user:{userId}:refresh` → 그 사용자의 tokenHash Set. 탈퇴(`DELETE /users/me`)나 전체 로그아웃 때 한 번에 지우는 데 쓴다.
+- 토큰 원문이 아니라 해시를 저장한다.
+- 재발급(rotation)은 `GETDEL`로 기존 토큰을 꺼내면서 지운다. 이미 지워진 토큰이 다시 들어오면 재사용으로 보고 그 사용자의 토큰을 전부 지운다.
+- AOF를 켜서 재배포 때 전 사용자가 로그아웃되지 않게 한다. EC2 메모리가 4GB라서 `maxmemory`를 128MB로 제한한다.
 
 ## 문서 정리
 
@@ -218,7 +242,7 @@ flowchart LR
   - `backend/README.md` "단위 테스트 NO-SOURCE"
   - `docs/deployment.md` "501"
 - 설계 맥락 설명이 필요한 비자명한 결정은 해당 PR에서 `docs/`에 기록으로 남긴다.
-  - idempotency 저장소
+  - 저장소 결정(위 절의 내용을 `docs/architecture.md`로 옮긴다)
   - run 비동기 방식
   - 금액 계산 순서
 
@@ -227,4 +251,4 @@ flowchart LR
 1. 모든 컨트롤러에서 `@MockResponse`를 제거하고 `MockFixtures`와 `*MockData`를 삭제한다.
 2. `gradlew -p backend check` 명령어가 통과(green)해야 한다. 여기에는 unit 테스트, eval 테스트, integrationTest가 모두 포함된다.
 3. 시나리오 통합 테스트 1건으로 api.md §8.1~8.6 흐름을 검증한다. 검증 흐름은 업로드 → 분류 응답 → run → 결과 조회 → 질문 답변 재판정 → override → 거래 제외 → batch 재판정 순서다.
-4. 로컬 환경에서 `docker compose up -d postgres`와 `bootRun --args="--spring.profiles.active=local"`을 실행한다. 프론트엔드의 `api/index.ts` 설정을 HTTP 호출로 전환한 뒤 업로드부터 결과 화면까지 정상 동작하는지 직접 확인한다.
+4. 로컬 환경에서 `docker compose up -d postgres redis`와 `bootRun --args="--spring.profiles.active=local"`을 실행한다. 프론트엔드의 `api/index.ts` 설정을 HTTP 호출로 전환한 뒤 업로드부터 결과 화면까지 정상 동작하는지 직접 확인한다.
