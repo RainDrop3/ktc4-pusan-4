@@ -74,23 +74,39 @@ export function Questions() {
         });
         if (!result.page.hasNext) break;
       }
-      const transactions = await Promise.all(
-        [...new Set(transactionIdOf.values())].map((id) => api.transactions.get(id).catch(() => null))
+      const ids = [...new Set(transactionIdOf.values())];
+      const [transactions, currents] = await Promise.all([
+      Promise.all(ids.map((id) => api.transactions.get(id).catch(() => null))),
+      // 사용자가 직접 수정한 거래는 답해도 현재 판정이 바뀌지 않는다(3.8). 카드에서 알린다
+      Promise.all(
+        ids.map((id) =>
+        api.judgments.
+        list({ transactionId: id }).
+        then((page) => page.items[0]?.origin.type === 'OVERRIDE').
+        catch(() => false)
+        )
+      )]
       );
       const byId = new Map(
         transactions.
         filter((transaction): transaction is Transaction => transaction !== null).
         map((transaction) => [transaction.id, transaction])
       );
-      return new Map(
-        [...transactionIdOf].
-        map(([questionId, transactionId]) => [questionId, byId.get(transactionId)] as const).
-        filter((entry): entry is [string, Transaction] => entry[1] !== undefined)
-      );
+      return {
+        transactions: new Map(
+          [...transactionIdOf].
+          map(([questionId, transactionId]) => [questionId, byId.get(transactionId)] as const).
+          filter((entry): entry is [string, Transaction] => entry[1] !== undefined)
+        ),
+        overridden: new Set(ids.filter((_, index) => currents[index]))
+      };
     },
     [batchId, shownIds.join()]
   );
-  const transactionOfQuestion = rowsQ.data ?? new Map<string, Transaction>();
+  const transactionOfQuestion = rowsQ.data?.transactions ?? new Map<string, Transaction>();
+  const overridden = rowsQ.data?.overridden ?? new Set<string>();
+  /** 지금 보이는 페이지. 다음 페이지를 받는 동안에는 이전 페이지 번호로 센다 */
+  const shownPage = pendingQ.data?.page.number ?? 0;
 
   // 마지막 질문에 답해 그 페이지가 비면 첫 페이지로 돌아간다
   useEffect(() => {
@@ -281,7 +297,8 @@ export function Questions() {
           </p>
         }
 
-        {!pendingQ.loading && pending.length === 0 ?
+        {/* 뒤 페이지가 비면 첫 페이지로 돌아가므로, 그 사이에 「다 답했다」를 띄우지 않는다 */}
+        {!pendingQ.loading && pending.length === 0 && page === 0 ?
         <Empty
           className="mt-4"
           tone="ok"
@@ -311,7 +328,7 @@ export function Questions() {
                     <section className="overflow-hidden rounded-2xl border border-line bg-surface">
                       <header className="flex items-start gap-3 border-b border-line2 px-5 py-4">
                         <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-canvas text-caption font-semibold tabular-nums text-ink2">
-                          {index + 1}
+                          {shownPage * BATCH_SIZE + index + 1}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -338,6 +355,12 @@ export function Questions() {
                           <li>외 {formatNumber(group.count - SHOWN_TRANSACTIONS)}건</li>
                           }
                             </ul>
+                        }
+                          {rows.some((row) => overridden.has(row.id)) &&
+                        <p className="mt-2 text-small text-ink2">
+                              직접 수정한 판정을 쓰는 거래가 있습니다. 답하면 기록은 남지만 그 거래의 현재
+                              판정은 수정한 값 그대로입니다.
+                            </p>
                         }
                         </div>
                       </header>
@@ -372,8 +395,8 @@ export function Questions() {
           page={pendingQ.data.page}
           onChange={setPage}
           note={`남은 질문 ${formatNumber(pendingTotal)}개 중 ${formatNumber(
-            page * BATCH_SIZE + 1
-          )}–${formatNumber(page * BATCH_SIZE + pending.length)}번째`} />
+            shownPage * BATCH_SIZE + 1
+          )}–${formatNumber(shownPage * BATCH_SIZE + pending.length)}번째`} />
 
         }
 
@@ -432,7 +455,16 @@ export function Questions() {
           </section>
         }
 
-        {answered.length > 0 &&
+        {answeredQ.error &&
+        <p role="alert" className="mt-6 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-small text-deny">
+            답한 질문을 불러오지 못해 답을 바꿀 수 없습니다.{' '}
+            <button type="button" onClick={answeredQ.reload} className="font-semibold underline">
+              다시 시도
+            </button>
+          </p>
+        }
+
+        {!answeredQ.error && answered.length > 0 &&
         <section className="mt-6">
             <h2 className="text-body font-semibold text-ink">
               답한 질문 <span className="tabular-nums text-muted">{formatNumber(answeredTotal)}개</span>
@@ -467,14 +499,21 @@ export function Questions() {
                       </Button>
                     </div>
                     {open &&
-                  <ChoiceGroup
-                    className="mt-3"
-                    name={`${group.questionText} 답 바꾸기`}
-                    columns={group.options.length >= 3 ? 3 : 2}
-                    value={chosen[key] ?? ''}
-                    onChange={(value) => void answer(group, value)}
-                    options={group.options.map((option) => ({ value: option, label: option }))} />
+                  <fieldset
+                    disabled={busy !== null}
+                    className={busy !== null ? 'mt-3 opacity-60' : 'mt-3'}>
 
+                        <ChoiceGroup
+                      name={`${group.questionText} 답 바꾸기`}
+                      columns={group.options.length >= 3 ? 3 : 2}
+                      value={chosen[key] ?? ''}
+                      // 이미 고른 답을 다시 누르면 정정하지 않는다. 같은 판정 이력만 늘어난다
+                      onChange={(value) =>
+                      value === chosen[key] ? setEditing(null) : void answer(group, value)
+                      }
+                      options={group.options.map((option) => ({ value: option, label: option }))} />
+
+                      </fieldset>
                   }
                   </li>);
 
