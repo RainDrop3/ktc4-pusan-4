@@ -84,7 +84,8 @@ export function Questions() {
         api.judgments.
         list({ transactionId: id }).
         then((page) => page.items[0] ?? null).
-        catch(() => null)
+        // 못 읽은 판정은 「모름」으로 둔다. 모르면 소명 대기일 수 있으니 일괄 답변을 열지 않는다
+        catch(() => 'unknown' as const)
         )
       )]
       );
@@ -99,12 +100,20 @@ export function Questions() {
           map(([questionId, transactionId]) => [questionId, byId.get(transactionId)] as const).
           filter((entry): entry is [string, Transaction] => entry[1] !== undefined)
         ),
-        overridden: new Set(ids.filter((_, index) => currents[index]?.origin.type === 'OVERRIDE')),
+        overridden: new Set(
+          ids.filter((_, index) => {
+            const current = currents[index];
+            return current !== 'unknown' && current?.origin.type === 'OVERRIDE';
+          })
+        ),
         presumed: new Set(
-          ids.filter(
-            (_, index) =>
-            currents[index]?.verdict.code === 'UNAVAILABLE' && currents[index]?.origin.type !== 'OVERRIDE'
-          )
+          ids.filter((_, index) => {
+            const current = currents[index];
+            return (
+              current === 'unknown' ||
+              current?.verdict.code === 'UNAVAILABLE' && current.origin.type !== 'OVERRIDE');
+
+          })
         )
       };
     },
@@ -185,7 +194,7 @@ export function Questions() {
           result.rejudgedTransactionCount
         )}건을 다시 판정했습니다.${
         result.skippedCount > 0 ?
-        ` 종류가 다른 질문 ${formatNumber(result.skippedCount)}건은 그대로 남았습니다.` :
+        ` 나머지 질문 ${formatNumber(result.skippedCount)}건은 그대로 남았습니다.` :
         ''}`
       );
       reload();
@@ -210,8 +219,14 @@ export function Questions() {
   // 「전부 업무미팅」 한 번에 주말 불가 추정이 모두 풀린다 (rule-card-fields.md)
   const hasPresumption = (group: QuestionGroup) =>
   group.questionIds.some((id) => presumed.has(transactionOfQuestion.get(id)?.id ?? ''));
-  const bulkTargets = bulkCandidates.filter((target) => !target.groups.some(hasPresumption));
-  const heldBack = bulkCandidates.filter((target) => target.groups.some(hasPresumption));
+  // 거래 줄(과 지금 판정)을 받기 전이나 받다가 실패하면 소명 대기를 모른다. 그동안은 열지 않는다
+  const presumptionKnown = Boolean(rowsQ.data) && !rowsQ.loading && !rowsQ.error;
+  const bulkTargets = presumptionKnown ?
+  bulkCandidates.filter((target) => !target.groups.some(hasPresumption)) :
+  [];
+  const heldBack = presumptionKnown ?
+  bulkCandidates.filter((target) => target.groups.some(hasPresumption)) :
+  [];
 
   /** 카드 머리의 가맹점 이름과 아래 건별 줄 */
   const transactionsOf = (group: QuestionGroup) =>
@@ -433,7 +448,7 @@ export function Questions() {
             {heldBack.length > 0 &&
           <p className="mt-2 text-small text-ink2">
                 {heldBack.map((target) => `「${target.factType}」`).join('·')} 질문에는 주말·공휴일처럼 추정으로
-                제외한 거래가 섞여 있어 한 번에 답하지 않습니다. 하나씩 답해 주세요.
+                제외한 거래가 섞여 있거나 지금 판정을 확인하지 못해, 한 번에 답하지 않습니다. 하나씩 답해 주세요.
               </p>
           }
             <div className="mt-4 space-y-5">
