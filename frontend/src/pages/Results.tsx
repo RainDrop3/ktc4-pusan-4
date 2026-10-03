@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRightIcon, CircleHelpIcon, SearchXIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
@@ -28,8 +28,10 @@ export function Results() {
   const { batchId } = useSession();
   const [filter, setFilter] = useState<Filter>('ALL');
   const [page, setPage] = useState(0);
-  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
-  const panel = useRef<HTMLElement>(null);
+  /** 고른 거래. 거래 정보를 아직 못 받은 행도 고를 수 있게 id 만 든다 */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** 사용자가 직접 고른 경우에만 패널로 초점을 옮긴다. 처음 자동 선택은 초점을 뺏지 않는다 */
+  const [picked, setPicked] = useState(false);
 
   const batchQ = useApi(
     () => batchId ? api.uploads.get(batchId) : Promise.resolve(null),
@@ -58,56 +60,72 @@ export function Results() {
     Promise.resolve(null),
     [batchId]
   );
+  // 다 답한 뒤에도 답을 바꾸러 갈 수 있어야 한다 (3.10 정정, F1-c)
+  const answeredQ = useApi(
+    () =>
+    batchId ?
+    api.questions.grouped({ batchId, status: 'ANSWERED', size: 1 }) :
+    Promise.resolve(null),
+    [batchId]
+  );
 
   const judgments: Judgment[] = judgmentsQ.data?.items ?? [];
 
-  // 판정 응답에는 거래 정보가 없어 지금 페이지의 거래만 따로 받는다 (최대 20건)
+  // 판정 응답에는 거래 정보가 없어 지금 페이지의 거래만 따로 받는다 (최대 20건).
+  // [id, 거래 | null] 로 받아, 아직 안 온 것(대기)과 못 받은 것(null)을 구분한다
   const transactionsQ = useApi(
     () =>
     Promise.all(
       judgments.map((judgment) =>
-      api.transactions.get(judgment.transactionId).catch(() => null)
+      api.transactions.
+      get(judgment.transactionId).
+      catch(() => null).
+      then((transaction) => [judgment.transactionId, transaction] as const)
       )
     ),
     [judgments.map((judgment) => judgment.transactionId).join()]
   );
+  const fetched = new Map<string, Transaction | null>(transactionsQ.data ?? []);
   const transactions = new Map(
-    (transactionsQ.data ?? []).
-    filter((transaction): transaction is Transaction => transaction !== null).
-    map((transaction) => [transaction.id, transaction])
+    [...fetched].filter((entry): entry is [string, Transaction] => entry[1] !== null)
   );
 
-  // 패널은 고른 거래의 현재 판정을 따로 읽는다. 수정하면 그 행이 목록 맨 위로 올라가도
-  // (computedAt DESC) 패널은 그 거래에 머문다
-  const currentQ = useApi(
+  // 패널은 고른 거래의 현재 판정과 거래를 따로 읽는다. 수정하면 그 행이 목록 맨 위로
+  // 올라가도(computedAt DESC) 패널은 그 거래에 머문다
+  const panelQ = useApi(
     () =>
-    selectedTx ? api.judgments.list({ transactionId: selectedTx.id }) : Promise.resolve(null),
-    [selectedTx?.id]
+    selectedId ?
+    Promise.all([
+    api.judgments.list({ transactionId: selectedId }),
+    api.transactions.get(selectedId)]
+    ).then(([page, transaction]) => ({ judgment: page.items[0] ?? null, transaction })) :
+    Promise.resolve(null),
+    [selectedId]
   );
-  const current = currentQ.data?.items[0];
+  // 다른 거래를 고른 직후에는 이전 거래의 응답이 남아 있다. 고른 거래의 것일 때만 그린다
+  const panelData = panelQ.data?.transaction.id === selectedId ? panelQ.data : null;
 
   // 처음에는 첫 행을 보여준다
-  const firstTransaction = judgments[0] && transactions.get(judgments[0].transactionId);
+  const firstId = judgments[0]?.transactionId;
   useEffect(() => {
-    if (!selectedTx && firstTransaction) setSelectedTx(firstTransaction);
-  }, [selectedTx, firstTransaction]);
+    if (!selectedId && firstId) setSelectedId(firstId);
+  }, [selectedId, firstId]);
 
   // 마지막 행이 다른 분류로 빠지면 그 페이지가 빈다. Pagination 이 사라지므로 첫 페이지로
   useEffect(() => {
     if (page > 0 && judgmentsQ.data && judgmentsQ.data.items.length === 0) setPage(0);
   }, [page, judgmentsQ.data]);
 
-  const select = (transaction: Transaction) => {
-    setSelectedTx(transaction);
-    // 좁은 화면에서는 패널이 표 아래에 있어 고른 것이 보이지 않는다
-    if (window.matchMedia('(max-width: 1023px)').matches)
-    panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // 패널은 열릴 때 제목으로 초점을 옮긴다. 좁은 화면에서는 표 아래에 있으므로 그때 함께 스크롤된다
+  const select = (transactionId: string) => {
+    setSelectedId(transactionId);
+    setPicked(true);
   };
 
   const changed = () => {
     judgmentsQ.reload();
     summaryQ.reload();
-    currentQ.reload();
+    panelQ.reload();
   };
 
   const summary = summaryQ.data;
@@ -119,12 +137,13 @@ export function Results() {
 
   const unresolved = questionsQ.data?.unresolved;
   const questionGroups = questionsQ.data?.page.totalElements ?? 0;
+  const answeredGroups = answeredQ.data?.page.totalElements ?? 0;
 
   const pending = (width: string) =>
   <span className={`block h-4 ${width} animate-pulse rounded bg-line2`} />;
 
   const missing = (judgment: Judgment) =>
-  !transactions.has(judgment.transactionId) && !transactionsQ.loading;
+  fetched.has(judgment.transactionId) && fetched.get(judgment.transactionId) === null;
 
   const columns: Column<Judgment>[] = [
   {
@@ -171,17 +190,19 @@ export function Results() {
     cell: (row) => {
       const transaction = transactions.get(row.transactionId);
       if (!transaction) return missing(row) ? '—' : pending('ml-auto w-20');
-      // 「일부 인정」은 AVAILABLE + finalAmount < amount 다 (2.1)
+      // 「일부 인정」은 AVAILABLE + finalAmount < amount 다 (2.1).
+      // 자산은 그해 넣을 수 있는 한도라 「최대」로 쓴다 (CONTEXT.md G4 화면 문구)
+      const asset = row.attributes['자산'] === true;
       const partial =
       row.verdict.code === 'AVAILABLE' &&
       row.finalAmount !== null &&
-      row.finalAmount !== transaction.amount;
+      (asset || row.finalAmount !== transaction.amount);
       return (
         <span className="block">
             <span className="whitespace-nowrap font-semibold text-ink">{formatWon(transaction.amount)}</span>
             {partial && row.finalAmount !== null &&
           <span className="block whitespace-nowrap text-caption text-ok">
-                산입 {formatWon(row.finalAmount)}
+                {asset ? '최대' : '산입'} {formatWon(row.finalAmount)}
               </span>
           }
           </span>);
@@ -218,10 +239,18 @@ export function Results() {
           </p>
       }
       </div>
-      <Button to="/summary" variant="secondary" size="sm">
-        요약 보기
-        <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {/* 확인할 질문이 없을 때는 아래 안내가 사라지므로, 답을 바꾸러 가는 길을 여기 남긴다 */}
+        {!(unresolved && unresolved.count > 0) && answeredGroups > 0 &&
+      <Button to="/questions" variant="ghost" size="sm">
+            답한 질문 보기
+          </Button>
+      }
+        <Button to="/summary" variant="secondary" size="sm">
+          요약 보기
+          <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
     </header>;
 
 
@@ -305,7 +334,7 @@ export function Results() {
             </span>
             <span className="mt-0.5 block text-small text-ink2">
               질문 {formatNumber(questionGroups)}개에 답하면 정리됩니다. 같은 사유끼리 묶어
-              물어보고, 한 번 답하면 다음 판정에서 다시 묻지 않습니다.
+              물어보고, 답하면 묶인 거래를 바로 다시 판정합니다.
             </span>
           </span>
           <ArrowRightIcon className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
@@ -330,11 +359,8 @@ export function Results() {
             rows={failed ? [] : judgments}
             rowKey={(row) => row.id}
             loading={judgmentsQ.loading}
-            selectedKey={judgments.find((row) => row.transactionId === selectedTx?.id)?.id}
-            onRowClick={(row) => {
-              const transaction = transactions.get(row.transactionId);
-              if (transaction) select(transaction);
-            }}
+            selectedKey={judgments.find((row) => row.transactionId === selectedId)?.id}
+            onRowClick={(row) => select(row.transactionId)}
             empty={empty} />
 
           {!failed && judgmentsQ.data && judgments.length > 0 &&
@@ -342,14 +368,32 @@ export function Results() {
           }
         </section>
 
-        {current && selectedTx &&
-        <aside ref={panel} className="scroll-mt-20 lg:sticky lg:top-32 lg:self-start">
-            <JudgmentDetailPanel
-            key={selectedTx.id}
-            judgment={current}
-            transaction={selectedTx}
-            onChanged={changed} />
+        {selectedId && !failed && !nothingJudged &&
+        // 패널이 화면보다 길면 수정 버튼·이력이 접힌 아래로 밀린다. 화면 높이 안에서 따로 스크롤한다
+        <aside className="lg:sticky lg:top-32 lg:max-h-[calc(100vh-9rem)] lg:self-start lg:overflow-y-auto">
+            {panelData?.judgment ?
+          <JudgmentDetailPanel
+            key={selectedId}
+            judgment={panelData.judgment}
+            transaction={panelData.transaction}
+            focusOnMount={picked}
+            onChanged={changed} /> :
 
+          panelQ.error ?
+          <div role="alert" className="rounded-2xl border border-deny-line bg-deny-bg p-5 text-body text-deny">
+                이 거래의 판정을 불러오지 못했습니다.{' '}
+                <button type="button" onClick={panelQ.reload} className="font-semibold underline">
+                  다시 시도
+                </button>
+              </div> :
+
+          panelData ?
+          <p className="rounded-2xl border border-line bg-surface p-5 text-body text-muted">
+                이 거래에는 현재 판정이 없습니다. 판정 대상에서 빠졌거나 아직 판정하지 않은 거래입니다.
+              </p> :
+
+          <span className="block h-96 animate-pulse rounded-2xl bg-line2" />
+          }
           </aside>
         }
       </div>
