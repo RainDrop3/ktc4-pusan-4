@@ -2,7 +2,7 @@
 
 > 목표: 10/31까지 업로드부터 질문 응답과 수정까지 실제 서비스로 동작하게 한다.
 > 기준은 프론트엔드에서 `frontend/src/api/index.ts`를 mock에서 HTTP 호출로 전환할 수 있는 상태다.
-> v1.0 배포 일정은 11/6이다.
+> v1.0 배포 일정은 11/6이다. 11/2~11/5는 밀린 PR과 회귀 수정을 위한 버퍼로 둔다.
 
 ## 한눈에 보기
 
@@ -10,9 +10,10 @@
 | --- | --- |
 | 인원 | 백엔드 담당자 2명이다. 트랙 A(판정)와 트랙 B(입력)로 역할을 나눈다. |
 | PR 크기 | 추가 1000줄 이하다. 테스트 코드, 마이그레이션 SQL, worklog를 모두 포함한 GitHub `+` 수치 기준이다. |
-| PR 수 | 트랙 A 11개, 트랙 B 11개다. 1인당 주 2~3개 merge를 목표로 한다. |
+| PR 수 | 트랙 A 13개, 트랙 B 14개다. 1인당 주 3~4개를 merge해야 하는 빠듯한 일정이다. 트랙 A의 마지막 PR(A7)은 11/2로 넘어간다. |
 | 10월 범위 | 기본 흐름과 임시 사용자를 구현하고 4주차에 인증을 도입한다. 리프레시 토큰 저장소로 Redis를 새로 들인다. 공휴일 정적 YAML, 금액 계산 최소판, 분류 AI 연동, bulk-answer를 포함한다. |
-| 미룰 순서 | B10 분류 AI → A7 bulk-answer → A6 금액 계산 순서로 미룬다. 단, 인증 작업(B9a, B9b)은 미루지 않는다. |
+| 10월 이후 | 보고서(핸드오프 문서) 생성, 규칙 후보 승인 관리자 페이지, 분류 웹 검색, 금액 계산 완전판. [10월 이후](#10월-이후) 참고. |
+| 미룰 순서 | B10 분류 AI → A7 bulk-answer → A6 금액 계산 순서로 미룬다. 단, 인증 작업(B9a~B9c)은 미루지 않는다. |
 | 저장소 | Idempotency-Key는 Postgres, 리프레시 토큰은 Redis에 둔다. 근거는 [저장소 결정](#저장소-결정)에 있다. |
 
 ### 일정
@@ -28,37 +29,44 @@ gantt
     열린 백엔드 브랜치 merge     :pre, 2026-10-05, 1d
 
     section 트랙 A · 판정
-    A1 판정 스키마               :a1, 2026-10-05, 3d
-    A0 statutes                  :a0, after a1, 1d
-    A2a 판정 실행기·공휴일       :a2a, 2026-10-12, 3d
+    A1a 판정 스키마·삭제 정책    :a1a, 2026-10-05, 2d
+    A1b 판정 엔티티·origin 저장  :a1b, after a1a, 2d
+    A0 statutes                  :a0, 2026-10-12, 1d
+    A2a 판정 실행기·공휴일       :a2a, after a0, 2d
     A2b judgment-runs API        :a2b, after a2a, 2d
     A3a judgments 조회           :a3a, 2026-10-19, 2d
     A3b summary                  :a3b, after a3a, 1d
-    A4 질문·답변 재판정          :a4, after a3b, 2d
-    A5 override                  :a5, 2026-10-26, 1d
-    A6 금액 계산 최소판·한도     :a6, after a5, 2d
-    A7 bulk-answer               :a7, after a6, 1d
+    A4a 질문 조회                :a4a, after a3b, 1d
+    A4b 질문 답변·재판정         :a4b, after a4a, 2d
+    A5 override                  :a5, after a4b, 1d
+    A6a 금액 계산 최소판         :a6a, after a5, 2d
+    A6b 한도 집계 연결           :a6b, after a6a, 1d
+    A7 bulk-answer               :a7, after a6b, 1d
 
     section 트랙 B · 입력
-    B1 CurrentUser·사용자·문진   :b1, 2026-10-05, 2d
-    B2 입력 스키마               :b2, after b1, 2d
-    B3 정규화·분류기             :b3, 2026-10-12, 2d
-    B4 업로드                    :b4, after b3, 3d
-    B5 Idempotency-Key           :b5, 2026-10-19, 1d
-    B6 batch 조회·삭제           :b6, after b5, 2d
+    B1a CurrentUser·사용자 조회  :b1a, 2026-10-05, 1d
+    B1b 문진 Context             :b1b, after b1a, 1d
+    B2 거래 스키마 정렬          :b2, after b1b, 2d
+    B3a 정규화기 이전            :b3a, 2026-10-12, 1d
+    B3b 분류기                   :b3b, after b3a, 1d
+    B4 업로드 서비스             :b4, after b3b, 2d
+    B5 Idempotency·업로드 공개   :b5, after b4, 1d
+    B6 batch 조회·삭제·탈퇴      :b6, 2026-10-19, 2d
     B7 거래 조회·제외            :b7, after b6, 2d
-    B8 분류 검토·응답            :b8, 2026-10-26, 1d
-    B9a Redis 인프라             :b9a, after b8, 1d
-    B9b 인증·리프레시 토큰       :b9b, after b9a, 2d
-    B10 분류 AI 연동             :b10, after b9b, 1d
+    B8 분류 검토·응답            :b8, after b7, 1d
+    B9a Redis 인프라             :b9a, 2026-10-26, 1d
+    B9b 인증·액세스 토큰         :b9b, after b9a, 2d
+    B9c 리프레시 토큰·로그아웃   :b9c, after b9b, 1d
+    B10 분류 AI 연동             :b10, after b9c, 1d
 
-    section 함께
-    시나리오 통합 테스트(A 주도) :it, 2026-10-30, 1d
+    section 배포 준비
+    버퍼·회귀 수정               :buf, 2026-11-02, 4d
+    v1.0 배포                    :milestone, rel, 2026-11-06, 0d
 
     section 결정 마감
-    인증 방식                    :milestone, d1, 2026-10-08, 0d
-    금액 계산 순서               :milestone, d2, 2026-10-23, 0d
-    AI 분류 계약                 :milestone, d3, 2026-10-23, 0d
+    인증 방식·인증 API 계약      :milestone, d1, 2026-10-08, 0d
+    분류 API 계약                :milestone, d3, 2026-10-16, 0d
+    금액 규칙·휴일 질문 처리     :milestone, d2, 2026-10-23, 0d
 ```
 
 ### PR 의존 관계
@@ -70,67 +78,77 @@ gantt
 flowchart TB
     subgraph TA["트랙 A · 판정"]
         direction LR
-        A0["A0 statutes<br/>1주"]
-        A1["A1 판정 스키마<br/>1주"] --> A2a["A2a 판정 실행기<br/>2주"]
+        A0["A0 statutes<br/>2주"]
+        A1a["A1a 판정 스키마<br/>1주"] --> A1b["A1b 판정 엔티티<br/>1주"]
+        A1b --> A2a["A2a 판정 실행기<br/>2주"]
         A2a --> A2b["A2b runs API<br/>2주"]
         A2b --> A3a["A3a judgments 조회<br/>3주"]
         A3a --> A3b["A3b summary<br/>3주"]
         A3a --> A5["A5 override<br/>4주"]
-        A2b --> A6["A6 금액 계산<br/>4주"]
-        A2a --> A4["A4 질문·답변<br/>3주"]
-        A4 --> A7["A7 bulk-answer<br/>4주"]
-        D2{{"안분·부가세 순서"}} -.-> A6
+        A2a --> A4a["A4a 질문 조회<br/>3주"]
+        A4a --> A4b["A4b 질문 답변<br/>3~4주"]
+        A4b --> A7["A7 bulk-answer<br/>11/2"]
+        A2b --> A6a["A6a 금액 계산<br/>4주"]
+        A6a --> A6b["A6b 한도 집계<br/>4주"]
+        D2{{"금액 규칙"}} -.-> A6a
+        D4{{"휴일 질문 처리"}} -.-> A7
     end
 
     subgraph TB["트랙 B · 입력"]
         direction LR
-        B1["B1 CurrentUser·사용자<br/>1주"] --> B4["B4 업로드<br/>2주"]
-        B2["B2 입력 스키마<br/>1주"] --> B4
-        B3["B3 정규화·분류기<br/>2주"] --> B4
-        B4 --> B5["B5 Idempotency<br/>3주"]
-        B4 --> B6["B6 batch 조회·삭제<br/>3주"]
+        B1a["B1a CurrentUser<br/>1주"] --> B1b["B1b 문진 Context<br/>1주"]
+        B2["B2 거래 스키마<br/>1주"] --> B4["B4 업로드 서비스<br/>2주"]
+        B1a --> B4
+        B3a["B3a 정규화기<br/>2주"] --> B3b["B3b 분류기<br/>2주"]
+        B3b --> B4
+        B4 --> B5["B5 Idempotency<br/>2주"]
+        B5 --> B6["B6 batch 조회·삭제<br/>3주"]
         B4 --> B7["B7 거래<br/>3주"]
-        B4 --> B8["B8 분류 검토<br/>4주"]
+        B4 --> B8["B8 분류 검토<br/>3주"]
         B9a["B9a Redis 인프라<br/>4주"] --> B9b["B9b 인증<br/>4주"]
-        B1 --> B9b
-        B3 --> B10["B10 분류 AI<br/>4주"]
-        D1{{"인증 방식"}} -.-> B9b
-        D3{{"AI 분류 계약"}} -.-> B10
+        B1a --> B9b
+        B9b --> B9c["B9c 리프레시 토큰<br/>4주"]
+        B3b --> B10["B10 분류 AI<br/>4주"]
+        D1{{"인증 방식·API 계약"}} -.-> B9b
+        D3{{"분류 API 계약"}} -.-> B10
     end
 
+    A1a ==>|classification_review 테이블| B4
     B2 ==>|거래 상태 컬럼| A2a
     A2a ==>|rejudge| B8
 
     classDef trackA fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
     classDef trackB fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef decision fill:#fef3c7,stroke:#d97706,color:#78350f
-    class A0,A1,A2a,A2b,A3a,A3b,A4,A5,A6,A7 trackA
-    class B1,B2,B3,B4,B5,B6,B7,B8,B9a,B9b,B10 trackB
-    class D1,D2,D3 decision
+    class A0,A1a,A1b,A2a,A2b,A3a,A3b,A4a,A4b,A5,A6a,A6b,A7 trackA
+    class B1a,B1b,B2,B3a,B3b,B4,B5,B6,B7,B8,B9a,B9b,B9c,B10 trackB
+    class D1,D2,D3,D4 decision
 ```
 
 ### 완성 후 요청 흐름
 
-각 PR이 실제 요청 흐름 중 어느 단계를 담당하는지 보여준다.
+각 PR이 실제 요청 흐름 중 어느 단계를 담당하는지 보여준다. 점선 노드는 10월 이후 작업이다.
 
 ```mermaid
 flowchart LR
-    U["업로드<br/>B4·B5"] --> N["정규화·분류<br/>B3·B10"]
+    U["업로드<br/>B4·B5"] --> N["정규화·분류<br/>B3a·B3b·B10"]
     N -->|미분류| CR["분류 검토<br/>B8"]
     N -->|분류됨| R["판정 run<br/>A2a·A2b"]
     CR -->|rejudge| R
     R --> J["judge()<br/>기존 엔진"]
-    J --> C["computeAmount<br/>A6"]
-    C --> L["settleLimits 잠정<br/>A6"]
+    J --> C["computeAmount<br/>A6a"]
+    C --> L["settleLimits 잠정<br/>A6b"]
     L --> Q["결과 조회<br/>A3a·A3b"]
-    Q --> QA["질문 답변<br/>A4·A7"]
+    Q --> QA["질문 답변<br/>A4a·A4b·A7"]
     QA -->|rejudge| R
     Q --> O["override<br/>A5"]
     Q --> X["거래 제외<br/>B7"]
+    Q -.-> RP["보고서 생성<br/>10월 이후"]
     subgraph AUTH["모든 요청 앞단"]
-        T["Bearer 검증·토큰 재발급<br/>B9b"] --- RD[("Redis<br/>리프레시 토큰")]
+        T["Bearer 검증·토큰 재발급<br/>B9b·B9c"] --- RD[("Redis<br/>리프레시 토큰")]
     end
     T -.-> U
+    style RP stroke-dasharray: 5 5
 ```
 
 ## 공통 규칙
@@ -142,13 +160,15 @@ flowchart LR
   - `ApiResponseContractTest`와 `ApiContractIntegrationTest`는 항상 통과(green)해야 한다.
 - 패키지 구조: 기존 관례인 `<feature>.api`, `domain`, `persistence` 구성을 따른다. 서비스는 기능별 패키지 안에 배치한다. 공용 계층은 두 개 이상의 기능에서 실제로 공유할 때만 새로 만든다.
 - 마이그레이션 번호: 두 트랙의 PR 간에 번호가 충돌할 수 있다. 따라서 merge 직전에 develop 브랜치의 최신 번호 +1로 변경(rename)한다. 이미 적용된 마이그레이션은 수정하지 않는다(`db/README.md`).
+- 기존 행이 있는 테이블에 제약을 추가할 때는 "컬럼 추가 → 기존 행 채우기(backfill) → 제약 추가" 순서로 쓴다. 운영 DB가 비어 있다는 전제에 기대지 않는다.
 - PR 크기 확인: PR을 올리기 전에 `git diff --shortstat origin/develop...HEAD`를 확인한다. 추가 줄 수가 1000줄을 초과하면 "스키마 및 엔티티"와 "서비스 및 API"로 작업을 나눈다.
 - PR별 검증 항목:
   - `.\backend\gradlew.bat -p backend test` 실행
   - `integrationTest` 실행 (Docker 필요)
   - eval 리포트에 기능 회귀가 없는지 확인
   - `/worklog` 작성
-- 사용자 식별: B1에서 `CurrentUser` 리졸버를 작성하고 모든 서비스는 이를 통해 userId를 전달받는다. 초기에는 고정 임시 사용자를 반환하도록 구현하고, B9b에서 구현체만 Bearer 토큰 검증 방식으로 교체한다.
+- 시나리오 통합 테스트는 마지막에 한 번에 만들지 않고 누적한다. B5와 A2b가 merge되면 "업로드 → run" 시나리오를 만들고, 이후 PR마다 자기 단계를 이어 붙인다.
+- 사용자 식별: B1a에서 `CurrentUser` 리졸버를 작성하고 모든 서비스는 이를 통해 userId를 전달받는다. 초기에는 고정 임시 사용자를 반환하도록 구현하고, B9b에서 구현체만 Bearer 토큰 검증 방식으로 교체한다.
 
 ## 사전 정리 (1주차 월요일)
 
@@ -160,11 +180,13 @@ flowchart LR
 
 ## 트랙 분담
 
-- 트랙 A(판정): run, 결과 조회, 질문, override, 금액 계산, bulk-answer를 담당한다. 엔진과 영속 서비스를 감싸는 영역이다.
-- 트랙 B(입력): 사용자 및 문진, 업로드, 정규화와 분류, 거래, 분류 검토, 인증을 담당한다. 판정에 입력할 데이터를 가공하는 영역이다.
-- 두 트랙 사이의 접점은 다음 두 곳이다.
-  1. B2의 거래 상태 컬럼(`user_inclusion`, `classification_status`)을 트랙 A에서 run 대상 선정과 현재 결과 필터링에 사용한다. 따라서 B2가 A2a보다 먼저 merge되어야 한다.
-  2. A2a가 `rejudge(transactionIds, origin)` 진입점을 제공한다. B8의 분류 응답 처리에서 이를 호출한다(origin 값은 `classification_review_id`).
+- 트랙 A(판정): 판정 스키마, run, 결과 조회, 질문, override, 금액 계산, bulk-answer를 담당한다. 엔진과 영속 서비스를 감싸는 영역이다.
+- 트랙 B(입력): 사용자 및 문진, 거래 스키마, 업로드, 정규화와 분류, 거래, 분류 검토, 인증을 담당한다. 판정에 입력할 데이터를 가공하는 영역이다.
+- 두 트랙 사이의 접점은 다음 세 곳이다.
+  1. `classification_review` 테이블은 판정 origin FK의 대상이라 A1a에서 만든다. B4는 이 테이블에 행을 쓰므로 A1a가 B4보다 먼저 merge되어야 한다.
+  2. B2의 거래 상태 컬럼(`user_inclusion`, `classification_status`)을 트랙 A에서 run 대상 선정과 현재 결과 필터링에 사용한다. 따라서 B2가 A2a보다 먼저 merge되어야 한다.
+  3. A2a가 `rejudge(transactionIds, origin, contextVersion)` 진입점을 제공한다. 어떤 Context로 재판정할지는 호출하는 쪽이 api.md 규칙에 따라 정해서 넘긴다. B8 분류 응답과 A4b 질문 응답이 이를 호출한다.
+- 삭제 정책은 A1a에서 한 번에 설계한다. batch를 지우면 따라 지워져야 할 테이블(api.md §6)의 FK에 `ON DELETE CASCADE`를 걸고, B6에서 전체 그래프를 지우는 통합 테스트로 확인한다.
 - 작업 순서는 프론트엔드 화면 순서(업로드 → 분류 → run → 결과 → 질문)에 맞춘다. 이를 통해 프론트엔드가 앞 화면부터 차례로 HTTP 호출로 전환할 수 있도록 한다.
 
 ## 주차별 PR
@@ -173,51 +195,58 @@ flowchart LR
 
 | PR | 트랙 | 내용 |
 | --- | --- | --- |
-| A1 | A | 판정 관련 스키마를 구성한다. `judgment`에서 `state` 컬럼을 제거하고 origin FK 4개와 `CHECK num_nonnulls(...)=1`을 추가한다. `judgment_run`, `judgment_run_item`, `judgment_override` 테이블을 만든다. `user_fact.batch_id`를 추가하고 `question_queue.status`를 PENDING, ANSWERED, CANCELED로 변경한다. 엔티티와 `JudgmentService.save`에 origin을 반영하고 `JudgmentSchemaIntegrationTest`를 수정한다. |
-| A0 | A | `GET /statutes/{id}`를 실제 서비스로 구현한다. 작은 단위의 PR로 mock 교체 패턴을 미리 정립한다. |
-| B1 | B | `CurrentUser` 리졸버와 임시 사용자 시드를 구현한다. `GET/DELETE /users/me`, `POST/GET /users/me/contexts`, `contexts/current`를 구현한다. `app_user`/`user_context` 엔티티를 V1 테이블에 매핑한다. |
-| B2 | B | 입력 관련 스키마를 구성한다. `transaction`에 `source_status`, `user_inclusion`, `classification_status` 컬럼을 둔다. 유니크 제약조건을 `UNIQUE(user_id, natural_key)`와 `UNIQUE(user_id, file_hash)`로 변경하고 `installment_months` 기본값을 0으로 설정한다. `classification_review`와 `idempotency_key` 테이블을 만든다. `TransactionRecordEntity`와 `UploadBatchEntity`에 전체 컬럼을 매핑한다. |
+| A1a | A | 판정 쪽 스키마와 삭제 정책을 만든다. `judgment_run`, `judgment_run_item`, `judgment_override`, `classification_review` 테이블을 만든다. `judgment`에 origin 컬럼 4개를 추가하고 `state` 컬럼을 제거한다. `CHECK num_nonnulls(...)=1`은 기존 행을 채운 뒤 건다(운영 DB의 `judgment` 행 수를 먼저 확인한다). `user_fact.batch_id`를 추가하고 `question_queue.status`를 PENDING, ANSWERED, CANCELED로 바꾼다. `judgment.transaction_id`처럼 cascade가 빠진 기존 FK도 api.md §6에 맞게 고친다. |
+| A1b | A | 판정 엔티티와 저장 로직에 A1a를 반영한다. `JudgmentService.save`가 origin을 받도록 바꾸고 `JudgmentSchemaIntegrationTest`를 수정한다. |
+| B1a | B | `CurrentUser` 리졸버와 임시 사용자 시드를 구현한다. `GET /users/me`를 구현하고 `app_user` 엔티티를 V1 테이블에 매핑한다. 탈퇴(`DELETE /users/me`)는 삭제 정책이 갖춰진 뒤 B6에서 구현한다. |
+| B1b | B | `POST/GET /users/me/contexts`, `contexts/current`를 구현한다. `user_context` 엔티티를 V1 테이블에 매핑한다. |
+| B2 | B | 거래 스키마를 api.md에 맞춘다. `transaction.user_id`를 추가해 기존 행을 채우고 FK를 건 뒤, 전역 `UNIQUE(natural_key)`를 `UNIQUE(user_id, natural_key)`로 바꾼다. `status` 하나를 `source_status`, `user_inclusion`, `classification_status`로 나눈다. `installment_months`는 기본값을 0으로, CHECK를 `>= 0`으로 바꾼다. 업로드로 받는 `approval_no`, `biz_no`, `branch`, `branch_raw`, `memo`, `is_aggregated`, `needs_review`, `review_reason`, `source_card` 컬럼을 추가한다(`docs/schema_mapping.md`). `UNIQUE(user_id, file_hash)`는 `upload_batch`에 이미 있다. `TransactionRecordEntity`와 `UploadBatchEntity`에 전체 컬럼을 매핑한다. |
 
 ### 2주차 (10/12~10/16): 업로드와 판정 실행
 
 | PR | 트랙 | 내용 |
 | --- | --- | --- |
-| A2a | A | 판정 실행기를 구현한다. `RuleCardLoader`를 통해 서버 기동 시 `RuleSet`을 1회 로드하여 빈으로 등록한다. 공휴일 정적 YAML(`rules/holidays/<연도>.yaml`)을 읽어 `judge(..., publicHolidays)`에 전달한다. 거래 1건을 판정하고 저장하는 `JudgmentExecutor`와 `rejudge(transactionIds, origin)`을 작성한다. 이때 `judge()` 자체는 순수 함수로 유지한다. |
+| A0 | A | `GET /statutes/{id}`를 실제 서비스로 구현한다. 작은 단위의 PR로 mock 교체 패턴을 미리 정립한다. |
+| A2a | A | 판정 실행기를 구현한다. `RuleCardLoader`를 통해 서버 기동 시 `RuleSet`을 1회 로드하여 빈으로 등록한다. 공휴일 정적 YAML(`rules/holidays/<연도>.yaml`)을 읽어 `judge(..., publicHolidays)`에 전달한다. 거래 1건을 판정하고 저장하는 `JudgmentExecutor`와 `rejudge(transactionIds, origin, contextVersion)`을 작성한다. 이때 `judge()` 자체는 순수 함수로 유지한다. |
 | A2b | A | `POST /judgment-runs`(202 QUEUED), `GET /judgment-runs/{id}`, `/failures`를 구현한다. 트랜잭션 커밋 후 `@Async`로 비동기 실행하며, 건별 실패 내역은 `judgment_run_item`에 기록한다. 대상은 `effectiveStatus=JUDGEABLE`이면서 `classificationStatus=CLASSIFIED`인 거래다. |
-| B3 | B | 순수 컴포넌트 형태의 정규화 및 분류기를 구현한다. `engine/.../T1Normalizer` 로직을 backend로 이전하고 `rules/normalize.yaml`을 읽어온다. 가맹점 분류는 `MerchantDictionaryRepository`(개인 → 전역) → `keyword_rules.yaml` → 실패 시 `미분류` 순서로 처리한다. |
-| B4 | B | `POST /upload-batches` 본체 로직을 구현한다. natural_key 중복 건은 건너뛰고 건수를 집계한다. file_hash 중복 시에는 409를 반환한다. 미분류 거래가 발생하면 `ClassificationReview`를 생성한다. 정상 응답 코드는 201이다. |
+| B3a | B | `engine/.../T1Normalizer` 로직을 backend로 이전하고 `rules/normalize.yaml`을 읽어온다. 순수 컴포넌트로 두고 fixture 기반 단위 테스트를 함께 옮긴다. |
+| B3b | B | 가맹점 분류기를 구현한다. `MerchantDictionaryRepository`(개인 → 전역) → `keyword_rules.yaml` → 실패 시 `미분류` 순서로 처리한다. 분류기는 인터페이스로 두어 B10에서 AI 단계를 끼울 수 있게 한다. |
+| B4 | B | 업로드 서비스를 구현한다. natural_key 중복 건은 건너뛰고 건수를 집계한다. file_hash 중복 시에는 409를 반환한다. 미분류 거래가 발생하면 `ClassificationReview`를 생성한다. 엔드포인트의 mock은 아직 교체하지 않는다. Idempotency 없이 공개하면 계약을 어기기 때문이다. |
+| B5 | B | `Idempotency-Key`를 구현하고 `POST /upload-batches`를 공개한다. `idempotency_key` 테이블에 `(user_id, key)` UNIQUE, payload 해시, 최초 응답 스냅샷, 상태, `expires_at`을 둔다. 업로드 저장과 같은 트랜잭션으로 묶는다. 400, 409, 410과 만료된 키의 새 요청 처리, 동시 요청을 테스트한다. 정상 응답 코드는 201이다. |
 
 ### 3주차 (10/19~10/23): 조회와 질문
 
 | PR | 트랙 | 내용 |
 | --- | --- | --- |
-| A3a | A | `GET /judgments`(batchId, year, transactionId, runId 필터)와 `GET /judgments/{id}`를 구현한다. 현재 결과는 api.md 5절 규칙을 적용한다. 활성 상태인 override를 우선 적용하며, 없으면 override가 아닌 최신 revision을 채택한다. EXCLUDED 상태 거래는 결과에서 제외한다. |
-| A3b | A | `GET /judgments/summary`를 구현한다. verdict별, 계정별 집계를 반환한다. |
-| A4 | A | `GET /questions`(그룹화 및 미해소 집계)와 `POST /question-responses`를 구현한다. `UserFactPersistenceService.answerQuestion`을 재사용하고 UserFact는 batch scope로 관리한다. 동일 scope의 거래를 대상으로 `rejudge`를 수행하며, origin은 `trigger_user_fact_id`로 설정한다. 형제 질문 처리는 `worklog/be/2026-09-26-merge-mock-into-spring.md`에 정리된 결정을 따른다. |
-| B5 | B | `Idempotency-Key` 처리 로직을 구현한다. Postgres 테이블에 `expires_at`을 두어 24시간 유효기간을 설정한다. 업로드 저장과 같은 트랜잭션으로 묶기 위해 Redis가 아닌 DB에 둔다. 400, 409, 410 에러를 상황에 맞게 처리한다. |
-| B6 | B | `GET /upload-batches`(목록 및 상세)와 `DELETE /upload-batches/{id}`를 구현한다. 삭제 시 batch 범위의 데이터를 연쇄 삭제(cascade)하고, idempotency 키 상태는 `DELETED`로 변경한다. |
+| A3a | A | `GET /judgments`와 `GET /judgments/{id}`를 구현한다. 필터는 batchId, year, transactionId, runId, verdict, latestOnly다. 현재 결과는 api.md §5 규칙을 적용한다. 활성 상태인 override를 우선 적용하며, 없으면 override가 아닌 최신 revision을 채택한다. EXCLUDED 상태 거래는 결과에서 제외한다. `latestOnly=false`는 revision 이력 조회다. |
+| A3b | A | `GET /judgments/summary`를 구현한다. verdict별, 계정별 집계를 반환한다. batchId, year, runId 중 정확히 하나만 받고, 아니면 `INVALID_SUMMARY_SCOPE`를 반환한다. |
+| A4a | A | `GET /questions`를 구현한다. grouped 응답과 미해소 집계를 포함한다. |
+| A4b | A | `POST /question-responses`를 구현한다. `UserFactPersistenceService.answerQuestion`을 재사용하고 UserFact는 batch scope로 관리한다. 동일 scope의 거래를 질문이 발생한 원래 Judgment의 Context로 `rejudge`하며, origin은 `trigger_user_fact_id`로 설정한다. 답변 정정과 형제 질문 처리는 `worklog/be/2026-09-26-merge-mock-into-spring.md`에 정리된 결정을 따른다. |
+| B6 | B | `GET /upload-batches`(목록 및 상세), `DELETE /upload-batches/{id}`, `DELETE /users/me`를 구현한다. 판정, 질문, override까지 채운 batch를 지우는 통합 테스트로 연쇄 삭제를 확인한다. batch를 지우면 idempotency 키 상태는 `DELETED`로 남는다. |
 | B7 | B | `GET /transactions`(목록 및 상세)와 `POST /transactions/{id}/exclude`, `include`를 구현한다. |
+| B8 | B | `GET /classification-reviews`와 `POST /classification-responses`를 구현한다. 사용자 응답은 개인 scope의 `merchant_dict`에 저장한다. 해당 batch에 완료된 run이 없으면 분류만 확정하고 `judgedCount=0`으로 응답한다. 완료된 run이 있으면 최근 run의 Context로 `rejudge`한다(api.md "판정 처리" 절). |
 
 ### 4주차 (10/26~10/30): 수정, 확장, 인증
 
 | PR | 트랙 | 내용 |
 | --- | --- | --- |
 | A5 | A | `POST /judgments/{id}/override`와 `DELETE /judgment-overrides/{id}`를 구현한다. 생성되는 override revision의 origin은 `judgment_override_id`로 지정한다. |
-| A6 | A | 금액 계산 최소판을 구현하고 한도 로직을 연결한다. G3 안분 비율을 적용한다. 100만 원 이상 자산(시행령 §67④)은 5년 정액법으로 해당 연도의 월할 금액만 계산한다. 실행 순서는 `judge → computeAmount → settleLimits(잠정)`으로 구성하고 `LimitBucketPersistenceService.replaceProvisional`을 연결한다. |
-| A7 | A | `POST /questions/bulk-answer`를 구현한다. 단건 답변 서비스를 반복해서 호출하며, 휴일 소명 질문은 일괄 답변 대상에서 제외한다. |
-| B8 | B | `GET /classification-reviews`와 `POST /classification-responses`를 구현한다. 사용자 응답 내용은 개인 scope의 `merchant_dict`에 저장하고 `rejudge`를 호출한다. |
-| B9a | B | Redis 인프라를 추가한다. 로컬 `compose.yaml`, `deploy/compose.yaml`(`maxmemory` 128MB, AOF 켜기), `deploy/deploy.sh` 헬스체크, `spring-boot-starter-data-redis`, Testcontainers Redis 설정을 포함한다. 인증과 무관하므로 B트랙에 여유가 생기면 3주차로 앞당긴다. |
-| B9b | B | 인증 체계를 도입한다. 액세스 토큰(JWT) 발급, 리프레시 토큰 재발급, 로그아웃을 구현하고 `CurrentUser` 리졸버 구현체를 Bearer 토큰 검증 방식으로 교체한다. 리프레시 토큰 저장 규칙은 [저장소 결정](#저장소-결정)을 따른다. |
-| B10 | B | 분류 AI 연동 기능을 구현한다. 사전에 등록되지 않은 가맹점이면 AI 모듈을 호출하는 HTTP 클라이언트를 작성한다. 타임아웃이나 호출 실패가 발생하면 `미분류` 상태로 둔다. |
+| A6a | A | 금액 계산 최소판을 구현한다. G3 안분 비율을 적용한다. 자산 처리 규칙은 착수 전에 `CONTEXT.md` §14 기준으로 확정한다. 자산 경계는 100만 원 "초과"이고, 무신고 시 건축물 외 유형자산의 기본 상각방법은 정률법이다. 정액 5년은 맥북 예시일 뿐 일반 규칙이 아니다. 상각방법이나 내용연수를 알 수 없으면 금액을 확정하지 않고 확인 필요로 둔다. |
+| A6b | A | run 실행 순서를 `judge → computeAmount → settleLimits(잠정)`으로 구성하고 `LimitBucketPersistenceService.replaceProvisional`을 연결한다. |
+| A7 | A | `POST /questions/bulk-answer`를 구현한다(11/2). 단건 답변 로직을 반복 호출하되, 동일 거래는 한 번만 재판정한다. 휴일 소명 질문은 일반 카드 13장과 같은 `fact_type: 용도`를 쓴다. 그래서 그대로 두면 "용도 전부 업무미팅" 일괄 답변에 휴일 식사까지 휩쓸린다. 처리 방식은 [미리 정해야 할 것](#미리-정해야-할-것)에서 정한다. |
+| B9a | B | Redis 인프라를 추가한다. 로컬 `compose.yaml`, `deploy/compose.yaml`(`maxmemory` 128MB, AOF 켜기), `deploy/deploy.sh` 헬스체크, `spring-boot-starter-data-redis`, Testcontainers Redis 설정을 포함한다. 인증과 무관하므로 B트랙에 여유가 생기면 앞당긴다. |
+| B9b | B | 인증을 도입한다. 1주차에 확정한 인증 API 계약대로 로그인과 액세스 토큰(JWT) 발급을 구현하고, `CurrentUser` 리졸버 구현체를 Bearer 토큰 검증 방식으로 교체한다. |
+| B9c | B | 리프레시 토큰 재발급과 로그아웃을 구현한다. 저장 규칙은 [저장소 결정](#저장소-결정)을 따른다. 탈퇴 시 해당 사용자의 토큰을 모두 지운다. |
+| B10 | B | 분류 AI 연동을 구현한다. B3b 분류기에서 사전과 키워드로 분류하지 못한 가맹점만 모아 AI 서버의 분류 API를 한 번에 호출한다. 호출은 DB 트랜잭션을 열기 전에 하고, 타임아웃(3초 안팎)이나 실패 시 해당 거래는 `미분류`로 둔다. 모델 결과는 전역 `merchant_dict`에 저장하지 않는다(`CONTEXT.md` 흔한 실수 #18). AI 쪽은 처음에 전부 `null`을 돌려주는 stub으로 시작해, 모델이 준비되면 AI 쪽만 교체한다. |
 
 ## 미리 정해야 할 것
 
 | 마감 시점 | 결정 사항 | 대상 PR |
 | --- | --- | --- |
-| 1주차 | 인증 방식 결정 (카카오 OAuth, 자체 JWT 등). 리프레시 토큰 저장소는 Redis로 확정했다. 액세스·리프레시 토큰 만료 기간도 함께 정한다. | B9b |
-| 3주차 | 금액 계산 순서 결정: 안분 선적용 여부 또는 부가세 선적용 여부 (`CONTEXT.md` 미결정 #6) | A6 |
-| 3주차 | AI 분류 엔드포인트 요청 및 응답 규격 협의 (AI 담당자와 협의) | B10 |
+| 1주차 | 인증 방식(카카오 OAuth, 자체 JWT 등)과 인증 API 계약. 로그인·재발급·로그아웃 엔드포인트, 토큰 전달 위치(헤더 또는 쿠키), 액세스·리프레시 토큰 만료 기간, 로그아웃 범위를 api.md에 먼저 쓴다. 리프레시 토큰 저장소는 Redis로 확정했다. | B9b, B9c |
+| 2주차 | 분류 API 계약(AI 담당자와 협의). 배치 요청 `[{ merchantNorm, merchantRaw, bizNo? }]`, 응답 `[{ category 또는 null, confidence }]` 형태를 제안한다. cutoff 미만이면 `null`이다. | B10 |
 | 2주차 | 공휴일 YAML 파일에 포함할 연도 범위 확정 | A2a |
+| 3주차 | 금액 계산 규칙. 안분과 부가세 중 무엇을 먼저 적용할지(`CONTEXT.md` 미결정 #6), 자산 판단과 상각방법 기본값을 정한다. | A6a |
+| 3주차 | 휴일 소명 질문의 bulk-answer 처리. 휴일 카드 4장(R-311~314)의 질문에 별도 fact_type(예: `휴일용도`)을 주는 방식을 추천한다. 그러면 api.md의 대상 규칙을 바꾸지 않아도 된다. 다른 방법은 api.md에 제외 규칙과 `skippedCount`의 의미를 추가하는 것이다. | A7 |
 
 ## 저장소 결정
 
@@ -228,12 +257,24 @@ flowchart LR
 
 리프레시 토큰 저장 규칙:
 
+- 리프레시 토큰은 userId와 로그인 세션 식별자(familyId)를 담은 JWT로 발급한다. 그래야 Redis에서 키가 지워진 뒤에도 누구의 토큰인지 알 수 있다.
 - 키 구조
-  - `refresh:{tokenHash}` → userId. TTL은 리프레시 토큰 만료 기간과 같다.
-  - `user:{userId}:refresh` → 그 사용자의 tokenHash Set. 탈퇴(`DELETE /users/me`)나 전체 로그아웃 때 한 번에 지우는 데 쓴다.
+  - `refresh:{familyId}` → `{ userId, tokenHash }`. TTL은 리프레시 토큰 만료 기간과 같다.
+  - `user:{userId}:families` → 그 사용자의 familyId Set. 탈퇴(`DELETE /users/me`)나 전체 로그아웃 때 한 번에 지우는 데 쓴다. 로그인할 때마다 Set의 TTL을 리프레시 만료 기간으로 갱신해 오래된 Set이 남지 않게 한다.
 - 토큰 원문이 아니라 해시를 저장한다.
-- 재발급(rotation)은 `GETDEL`로 기존 토큰을 꺼내면서 지운다. 이미 지워진 토큰이 다시 들어오면 재사용으로 보고 그 사용자의 토큰을 전부 지운다.
+- 재발급(rotation)은 Lua 스크립트 하나로 원자적으로 처리한다. 저장된 tokenHash와 들어온 토큰이 같으면 새 토큰의 해시로 바꾼다. 다르면 이미 쓰인 토큰의 재사용으로 보고 그 family를 지운다(그 기기만 로그아웃).
 - AOF를 켜서 재배포 때 전 사용자가 로그아웃되지 않게 한다. EC2 메모리가 4GB라서 `maxmemory`를 128MB로 제한한다.
+
+## 10월 이후
+
+10월 계획에는 넣지 않지만 v1.0 전후로 정해야 하는 작업이다.
+
+| 작업 | 내용 | 먼저 할 일 |
+| --- | --- | --- |
+| 보고서(핸드오프 문서) 생성 | 판정이 어려운 건을 근거 조문과 함께 세무사에게 전달하는 문서다(`CONTEXT.md` 결정 #17). AI 쪽은 규칙 후보 추출의 질의 작성, 위계 검색, 근거 선택 로직을 재사용할 수 있다. 백엔드 몫은 run처럼 "202 접수 → 폴링" 구조의 프록시와 저장으로, PR 1~2개 규모다. | AI 담당자와 보고서 스펙(들어갈 항목, 형식, 생성 시점, 핸드오프 임계값)을 정하고 api.md에 계약을 쓴다. 품질 검증(근거 오적용)이 일정을 좌우한다. |
+| 규칙 후보 승인 관리자 페이지 | `rule_candidate`를 세무 검수자가 승인하고 GitHub PR을 자동 생성하는 화면이다(`docs/architecture.md` §3). | 담당과 v1.0 포함 여부를 정한다. |
+| 분류 웹 검색 | 분류 순서(사전 → 업종코드 → 웹 검색 → 모델 → 미분류) 중 웹 검색 단계다. | B10의 분류 API 뒤에 AI 쪽에서 추가한다. |
+| 금액 계산 완전판 | 여러 해에 걸친 감가상각과 선급비용(`asset_ledger`, `depreciation_schedule`, `prepaid_schedule`) | A6a 최소판의 결과를 보고 범위를 정한다. |
 
 ## 문서 정리
 
@@ -244,11 +285,12 @@ flowchart LR
 - 설계 맥락 설명이 필요한 비자명한 결정은 해당 PR에서 `docs/`에 기록으로 남긴다.
   - 저장소 결정(위 절의 내용을 `docs/architecture.md`로 옮긴다)
   - run 비동기 방식
-  - 금액 계산 순서
+  - 삭제 정책
+  - 금액 계산 규칙
 
 ## 완료 기준
 
 1. 모든 컨트롤러에서 `@MockResponse`를 제거하고 `MockFixtures`와 `*MockData`를 삭제한다.
 2. `gradlew -p backend check` 명령어가 통과(green)해야 한다. 여기에는 unit 테스트, eval 테스트, integrationTest가 모두 포함된다.
-3. 시나리오 통합 테스트 1건으로 api.md §8.1~8.6 흐름을 검증한다. 검증 흐름은 업로드 → 분류 응답 → run → 결과 조회 → 질문 답변 재판정 → override → 거래 제외 → batch 재판정 순서다.
+3. 누적해 온 시나리오 통합 테스트가 api.md §8.1~8.6 흐름을 모두 덮는다. 검증 흐름은 업로드 → 분류 응답 → run → 결과 조회 → 질문 답변 재판정 → override → 거래 제외 → batch 재판정 순서다.
 4. 로컬 환경에서 `docker compose up -d postgres redis`와 `bootRun --args="--spring.profiles.active=local"`을 실행한다. 프론트엔드의 `api/index.ts` 설정을 HTTP 호출로 전환한 뒤 업로드부터 결과 화면까지 정상 동작하는지 직접 확인한다.
