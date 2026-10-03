@@ -1673,14 +1673,14 @@ export const QUESTION_GROUPS: QuestionGroup[] = [
     options: ['사업 전용', '자택 겸용']
   },
   {
-    // R-242_소프트웨어
-    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001004',
-    factType: '결제유형',
+    // R-101_구독서비스
+    groupKey: 'merchant:Adobe',
+    factType: '전용여부',
     questionIds: ['0199a1b2-0000-7000-8000-00000000001004'],
     count: 1,
     totalAmount: 0,
-    questionText: '이 결제는 영구 라이선스 구매인가요, 기간 구독 선결제인가요?',
-    options: ['영구 라이선스', '기간 구독 선결제', '월 단위 결제']
+    questionText: '이 구독은 업무 전용인가요?',
+    options: ['업무 전용', '개인 전용', '업무·개인 혼용']
   }
 ];
 
@@ -1691,24 +1691,21 @@ export const QUESTION_TRANSACTIONS: Record<string, string[]> = {
   'transaction:0199c8f2-0000-7000-8000-00000000001006': ['0199c8f2-0000-7000-8000-00000000001006'],
   'merchant:SK텔레콤': ['0199c8f2-0000-7000-8000-00000000001007'],
   'merchant:자택 관리비': ['0199c8f2-0000-7000-8000-00000000001008'],
-  'transaction:0199c8f2-0000-7000-8000-00000000001004': ['0199c8f2-0000-7000-8000-00000000001004']
+  'merchant:Adobe': ['0199c8f2-0000-7000-8000-00000000001004']
 };
 
 /**
  * 목업 전용: 답변 → 재판정 결과. 서버 룰엔진이 하는 일을 흉내 낸다.
- * 카드에 verdict 가 없는 선택지(혼자작업·공용 등)는 다음 관문으로 넘어가는데, 목업은 가능으로 둔다.
+ * 카드에 verdict 가 없는 선택지(혼자작업·공용·자택 겸용·혼용)는 다음 관문으로 넘어가 금액 조건이
+ * 남는다. 그 상태(확인 필요 ③, docs/rule-card-fields.md)가 화면에 보이도록 NEEDS_REVIEW 로 둔다.
  */
 export const QUESTION_ANSWER_VERDICT: Record<string, Record<string, Verdict>> = {
-  'transaction:0199c8f2-0000-7000-8000-00000000001005': { 업무미팅: 'AVAILABLE', 개인: 'UNAVAILABLE', 혼자작업: 'AVAILABLE' },
+  'transaction:0199c8f2-0000-7000-8000-00000000001005': { 업무미팅: 'AVAILABLE', 개인: 'UNAVAILABLE', 혼자작업: 'NEEDS_REVIEW' },
   'transaction:0199c8f2-0000-7000-8000-00000000001017': { 업무용: 'AVAILABLE', 개인: 'UNAVAILABLE' },
   'transaction:0199c8f2-0000-7000-8000-00000000001006': { 업무출장: 'AVAILABLE', 개인: 'UNAVAILABLE' },
-  'merchant:SK텔레콤': { 전용: 'AVAILABLE', 공용: 'AVAILABLE', 개인: 'UNAVAILABLE' },
-  'merchant:자택 관리비': { '사업 전용': 'AVAILABLE', '자택 겸용': 'AVAILABLE' },
-  'transaction:0199c8f2-0000-7000-8000-00000000001004': {
-    '영구 라이선스': 'AVAILABLE',
-    '기간 구독 선결제': 'AVAILABLE',
-    '월 단위 결제': 'AVAILABLE'
-  }
+  'merchant:SK텔레콤': { 전용: 'AVAILABLE', 공용: 'NEEDS_REVIEW', 개인: 'UNAVAILABLE' },
+  'merchant:자택 관리비': { '사업 전용': 'AVAILABLE', '자택 겸용': 'NEEDS_REVIEW' },
+  'merchant:Adobe': { '업무 전용': 'AVAILABLE', '개인 전용': 'UNAVAILABLE', '업무·개인 혼용': 'NEEDS_REVIEW' }
 };
 
 

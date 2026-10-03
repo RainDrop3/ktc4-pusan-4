@@ -118,6 +118,8 @@ const store = {
   judgments: JUDGMENTS.map((j) => ({ ...j })) as Judgment[],
   /** groupKey → 답변 라벨과 답한 시각. 같은 그룹에 다시 답하면 정정이다 (3.10) */
   answers: new Map<string, { value: string; at: string }>(),
+  /** groupKey → UserFact version. 정정할 때마다 올라간다 */
+  factVersions: new Map<string, number>(),
   /** overrideId → JudgmentOverride. 해제해도 지우지 않고 active 만 끈다 (api.md 3.8) */
   overrides: new Map<string, { transactionId: string; judgmentId: string; active: boolean }>(),
   reviews: CLASSIFICATION_REVIEWS.map((r) => ({ ...r })) as ClassificationReview[],
@@ -189,7 +191,7 @@ const rejudge = (transactionId: string, groupKey: string, answer: string): Judgm
     '사용자 응답으로 용도가 업무로 확인되어 통상성 게이트를 통과했습니다.' :
     verdict === 'UNAVAILABLE' ?
     '사용자 응답에 따라 개인 목적 지출로 확정되어 필요경비에 산입하지 않습니다.' :
-    prev.explanation,
+    '사용자 응답을 반영했습니다. 다음 관문에서 정할 조건이 남아 확인 필요로 둡니다.',
     computedAt: now()
   };
   store.judgments.push(next);
@@ -261,19 +263,29 @@ const pendingGroups = (status?: string, batchId?: string) => {
 const filterReviews = (status?: string) =>
 status ? store.reviews.filter((r) => r.status.code === status) : store.reviews;
 
-/** 미해소 집계 (3.9). batchId 는 적용하고 status·grouped·page 는 적용하지 않는다 */
-const unresolvedIn = (batchId?: string) => {
-  const pending = groupsIn(batchId).filter((g) => !store.answers.has(g.groupKey));
+/**
+ * 미해소 집계 (3.9). batchId·transactionId 는 적용하고 status·grouped·page 는 적용하지 않는다.
+ * amount 는 거래 단위 합이라 한 거래가 여러 질문에 걸려도 한 번만 더한다.
+ */
+const unresolvedIn = (batchId?: string, transactionId?: string) => {
+  const questions = groupsIn(batchId).
+  filter((g) => !store.answers.has(g.groupKey)).
+  flatMap((g) => (QUESTION_TRANSACTIONS[g.groupKey] ?? []).slice(0, g.questionIds.length)).
+  filter((id) => !transactionId || id === transactionId);
   return {
-    count: pending.reduce((sum, g) => sum + g.count, 0),
-    amount: pending.reduce((sum, g) => sum + g.totalAmount, 0)
+    count: questions.length,
+    amount: [...new Set(questions)].reduce((sum, id) => sum + (transactionOf(id)?.amount ?? 0), 0)
   };
 };
 
-const withUnresolved = <T,>(page: Page<T>, batchId?: string): QuestionPage<T> => {
+const withUnresolved = <T,>(
+page: Page<T>,
+batchId?: string,
+transactionId?: string)
+: QuestionPage<T> => {
   return {
     ...page,
-    unresolved: unresolvedIn(batchId)
+    unresolved: unresolvedIn(batchId, transactionId)
   };
 };
 
@@ -629,29 +641,40 @@ export const mockApi: Api = {
         };
       })
       ).filter((question) => !q?.transactionId || question.transactionId === q.transactionId);
-      return delay(withUnresolved(paginate(items, q?.page, q?.size ?? 20), q?.batchId));
+      return delay(withUnresolved(paginate(items, q?.page, q?.size ?? 20), q?.batchId, q?.transactionId));
     },
     grouped: (q) =>
     delay(
       withUnresolved(
         paginate(pendingGroups(q?.status, q?.batchId), q?.page, q?.size ?? 20),
-        q?.batchId
+        q?.batchId,
+        q?.transactionId
       )
     ),
     respond: ({ questionIds, answer }) => {
       // 살아 있는 그룹에서 찾는다. 배치를 지운 뒤에는 404 여야 한다 (정적 배열을 보면 TypeError 가 난다)
-      const group = liveGroups().find((g) => g.questionIds.some((id) => questionIds.includes(id)));
-      if (!group) return notFound('QUESTION_NOT_FOUND', '질문을 찾을 수 없습니다.');
+      const groups = liveGroups();
+      const owners = questionIds.map((id) => groups.find((g) => g.questionIds.includes(id)));
+      const group = owners[0];
+      if (!group || owners.some((g) => g === undefined))
+      return notFound('QUESTION_NOT_FOUND', '질문을 찾을 수 없습니다.');
+      // 한 요청의 질문은 같은 Batch·groupKey·factType 이어야 한다 (3.10)
+      if (owners.some((g) => g !== group))
+      return Promise.reject(
+        new ApiRequestError(409, 'QUESTION_GROUP_MISMATCH', '서로 다른 질문을 함께 답할 수 없습니다.')
+      );
       if (!group.options.includes(answer.value))
       return Promise.reject(new ApiRequestError(422, 'INVALID_ANSWER_VALUE', '선택지에 없는 값입니다.'));
-      // 이미 답한 그룹이면 정정이다. 새 UserFact 로 다시 판정한다 (3.10 답변 정정)
+      // 이미 답한 그룹이면 정정이다. 기존 UserFact 를 고치지 않고 새 version 을 만든다 (3.10 답변 정정)
+      const version = (store.factVersions.get(group.groupKey) ?? 0) + 1;
+      store.factVersions.set(group.groupKey, version);
       store.answers.set(group.groupKey, { value: answer.value, at: now() });
       const rejudged = QUESTION_TRANSACTIONS[group.groupKey] ?? [];
       rejudged.forEach((tid) => rejudge(tid, group.groupKey, answer.value));
       // 명세 3.10: 새 JudgmentRun 은 만들지 않는다. runId 는 응답에서 제거됐다
       return delay({
         answeredCount: group.count,
-        factId: `fact-${group.groupKey}`,
+        factId: `fact-${group.groupKey}-v${version}`,
         rejudgedTransactionCount: rejudged.length
       });
     },
