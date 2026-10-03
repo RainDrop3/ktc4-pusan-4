@@ -209,12 +209,17 @@ export interface ClassificationResponseResult {
 /** POST /judgment-runs 응답 (202) */
 export interface JudgmentRunCreated {
   id: string;
+  batchId: string;
+  contextId: string;
+  contextVersion: number;
   status: Coded<RunStatus>;
+  /** 미분류·취소상계·대상제외 거래는 포함하지 않는다 */
   totalCount: number;
 }
 
 /** GET /judgment-runs/{runId} 응답 */
 export interface JudgmentRun extends JudgmentRunCreated {
+  /** 성공적으로 처리가 끝난 수. NEEDS_REVIEW 도 성공으로 센다 */
   processedCount: number;
   failedCount: number;
   startedAt: string | null;
@@ -344,7 +349,8 @@ export interface QuestionResponseRequest {
 
 export interface QuestionResponseResult {
   answeredCount: number;
-  runId: string;
+  factId: string;
+  rejudgedTransactionCount: number;
 }
 
 export interface BulkAnswerRequest {
@@ -357,4 +363,6 @@ export interface BulkAnswerResult {
   answeredCount: number;
   skippedCount: number;
   factIds: string[];
+  rejudgedTransactionCount: number;
+  unresolved: UnresolvedSummary;
 }
