@@ -855,7 +855,9 @@ export const JUDGMENTS: Judgment[] = [
     isInference: false,
     unmatchedReason: null,
     attributes: {
-
+      자산: true,
+      내용연수: 5,
+      상각방법: '정액법'
     },
     ruleCardId: 'R-037',
     ruleCardVersion: 3,

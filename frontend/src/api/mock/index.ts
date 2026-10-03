@@ -196,6 +196,36 @@ const rejudge = (transactionId: string, groupKey: string, answer: string): Judgm
 };
 
 /**
+ * Run 이 끝나면 처리에 성공한 거래마다 새 revision 을 남긴다 (api.md 3.6, 8.6).
+ * 목업 엔진은 새로 판정하지 못하므로, Override 가 아닌 최신 revision 을 이 Run 의 결과로 다시 적는다.
+ * 활성 Override 는 그대로 현재 결과로 남는다 (3.8).
+ */
+const judgeRun = (run: JudgmentRun) => {
+  const failed = new Set((store.failures.get(run.id) ?? []).map((f) => f.transactionId));
+  store.transactions.
+  filter((t) =>
+  t.batchId === run.batchId &&
+  t.effectiveStatus.code === 'JUDGEABLE' &&
+  t.classificationStatus.code === 'CLASSIFIED' &&
+  !failed.has(t.id)
+  ).
+  forEach((t) => {
+    const prev = store.judgments.
+    filter((j) => j.transactionId === t.id && j.origin.type !== 'OVERRIDE').
+    sort((x, y) => y.revision - x.revision)[0];
+    if (!prev) return;
+    store.judgments.push({
+      ...prev,
+      id: nextId('0199f1c3'),
+      revision: latestOf(t.id).revision + 1,
+      origin: { type: 'RUN', id: run.id },
+      userContextVersion: run.contextVersion,
+      computedAt: now()
+    });
+  });
+};
+
+/**
  * 배치가 지워지면 그 거래에 걸린 질문도 함께 사라진다 (api.md 3.3).
  * count·totalAmount 는 시드 숫자를 쓰지 않고 거래에서 센다. count 는 questionIds.length 와 같아야 한다 (3.9)
  */
@@ -296,7 +326,10 @@ export const mockApi: Api = {
         }
       });
       store.answers.clear();
-      store.overrides.clear();
+      // 지운 배치의 거래에 걸린 수정만 지운다. 다른 배치의 수정은 남는다
+      [...store.overrides].forEach(([overrideId, o]) => {
+        if (txIds.has(o.transactionId)) store.overrides.delete(overrideId);
+      });
       return delay(undefined);
     }
   },
@@ -412,6 +445,7 @@ export const mockApi: Api = {
           { code: 'FAILED', label: '전체 실패' } :
           { code: 'PARTIAL_FAILED', label: '부분 실패' };
           run.completedAt = now();
+          judgeRun(run);
         }
       }
       return delay({ ...run });
@@ -567,7 +601,7 @@ export const mockApi: Api = {
         options: [...g.options],
         createdAt: '2026-09-12T14:05:00+09:00'
       }))
-      );
+      ).filter((question) => !q?.transactionId || question.transactionId === q.transactionId);
       return delay(withUnresolved(paginate(items, q?.page, q?.size ?? 20)));
     },
     grouped: (q) =>
