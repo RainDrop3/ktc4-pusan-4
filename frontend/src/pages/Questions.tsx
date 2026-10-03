@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRightIcon, CheckIcon, LayersIcon, SearchXIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
-import { Badge, Button, ChoiceGroup, Empty } from '../components/ui';
+import { Badge, Button, ChoiceGroup, Empty, Pagination } from '../components/ui';
 import { useSession } from '../contexts/SessionContext';
 import { api, ApiRequestError, useApi } from '../api';
 import type { QuestionGroup, Transaction } from '../types/domain';
@@ -38,13 +38,16 @@ export function Questions() {
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [bulkChoice, setBulkChoice] = useState<Record<string, string>>({});
+  /** 건너뛴 질문이 앞자리를 막아도 뒤 질문에 닿을 수 있게 페이지를 넘긴다 */
+  const [page, setPage] = useState(0);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
 
   const pendingQ = useApi(
     () =>
     batchId ?
-    api.questions.grouped({ batchId, status: 'PENDING', size: BATCH_SIZE }) :
+    api.questions.grouped({ batchId, status: 'PENDING', page, size: BATCH_SIZE }) :
     Promise.resolve(null),
-    [batchId]
+    [batchId, page]
   );
   const answeredQ = useApi(
     () =>
@@ -53,42 +56,62 @@ export function Questions() {
     Promise.resolve(null),
     [batchId]
   );
-  // 그룹 응답에는 거래가 없다. 질문 → 거래, 거래 → 가맹점·금액을 따로 받아 잇는다
-  const questionsQ = useApi(
-    () =>
-    batchId ?
-    api.questions.list({ batchId, status: 'PENDING', size: 100 }) :
-    Promise.resolve(null),
-    [batchId]
+  /**
+   * 그룹 응답에는 거래가 없다. 지금 보이는 카드의 질문(카드당 3개)만 골라 질문 → 거래를 찾고,
+   * 그 거래만 받는다. 판정이 확인 필요가 아니게 된 거래(사용자 수정)나 100건 너머의 질문도 빠지지 않는다.
+   */
+  const shownIds = (pendingQ.data?.items ?? []).flatMap((group) =>
+  group.questionIds.slice(0, SHOWN_TRANSACTIONS)
   );
-  // 답하지 않은 질문의 거래는 확인 필요 상태다
-  const transactionsQ = useApi(
-    () =>
-    batchId ?
-    api.transactions.list({ batchId, verdict: 'NEEDS_REVIEW', size: 100 }) :
-    Promise.resolve(null),
-    [batchId]
+  const rowsQ = useApi(
+    async () => {
+      const need = new Set(shownIds);
+      const transactionIdOf = new Map<string, string>();
+      for (let next = 0; batchId && transactionIdOf.size < need.size; next++) {
+        const result = await api.questions.list({ batchId, status: 'PENDING', page: next, size: 100 });
+        result.items.forEach((question) => {
+          if (need.has(question.id)) transactionIdOf.set(question.id, question.transactionId);
+        });
+        if (!result.page.hasNext) break;
+      }
+      const transactions = await Promise.all(
+        [...new Set(transactionIdOf.values())].map((id) => api.transactions.get(id).catch(() => null))
+      );
+      const byId = new Map(
+        transactions.
+        filter((transaction): transaction is Transaction => transaction !== null).
+        map((transaction) => [transaction.id, transaction])
+      );
+      return new Map(
+        [...transactionIdOf].
+        map(([questionId, transactionId]) => [questionId, byId.get(transactionId)] as const).
+        filter((entry): entry is [string, Transaction] => entry[1] !== undefined)
+      );
+    },
+    [batchId, shownIds.join()]
   );
+  const transactionOfQuestion = rowsQ.data ?? new Map<string, Transaction>();
 
-  const transactionOfQuestion = new Map<string, Transaction>();
-  const transactions = new Map(
-    (transactionsQ.data?.items ?? []).map((transaction) => [transaction.id, transaction])
-  );
-  (questionsQ.data?.items ?? []).forEach((question) => {
-    const transaction = transactions.get(question.transactionId);
-    if (transaction) transactionOfQuestion.set(question.id, transaction);
-  });
+  // 마지막 질문에 답해 그 페이지가 비면 첫 페이지로 돌아간다
+  useEffect(() => {
+    if (page > 0 && pendingQ.data && pendingQ.data.items.length === 0) setPage(0);
+  }, [page, pendingQ.data]);
 
   const pending = pendingQ.data?.items ?? [];
   const pendingTotal = pendingQ.data?.page.totalElements ?? 0;
   const answered = answeredQ.data?.items ?? [];
+  const answeredTotal = answeredQ.data?.page.totalElements ?? 0;
   const unresolved = pendingQ.data?.unresolved;
 
   const reload = () => {
     pendingQ.reload();
     answeredQ.reload();
-    questionsQ.reload();
-    transactionsQ.reload();
+  };
+
+  // 답한 카드가 목록에서 빠지면 초점이 사라진다. 결과 문구로 초점을 옮겨 읽어 준다
+  const announce = (message: string) => {
+    setNotice(message);
+    window.setTimeout(() => noticeRef.current?.focus(), 0);
   };
 
   const answer = async (group: QuestionGroup, value: string) => {
@@ -104,7 +127,7 @@ export function Questions() {
       });
       setChosen((prev) => ({ ...prev, [key]: value }));
       setEditing(null);
-      setNotice(
+      announce(
         `「${value}」${ro(value)} 답했습니다. 거래 ${formatNumber(result.rejudgedTransactionCount)}건을 다시 판정했고, 이전 판정은 이력에 남습니다.`
       );
       reload();
@@ -115,8 +138,7 @@ export function Questions() {
     }
   };
 
-  const answerAll = async (factType: string, groups: QuestionGroup[]) => {
-    const value = bulkChoice[factType];
+  const answerAll = async (factType: string, groups: QuestionGroup[], value: string | undefined) => {
     if (!batchId || !value || busy) return;
     setBusy(`bulk|${factType}`);
     setError(null);
@@ -127,7 +149,7 @@ export function Questions() {
         ...prev,
         ...Object.fromEntries(groups.map((group) => [groupId(group), value]))
       }));
-      setNotice(
+      announce(
         `질문 ${formatNumber(result.answeredCount)}건에 「${value}」${ro(value)} 답하고 거래 ${formatNumber(
           result.rejudgedTransactionCount
         )}건을 다시 판정했습니다.${
@@ -219,7 +241,10 @@ export function Questions() {
 
         <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-line bg-surface px-4 py-3 text-small tabular-nums">
           <span className="text-muted">
-            남은 질문 <strong className="font-semibold text-ink">{formatNumber(pendingTotal)}개</strong>
+            남은 질문{' '}
+            <strong className="font-semibold text-ink">
+              {pendingQ.data ? `${formatNumber(pendingTotal)}개` : '—'}
+            </strong>
           </span>
           {unresolved &&
           <span className="text-muted">
@@ -231,14 +256,20 @@ export function Questions() {
           }
         </div>
 
-        {pendingTotal > pending.length &&
+        {pendingTotal > BATCH_SIZE &&
         <p className="mt-3 text-small text-muted">
-            질문이 많아 {BATCH_SIZE}개씩 보여줍니다. 이 질문들에 답하면 다음 질문이 이어서
-            나옵니다.
+            질문이 많아 {BATCH_SIZE}개씩 보여줍니다. 답하면 다음 질문이 앞으로 당겨지고, 건너뛴
+            질문은 아래 페이지에서 넘겨 볼 수 있습니다.
           </p>
         }
 
-        <p role="status" aria-live="polite" className="mt-3 text-small text-ink2 empty:hidden">
+        {/* 결과를 읽어 주는 자리. 비어 있어도 DOM 에 남아 있어야 바뀐 내용을 읽는다 */}
+        <p
+          ref={noticeRef}
+          role="status"
+          tabIndex={-1}
+          className={notice ? 'mt-3 text-small text-ink2 outline-none' : 'sr-only'}>
+
           {notice}
         </p>
         {error &&
@@ -257,9 +288,11 @@ export function Questions() {
           icon={<CheckIcon className="h-5 w-5" />}
           title="확인할 질문이 없습니다"
           description={
-          answered.length > 0 ?
+          answeredTotal > 0 ?
           '모든 질문에 답했습니다. 답을 바꾸려면 아래 답한 질문에서 고르세요.' :
-          '규칙으로 판정하지 못해 물어볼 거래가 없습니다.'
+          answeredQ.data ?
+          '규칙으로 판정하면서 더 물어볼 것이 생기지 않았습니다.' :
+          '지금 답할 질문은 없습니다.'
           } /> :
 
 
@@ -310,13 +343,16 @@ export function Questions() {
                       </header>
 
                       <div className="px-5 py-4">
-                        <ChoiceGroup
-                        name={group.questionText}
-                        columns={group.options.length >= 3 ? 3 : 2}
-                        value={chosen[key] ?? ''}
-                        onChange={(value) => void answer(group, value)}
-                        options={group.options.map((option) => ({ value: option, label: option }))} />
+                        {/* 저장하는 동안은 다른 카드의 선택지도 막는다. 눌러도 아무 일 없는 버튼을 두지 않는다 */}
+                        <fieldset disabled={busy !== null} className={busy !== null ? 'opacity-60' : ''}>
+                          <ChoiceGroup
+                          name={group.questionText}
+                          columns={group.options.length >= 3 ? 3 : 2}
+                          value={chosen[key] ?? ''}
+                          onChange={(value) => void answer(group, value)}
+                          options={group.options.map((option) => ({ value: option, label: option }))} />
 
+                        </fieldset>
                         <p className="mt-3 text-caption text-muted">
                           {busy === key ?
                         '저장하고 다시 판정하는 중…' :
@@ -329,6 +365,16 @@ export function Questions() {
             })}
             </AnimatePresence>
           </ol>
+        }
+
+        {pendingQ.data && pendingQ.data.page.totalPages > 1 &&
+        <Pagination
+          page={pendingQ.data.page}
+          onChange={setPage}
+          note={`남은 질문 ${formatNumber(pendingTotal)}개 중 ${formatNumber(
+            page * BATCH_SIZE + 1
+          )}–${formatNumber(page * BATCH_SIZE + pending.length)}번째`} />
+
         }
 
         {bulkTargets.length > 0 &&
@@ -345,7 +391,8 @@ export function Questions() {
                     「{target.factType}」 질문 {formatNumber(target.groups.length)}개 ·{' '}
                     {formatNumber(target.groups.reduce((sum, group) => sum + group.count, 0))}건
                   </p>
-                  <ChoiceGroup
+                  {target.options.length > 1 &&
+              <ChoiceGroup
                 className="mt-2"
                 name={`「${target.factType}」 질문 한 번에 답하기`}
                 columns={target.options.length >= 3 ? 3 : 2}
@@ -355,15 +402,27 @@ export function Questions() {
                 }
                 options={target.options.map((option) => ({ value: option, label: `전부 ${option}` }))} />
 
+              }
                   <div className="mt-3 flex justify-end">
+                    {/* 함께 고를 수 있는 답이 하나뿐이면 고르는 단계 없이 그 답으로 보낸다 */}
                     <Button
                   variant="secondary"
                   size="sm"
-                  disabled={!bulkChoice[target.factType] || busy !== null}
-                  onClick={() => void answerAll(target.factType, target.groups)}>
+                  disabled={
+                  target.options.length > 1 && !bulkChoice[target.factType] || busy !== null
+                  }
+                  onClick={() =>
+                  void answerAll(
+                    target.factType,
+                    target.groups,
+                    target.options.length === 1 ? target.options[0] : bulkChoice[target.factType]
+                  )
+                  }>
 
                       {busy === `bulk|${target.factType}` ?
                   '답하는 중…' :
+                  target.options.length === 1 ?
+                  `${formatNumber(target.groups.length)}개 전부 「${target.options[0]}」${ro(target.options[0])} 답하기` :
                   `${formatNumber(target.groups.length)}개 한 번에 답하기`}
                     </Button>
                   </div>
@@ -376,7 +435,12 @@ export function Questions() {
         {answered.length > 0 &&
         <section className="mt-6">
             <h2 className="text-body font-semibold text-ink">
-              답한 질문 <span className="tabular-nums text-muted">{formatNumber(answered.length)}개</span>
+              답한 질문 <span className="tabular-nums text-muted">{formatNumber(answeredTotal)}개</span>
+              {answeredTotal > answered.length &&
+            <span className="ml-2 text-small font-normal text-muted">
+                  앞의 {formatNumber(answered.length)}개만 보여줍니다
+                </span>
+            }
             </h2>
             <ul className="mt-3 divide-y divide-line2 overflow-hidden rounded-2xl border border-line bg-surface">
               {answered.map((group) => {
@@ -425,7 +489,8 @@ export function Questions() {
             <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
           </Button>
           <p className="text-small text-muted">
-            모르는 건 건너뛰어도 됩니다. 남은 건은 세무대리인에게 넘길 문장에 그대로 적힙니다.
+            모르는 건 건너뛰어도 됩니다. 답하지 않은 질문은 요약의 세무대리인에게 넘길 문장에
+            건수와 금액으로 적힙니다.
           </p>
         </div>
       </div>
