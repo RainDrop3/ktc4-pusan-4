@@ -1325,34 +1325,31 @@ export const JUDGMENTS: Judgment[] = [
       type: 'RUN',
       id: '0199e5b2-0000-7000-8000-000000000001'
     },
+    // 2026-01-24 는 토요일이다. develop 의 R-311(주말·공휴일 음식점)은 기본 불가 + 소명 질문이다(소명 대기)
     verdict: {
-      code: 'AVAILABLE',
-      label: '가능'
+      code: 'UNAVAILABLE',
+      label: '불가'
     },
     outOfScope: false,
-    blockedAtGate: null,
-    account: '소모품비',
-    finalAmount: 412_000,
+    blockedAtGate: 'G2',
+    account: null,
+    finalAmount: null,
     isInference: false,
     unmatchedReason: null,
     attributes: {
 
     },
-    ruleCardId: 'R-059',
-    ruleCardVersion: 3,
-    appliedRuleIds: ['R-059'],
+    ruleCardId: 'R-311',
+    ruleCardVersion: 2,
+    appliedRuleIds: ['R-311'],
     rulesCommitSha: '139f8189',
     userContextVersion: 4,
-    explanation: '거래처 접대 목적이 확인된 지출로 접대비 버킷에 태그했습니다. 연말 한도 확정 시 초과분은 불산입으로 조정됩니다.',
+    explanation: '주말·공휴일 음식점 결제는 개인 식사로 추정해 가사 관련 경비로 봅니다. 거래처 미팅이었다면 소명하면 평일과 같게 판정합니다.',
     computedAt: '2026-09-12T14:05:00+09:00',
     citations: [
       {
-        statuteVersionId: 1449,
-        statuteId: '소득세법-33-1-14'
-      },
-      {
-        statuteVersionId: 1418,
-        statuteId: '소득세법-27-1'
+        statuteVersionId: 1435,
+        statuteId: '소득세법-33-1-5'
       }
     ]
   },
@@ -1673,6 +1670,16 @@ export const QUESTION_GROUPS: QuestionGroup[] = [
     options: ['사업 전용', '자택 겸용']
   },
   {
+    // R-311_주말음식점. 불가인데 질문이 남는 소명 대기다. 일괄 답변 대상에서 빼야 한다(rule-card-fields.md)
+    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001016',
+    factType: '용도',
+    questionIds: ['0199a1b2-0000-7000-8000-00000000001016'],
+    count: 1,
+    totalAmount: 0,
+    questionText: '주말·공휴일 식사라 개인 식사로 보고 제외했어요. 거래처 미팅이었다면 알려주세요.',
+    options: ['업무미팅', '개인']
+  },
+  {
     // R-107_해외SaaS_고액. 시드 판정(R-225)이 막힌 이유가 서비스 기간이라 기간을 묻는 카드다
     groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001004',
     factType: '기간',
@@ -1691,12 +1698,13 @@ export const QUESTION_TRANSACTIONS: Record<string, string[]> = {
   'transaction:0199c8f2-0000-7000-8000-00000000001006': ['0199c8f2-0000-7000-8000-00000000001006'],
   'merchant:SK텔레콤': ['0199c8f2-0000-7000-8000-00000000001007'],
   'merchant:자택 관리비': ['0199c8f2-0000-7000-8000-00000000001008'],
+  'transaction:0199c8f2-0000-7000-8000-00000000001016': ['0199c8f2-0000-7000-8000-00000000001016'],
   'transaction:0199c8f2-0000-7000-8000-00000000001004': ['0199c8f2-0000-7000-8000-00000000001004']
 };
 
 /**
  * 목업 전용: 답변 → 재판정 결과. 서버 룰엔진이 하는 일을 흉내 낸다.
- * 카드에 verdict 가 없는 선택지(혼자작업·공용·자택 겸용·혼용)는 다음 관문으로 넘어가 금액 조건이
+ * 카드에 verdict 가 없는 선택지(혼자작업·공용·자택 겸용·연간 일시불)는 다음 관문으로 넘어가 금액 조건이
  * 남는다. 그 상태(확인 필요 ③, docs/rule-card-fields.md)가 화면에 보이도록 NEEDS_REVIEW 로 둔다.
  */
 export const QUESTION_ANSWER_VERDICT: Record<string, Record<string, Verdict>> = {
@@ -1705,6 +1713,7 @@ export const QUESTION_ANSWER_VERDICT: Record<string, Record<string, Verdict>> = 
   'transaction:0199c8f2-0000-7000-8000-00000000001006': { 업무출장: 'AVAILABLE', 개인: 'UNAVAILABLE' },
   'merchant:SK텔레콤': { 전용: 'AVAILABLE', 공용: 'NEEDS_REVIEW', 개인: 'UNAVAILABLE' },
   'merchant:자택 관리비': { '사업 전용': 'AVAILABLE', '자택 겸용': 'NEEDS_REVIEW' },
+  'transaction:0199c8f2-0000-7000-8000-00000000001016': { 업무미팅: 'AVAILABLE', 개인: 'UNAVAILABLE' },
   'transaction:0199c8f2-0000-7000-8000-00000000001004': { '월 단위 결제': 'AVAILABLE', '연간 일시불': 'NEEDS_REVIEW' }
 };
 
@@ -1713,8 +1722,8 @@ interface QuestionCard {
   ruleCardVersion: number;
   /** 카드 citations 의 statuteVersionId */
   citations: number[];
-  /** 선택지별 계정과목·근거. 선택지 citations 는 카드 citations 를 대신한다 (PR #68) */
-  options: Record<string, { account?: string; citations?: number[] }>;
+  /** 선택지별 계정과목·근거·속성. 선택지 citations 는 카드 citations 를 대신한다 (PR #68) */
+  options: Record<string, {account?: string;citations?: number[];attributes?: Record<string, unknown>;}>;
 }
 
 /**
@@ -1728,7 +1737,13 @@ export const QUESTION_CARDS: Record<string, QuestionCard> = {
     ruleCardId: 'R-300',
     ruleCardVersion: 2,
     citations: [1435],
-    options: { 업무미팅: { account: '접대비', citations: [] } }
+    options: { 업무미팅: { account: '접대비', citations: [], attributes: { limit_bucket: '접대비' } } }
+  },
+  'transaction:0199c8f2-0000-7000-8000-00000000001016': {
+    ruleCardId: 'R-311',
+    ruleCardVersion: 2,
+    citations: [1435],
+    options: { 업무미팅: { account: '접대비', citations: [], attributes: { limit_bucket: '접대비' } } }
   },
   'transaction:0199c8f2-0000-7000-8000-00000000001017': {
     ruleCardId: 'R-303',

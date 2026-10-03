@@ -11,6 +11,7 @@ import type {
   JudgmentRunFailure,
   Page,
   Question,
+  QuestionGroup,
   QuestionPage,
   Transaction,
   UploadBatch,
@@ -195,20 +196,22 @@ const rejudge = (transactionId: string, groupKey: string, answer: string): Judgm
     ruleCardId: card?.ruleCardId ?? prev.ruleCardId,
     ruleCardVersion: card?.ruleCardVersion ?? prev.ruleCardVersion,
     appliedRuleIds: card ? [card.ruleCardId] : prev.appliedRuleIds,
-    // 불가는 필요경비가 아니라 계정과목을 붙이지 않는다
-    account: verdict === 'UNAVAILABLE' ? null : option?.account ?? prev.account,
+    // 불가는 필요경비가 아니라 계정과목을 붙이지 않는다. 카드가 계정과목을 주지 않는 답이면 비운다
+    // (예전 답이나 시드 카드의 계정과목이 남으면 같은 답이라도 결과가 달라진다)
+    account: verdict === 'UNAVAILABLE' ? null : card ? option?.account ?? null : prev.account,
     citations: card ? citationsOf(option?.citations ?? card.citations) : prev.citations,
     blockedAtGate: verdict === 'NEEDS_REVIEW' ? prev.blockedAtGate : null,
     isInference: false,
     unmatchedReason: null,
-    attributes: ratio !== null ? { 안분율: ratio } : prev.attributes,
+    attributes:
+    ratio !== null ? { 안분율: ratio } : card ? { ...(option?.attributes ?? {}) } : prev.attributes,
     finalAmount:
     verdict !== 'AVAILABLE' ? null : ratio !== null ? Math.floor(amount * ratio / 100) : amount,
     explanation:
     verdict === 'AVAILABLE' ?
     ratio !== null ?
     `사용자 응답으로 업무 사용 비율 ${ratio}%를 적용해 구분되는 금액만 산입합니다.` :
-    '사용자 응답으로 용도가 업무로 확인되어 통상성 게이트를 통과했습니다.' :
+    '사용자 응답을 반영해 카드의 선택지대로 필요경비로 판정했습니다.' :
     verdict === 'UNAVAILABLE' ?
     '사용자 응답에 따라 개인 목적 지출로 확정되어 필요경비에 산입하지 않습니다.' :
     '사용자 응답을 반영했습니다. 다음 관문에서 정할 조건이 남아 확인 필요로 둡니다.',
@@ -707,7 +710,14 @@ export const mockApi: Api = {
       if (!groupsIn(batchId).some((g) => g.factType === factType))
       return Promise.reject(new ApiRequestError(422, 'UNKNOWN_FACT_TYPE', '알 수 없는 질문 종류입니다.'));
       const pending = pendingGroups('PENDING', batchId);
-      const targets = pending.filter((g) => g.factType === factType);
+      // 소명 대기(불가인데 질문이 남음)는 일괄 응답 대상에서 뺀다. 휴일 카드도 같은 「용도」를 써서
+      // 한 번에 답하면 주말 불가 추정이 전부 풀린다 (rule-card-fields.md)
+      const presumed = (g: QuestionGroup) =>
+      (QUESTION_TRANSACTIONS[g.groupKey] ?? []).some((id) => {
+        const current = currentOf(id);
+        return current?.verdict.code === 'UNAVAILABLE' && current.origin.type !== 'OVERRIDE';
+      });
+      const targets = pending.filter((g) => g.factType === factType && !presumed(g));
       // 하나라도 허용하지 않으면 아무것도 바꾸지 않는다
       if (targets.some((g) => !g.options.includes(answer.value)))
       return Promise.reject(
@@ -726,9 +736,9 @@ export const mockApi: Api = {
       });
       return delay({
         answeredCount: targets.reduce((sum, g) => sum + g.count, 0),
-        // 요청 당시 PENDING 중 factType 이 달라 건너뛴 수
+        // 요청 당시 PENDING 중 건너뛴 수(factType 이 다르거나 소명 대기)
         skippedCount: pending.
-        filter((g) => g.factType !== factType).
+        filter((g) => !targets.includes(g)).
         reduce((sum, g) => sum + g.count, 0),
         factIds: targets.map((g) => factIdOf(g.groupKey)),
         rejudgedTransactionCount: rejudged.size,
