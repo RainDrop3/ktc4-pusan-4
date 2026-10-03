@@ -293,7 +293,10 @@ export interface JudgmentSummary {
   byAccount: { account: string; count: number; finalAmount: number }[];
 }
 
-/** 근거 위계. 화면에서 근거·참고 해석기준·참고 사례로 나눠 보여준다 (CONTEXT.md §6) */
+/**
+ * 근거 위계. 화면에서 근거·참고 해석기준·참고 사례로 나눠 보여준다 (CONTEXT.md §6).
+ * 명세(3.13)는 「법률, 시행령, 기본통칙, 판례 등」이라 이 목록 밖의 값도 올 수 있다.
+ */
 export type StatuteHierarchy =
 '법률' | '시행령' | '시행규칙' | '기본통칙' | '고시' | '예규' | '심판례' | '판례';
 
@@ -301,7 +304,8 @@ export interface Statute {
   statuteVersionId: number;
   statuteId: string;
   title: string;
-  hierarchy: StatuteHierarchy;
+  /** 알려진 값 외의 문자열도 올 수 있다 */
+  hierarchy: StatuteHierarchy | (string & Record<never, never>);
   effectiveFrom: string;
   effectiveTo: string | null;
   sourceUrl: string;
