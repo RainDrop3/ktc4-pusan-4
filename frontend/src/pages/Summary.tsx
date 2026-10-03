@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRightIcon, CopyCheckIcon, CopyIcon, SearchXIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
 import { Button, Empty, Table, type Column } from '../components/ui';
 import { useSession } from '../contexts/SessionContext';
 import { api, useApi } from '../api';
-import type { BusinessContext, JudgmentSummary, UploadBatch, UnresolvedSummary } from '../types/domain';
+import type {
+  BusinessContext,
+  BusinessContextRef,
+  JudgmentSummary,
+  UploadBatch,
+  UnresolvedSummary } from
+'../types/domain';
 import { formatNumber, formatPeriod, formatWon } from '../utils/format';
 
 type AccountRow = JudgmentSummary['byAccount'][number];
@@ -27,24 +34,24 @@ period: string | null,
 summary: JudgmentSummary,
 unclassified: number,
 unresolved: UnresolvedSummary | undefined,
-context: BusinessContext | null | undefined) =>
+context: (BusinessContext & BusinessContextRef) | null | undefined) =>
 {
   const { AVAILABLE, UNAVAILABLE, NEEDS_REVIEW } = summary.byVerdict;
   // 사용자가 직접 바꾼 판정도 섞여 있으므로 「규칙으로 판정했다」고 쓰지 않는다
   const lines = [
-  `${period ? `${period} ` : ''}카드내역 중 판정한 ${formatNumber(summary.totalCount)}건의 결과입니다(직접 수정한 판정 포함).`,
+  `${period ? `${period} ` : ''}카드내역 중 판정한 ${formatNumber(summary.totalCount)}건의 결과입니다. 직접 수정한 판정은 수정한 값으로 셉니다.`,
   `필요경비로 볼 수 있는 것 ${formatNumber(AVAILABLE.count)}건(${formatWon(AVAILABLE.finalAmount)}), 볼 수 없는 것 ${formatNumber(UNAVAILABLE.count)}건, 근거를 확정하지 못한 것 ${formatNumber(NEEDS_REVIEW.count)}건입니다.`];
 
   if (unclassified > 0)
   lines.push(`가맹점을 분류하지 못한 ${formatNumber(unclassified)}건은 아직 판정하지 않았습니다.`);
   if (unresolved && unresolved.count > 0)
   lines.push(
-    `사용 목적 등 아직 답하지 않은 질문이 걸린 거래가 ${formatNumber(unresolved.count)}건(${formatWon(unresolved.amount)})입니다.`
+    `사용 목적 등 아직 답하지 않은 질문이 ${formatNumber(unresolved.count)}건이고, 관련 거래 금액은 ${formatWon(unresolved.amount)}입니다.`
   );
   // 판정에 쓴 문진 버전이 이와 다를 수 있다. 지금 응답임을 밝힌다
   if (context)
   lines.push(
-    `현재 문진 응답: 업종코드 ${context.industryCode}, ${context.bookkeepingDuty} 대상, 직원 ${
+    `현재 문진(v${context.version}) 응답: 업종코드 ${context.industryCode}, ${context.bookkeepingDuty} 대상, 직원 ${
     context.hasEmployee ? '있음' : '없음'}, 자택 작업공간 비율 ${
     context.homeOfficeRatio ? `${context.homeOfficeRatio}%` : '해당 없음'}.`
   );
@@ -87,7 +94,8 @@ export function Summary() {
   const unclassifiedQ = useApi(
     () =>
     batchId ?
-    api.transactions.list({ batchId, classificationStatus: 'NEEDS_REVIEW', size: 1 }) :
+    // 판정 대상에서 뺀 거래는 세지 않는다(문장 설명과 같게)
+    api.transactions.list({ batchId, status: 'JUDGEABLE', classificationStatus: 'NEEDS_REVIEW', size: 1 }) :
     Promise.resolve(null),
     [batchId]
   );
@@ -205,10 +213,18 @@ export function Summary() {
   }];
 
 
+  const unclassified = unclassifiedQ.data?.page.totalElements ?? 0;
   const text = summary ?
-  handoffText(period, summary, unclassifiedQ.data?.page.totalElements ?? 0, unresolved, contextQ.data) :
+  handoffText(period, summary, unclassified, unresolved, contextQ.data) :
   '';
   const answeredGroups = answeredQ.data?.page.totalElements ?? 0;
+  // 문장에 들어갈 건수를 아직 다 읽지 못했으면 복사하지 않는다. 빠진 채로 넘기면 「남은 것 없음」으로 읽힌다
+  const settling = questionsQ.loading || unclassifiedQ.loading || contextQ.loading;
+  const omitted = [
+  questionsQ.error && '답하지 않은 질문',
+  unclassifiedQ.error && '분류하지 못한 거래 수',
+  contextQ.error && '문진 응답'].
+  filter(Boolean);
 
   const copyText = async () => {
     try {
@@ -238,12 +254,25 @@ export function Summary() {
           '집계를 불러오는 중입니다.'}
         </p>
 
+        {/* count 는 질문 수, amount 는 그 질문이 걸린 거래 금액이다 (3.9). 거래 수로 쓰지 않는다 */}
         {unresolved && unresolved.count > 0 &&
         <p className="mt-4 rounded-xl border border-warn-line bg-warn-bg px-4 py-3 text-small text-ink2">
             <strong className="font-semibold text-warn">
-              미확정 {formatNumber(unresolved.count)}건 · {formatWon(unresolved.amount)}
+              미확정 {formatWon(unresolved.amount)} · 답하지 않은 질문 {formatNumber(unresolved.count)}건
             </strong>{' '}
-            — 아직 답하지 않은 질문이 걸린 거래입니다. 답하면 판정과 위 합계가 바뀔 수 있습니다.
+            — 답하면 판정과 위 합계가 바뀔 수 있습니다.
+          </p>
+        }
+        {unclassified > 0 &&
+        <p className="mt-3 flex flex-wrap items-center gap-x-2 text-small text-muted">
+            가맹점을 분류하지 못한 {formatNumber(unclassified)}건은 아직 판정하지 않았습니다.
+            <Link
+            to="/preview"
+            className="inline-flex items-center gap-1 font-semibold text-accent hover:underline">
+
+              분류 확인하기
+              <ArrowRightIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
           </p>
         }
 
@@ -302,13 +331,13 @@ export function Summary() {
         <blockquote className="mt-4 rounded-xl bg-canvas p-4 text-small leading-6 text-ink2">
           {text}
         </blockquote>
-        {contextQ.error &&
-        <p className="mt-2 text-caption text-muted">
-            문진 응답을 불러오지 못해 문장에서 뺐습니다.
+        {omitted.length > 0 &&
+        <p className="mt-2 text-caption text-deny">
+            불러오지 못해 문장에서 뺀 것: {omitted.join(', ')}. 새로고침한 뒤 다시 복사해 주세요.
           </p>
         }
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button variant="secondary" size="sm" disabled={!text} onClick={() => void copyText()}>
+          <Button variant="secondary" size="sm" disabled={!text || settling} onClick={() => void copyText()}>
             {copy === 'done' ?
             <CopyCheckIcon className="h-4 w-4" aria-hidden="true" /> :
             <CopyIcon className="h-4 w-4" aria-hidden="true" />}
