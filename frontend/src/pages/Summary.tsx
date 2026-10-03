@@ -25,21 +25,26 @@ const periodLabel = (batch: UploadBatch) => {
 const handoffText = (
 period: string | null,
 summary: JudgmentSummary,
+unclassified: number,
 unresolved: UnresolvedSummary | undefined,
 context: BusinessContext | null | undefined) =>
 {
   const { AVAILABLE, UNAVAILABLE, NEEDS_REVIEW } = summary.byVerdict;
+  // 사용자가 직접 바꾼 판정도 섞여 있으므로 「규칙으로 판정했다」고 쓰지 않는다
   const lines = [
-  `${period ? `${period} ` : ''}카드내역 ${formatNumber(summary.totalCount)}건을 규칙으로 판정했습니다.`,
+  `${period ? `${period} ` : ''}카드내역 중 판정한 ${formatNumber(summary.totalCount)}건의 결과입니다(직접 수정한 판정 포함).`,
   `필요경비로 볼 수 있는 것 ${formatNumber(AVAILABLE.count)}건(${formatWon(AVAILABLE.finalAmount)}), 볼 수 없는 것 ${formatNumber(UNAVAILABLE.count)}건, 근거를 확정하지 못한 것 ${formatNumber(NEEDS_REVIEW.count)}건입니다.`];
 
+  if (unclassified > 0)
+  lines.push(`가맹점을 분류하지 못한 ${formatNumber(unclassified)}건은 아직 판정하지 않았습니다.`);
   if (unresolved && unresolved.count > 0)
   lines.push(
-    `확정하지 못한 것 중 ${formatNumber(unresolved.count)}건(${formatWon(unresolved.amount)})은 사용 목적 등을 아직 답하지 않았습니다.`
+    `사용 목적 등 아직 답하지 않은 질문이 걸린 거래가 ${formatNumber(unresolved.count)}건(${formatWon(unresolved.amount)})입니다.`
   );
+  // 판정에 쓴 문진 버전이 이와 다를 수 있다. 지금 응답임을 밝힌다
   if (context)
   lines.push(
-    `문진 응답: 업종코드 ${context.industryCode}, ${context.bookkeepingDuty} 대상, 직원 ${
+    `현재 문진 응답: 업종코드 ${context.industryCode}, ${context.bookkeepingDuty} 대상, 직원 ${
     context.hasEmployee ? '있음' : '없음'}, 자택 작업공간 비율 ${
     context.homeOfficeRatio ? `${context.homeOfficeRatio}%` : '해당 없음'}.`
   );
@@ -70,11 +75,26 @@ export function Summary() {
     Promise.resolve(null),
     [batchId]
   );
+  const answeredQ = useApi(
+    () =>
+    batchId ?
+    api.questions.grouped({ batchId, status: 'ANSWERED', size: 1 }) :
+    Promise.resolve(null),
+    [batchId]
+  );
   const contextQ = useApi(() => api.contexts.current(), []);
+  // 아직 분류하지 못해 판정하지 않은 거래 수. 배치의 분류 대기 수는 분류 확인 뒤 바로 줄지 않을 수 있어 거래에서 센다
+  const unclassifiedQ = useApi(
+    () =>
+    batchId ?
+    api.transactions.list({ batchId, classificationStatus: 'NEEDS_REVIEW', size: 1 }) :
+    Promise.resolve(null),
+    [batchId]
+  );
 
-  // 「복사했습니다」는 잠깐만 보여준다
+  // 「복사했습니다」는 잠깐만 보여준다. 실패 안내는 직접 복사할 때까지 남긴다
   useEffect(() => {
-    if (copy === 'idle') return;
+    if (copy !== 'done') return;
     const timer = window.setTimeout(() => setCopy('idle'), 2000);
     return () => window.clearTimeout(timer);
   }, [copy]);
@@ -146,6 +166,22 @@ export function Summary() {
   { label: '불가', value: counts.unavailable, bar: 'bg-deny' }];
 
 
+  // 계정과목이 없는 인정 경비(예: 사용자가 가능으로 바꾼 거래)도 표에 남겨 합계가 맞게 한다
+  const accountRows: AccountRow[] = summary ? [...summary.byAccount] : [];
+  if (summary) {
+    const listed = summary.byAccount.reduce(
+      (sum, row) => ({ count: sum.count + row.count, amount: sum.amount + row.finalAmount }),
+      { count: 0, amount: 0 }
+    );
+    const rest = summary.byVerdict.AVAILABLE.finalAmount - listed.amount;
+    if (rest > 0)
+    accountRows.push({
+      account: '계정과목 미지정',
+      count: Math.max(0, summary.byVerdict.AVAILABLE.count - listed.count),
+      finalAmount: rest
+    });
+  }
+
   const accountColumns: Column<AccountRow>[] = [
   {
     header: '계정과목',
@@ -169,7 +205,10 @@ export function Summary() {
   }];
 
 
-  const text = summary ? handoffText(period, summary, unresolved, contextQ.data) : '';
+  const text = summary ?
+  handoffText(period, summary, unclassifiedQ.data?.page.totalElements ?? 0, unresolved, contextQ.data) :
+  '';
+  const answeredGroups = answeredQ.data?.page.totalElements ?? 0;
 
   const copyText = async () => {
     try {
@@ -194,7 +233,9 @@ export function Summary() {
         <span className="mt-1.5 block h-9 w-48 animate-pulse rounded bg-line2" />
         }
         <p className="mt-2 text-small tabular-nums text-muted">
-          전체 {formatNumber(total)}건 중 가능으로 판정한 것만 더했습니다.
+          {summary ?
+          `전체 ${formatNumber(total)}건 중 가능으로 판정한 것만 더했습니다.` :
+          '집계를 불러오는 중입니다.'}
         </p>
 
         {unresolved && unresolved.count > 0 &&
@@ -202,7 +243,7 @@ export function Summary() {
             <strong className="font-semibold text-warn">
               미확정 {formatNumber(unresolved.count)}건 · {formatWon(unresolved.amount)}
             </strong>{' '}
-            — 질문에 답하기 전이라 위 합계에 넣지 않았습니다.
+            — 아직 답하지 않은 질문이 걸린 거래입니다. 답하면 판정과 위 합계가 바뀔 수 있습니다.
           </p>
         }
 
@@ -225,7 +266,9 @@ export function Summary() {
                 {item.label}
               </dt>
               <dd className="mt-1 text-h4 font-semibold tabular-nums text-ink">
-                {formatNumber(item.value)}건
+                {summary ?
+              `${formatNumber(item.value)}건` :
+              <span className="block h-6 w-12 animate-pulse rounded bg-line2" />}
               </dd>
             </div>
           )}
@@ -238,7 +281,7 @@ export function Summary() {
           className="mt-3"
           caption="계정과목별 인정 경비"
           columns={accountColumns}
-          rows={summary?.byAccount ?? []}
+          rows={accountRows}
           rowKey={(row) => row.account}
           loading={summaryQ.loading}
           empty={
@@ -253,12 +296,17 @@ export function Summary() {
       <section className="mt-4 rounded-2xl border border-line bg-surface p-6">
         <h2 className="text-body font-semibold text-ink">세무대리인에게 넘길 문장</h2>
         <p className="mt-1.5 text-small text-muted">
-          판정 결과와 문진 응답을 상담용 문장으로 정리했습니다. 판정하지 못한 것은
-          그대로 적습니다.
+          판정 결과와 문진 응답을 상담용 문장으로 정리했습니다. 확정하지 못한 것과 분류하지
+          못한 것은 건수로 적고, 판정 대상에서 뺀 거래는 적지 않습니다.
         </p>
         <blockquote className="mt-4 rounded-xl bg-canvas p-4 text-small leading-6 text-ink2">
           {text}
         </blockquote>
+        {contextQ.error &&
+        <p className="mt-2 text-caption text-muted">
+            문진 응답을 불러오지 못해 문장에서 뺐습니다.
+          </p>
+        }
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button variant="secondary" size="sm" disabled={!text} onClick={() => void copyText()}>
             {copy === 'done' ?
@@ -266,10 +314,14 @@ export function Summary() {
             <CopyIcon className="h-4 w-4" aria-hidden="true" />}
             {copy === 'done' ? '복사했습니다' : '문장 복사'}
           </Button>
-          {unresolved && unresolved.count > 0 &&
+          {unresolved && unresolved.count > 0 ?
           <Button to="/questions" variant="secondary" size="sm">
               질문에 답하기
               <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
+            </Button> :
+          answeredGroups > 0 &&
+          <Button to="/questions" variant="secondary" size="sm">
+              답한 질문 보기
             </Button>
           }
           <Button to="/results" variant="ghost" size="sm">
@@ -277,6 +329,9 @@ export function Summary() {
             <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
+        <span role="status" className="sr-only">
+          {copy === 'done' ? '문장을 복사했습니다.' : ''}
+        </span>
         {copy === 'failed' &&
         <p role="alert" className="mt-3 text-small text-deny">
             복사하지 못했습니다. 문장을 직접 선택해 복사해 주세요.
