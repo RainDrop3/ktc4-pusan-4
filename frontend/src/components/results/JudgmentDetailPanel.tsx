@@ -19,15 +19,20 @@ const ORIGIN_LABEL: Record<JudgmentOriginType, string> = {
 
 /**
  * 확인 필요는 네 갈래다 (docs/rule-card-fields.md). verdict 는 모두 NEEDS_REVIEW 지만
- * 같은 문구로 보이면 ②(넘김)와 ③(인정되는 쪽)이 정반대로 읽혀 사용자가 포기한다.
+ * 같은 문구로 보이면 ②(넘김)와 ③(남은 조건)이 정반대로 읽혀 사용자가 포기한다.
+ * 불가인데 답할 질문이 남았으면 소명 대기다(주말·공휴일 식대 등). 추정일 뿐 확정이 아니다.
  */
-type ReviewState = 'QUESTION' | 'HANDOFF' | 'FOLLOW_UP' | 'NO_RULE';
+type ReviewState = 'QUESTION' | 'HANDOFF' | 'FOLLOW_UP' | 'NO_RULE' | 'PRESUMED';
 
 const REVIEW_MESSAGE: Record<ReviewState, string> = {
   QUESTION: '답할 질문이 남아 있습니다. 답하면 바로 다시 판정합니다.',
   HANDOFF: '판정하지 않고 세무사에게 넘겼습니다. 규칙으로 다루지 않는 지출입니다.',
-  FOLLOW_UP: '답을 반영했습니다. 비율이나 기간 같은 남은 조건이 정해지면 판정과 금액이 확정됩니다.',
-  NO_RULE: '판정할 규칙이 없습니다. 근거를 지어내지 않고 확인 필요로 두었습니다.'
+  // 문서(rule-card-fields.md ③)는 「인정됩니다」라 쓰지만, R-300 혼자작업처럼 조문만으로 갈리지 않는 답도
+  // 여기 들어온다. 둘 다에 맞는 말로 쓴다
+  FOLLOW_UP:
+  '답을 반영했지만 규칙만으로는 아직 확정하지 못했습니다. 안분 비율·기간처럼 뒤에서 정할 조건이 남았거나 세무사 판단이 필요한 답입니다.',
+  NO_RULE: '판정할 규칙이 없습니다. 근거를 지어내지 않고 확인 필요로 두었습니다.',
+  PRESUMED: '추정으로 제외했어요. 업무였다면 질문에 답해 주세요. 답하면 다시 판정합니다.'
 };
 
 /** 사용자가 바꿀 수 있는 판정. 확인 필요로 되돌리는 수정은 받지 않는다 (#62 논의) */
@@ -89,11 +94,11 @@ export function JudgmentDetailPanel({
     }),
     [judgment.transactionId, judgment.id]
   );
-  // 확인 필요라면 이 거래에 남은 질문(①)과 이미 답한 질문(③)이 있는지 본다.
+  // 확인 필요·불가라면 이 거래에 남은 질문(①, 소명 대기)과 이미 답한 질문(③)이 있는지 본다.
   // ③을 origin 으로 판단하면 다시 판정(Run)한 뒤 origin 이 RUN 으로 바뀌어 안내가 사라진다
   const reviewQ = useApi(
     () =>
-    judgment.verdict.code === 'NEEDS_REVIEW' ?
+    judgment.verdict.code !== 'AVAILABLE' ?
     Promise.all([
     api.questions.list({ transactionId: judgment.transactionId, status: 'PENDING', size: 1 }),
     api.questions.list({ transactionId: judgment.transactionId, status: 'ANSWERED', size: 1 })]
@@ -105,8 +110,12 @@ export function JudgmentDetailPanel({
     [judgment.transactionId, judgment.id]
   );
 
+  // 고른 행에 초점이 남아 있을 때만 패널로 옮긴다. 그사이 다른 곳으로 옮겼으면 뺏지 않는다
   useEffect(() => {
-    if (focusKey > 0) title.current?.focus();
+    if (focusKey === 0) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || active.getAttribute('aria-current') === 'true')
+    title.current?.focus();
   }, [focusKey]);
 
   // 폼을 열면 첫 사유로 초점을 옮긴다
@@ -117,19 +126,22 @@ export function JudgmentDetailPanel({
   const overridden = judgment.origin.type === 'OVERRIDE';
   const asset = judgment.attributes['자산'] === true;
   // 질문 조회가 끝나지 않았거나 실패했으면 ①·③을 가를 수 없다. 틀린 안내보다 안내 없음이 낫다
+  // 지금 판정의 표지(범위 밖·규칙 없음)가 질문 상태보다 먼저다. 예전 답이 남아 있어도 규칙이 없으면 ④다
   const reviewState: ReviewState | null =
-  judgment.verdict.code !== 'NEEDS_REVIEW' || overridden ?
+  judgment.verdict.code === 'AVAILABLE' || overridden ?
   null :
+  judgment.verdict.code === 'UNAVAILABLE' ?
+  reviewQ.data && !reviewQ.loading && !reviewQ.error && reviewQ.data.pending > 0 ? 'PRESUMED' : null :
   judgment.outOfScope ?
   'HANDOFF' :
+  judgment.unmatchedReason === 'RULE_NOT_FOUND' || judgment.isInference ?
+  'NO_RULE' :
   !reviewQ.data || reviewQ.loading || reviewQ.error ?
   null :
   reviewQ.data.pending > 0 ?
   'QUESTION' :
   reviewQ.data.answered > 0 ?
   'FOLLOW_UP' :
-  judgment.unmatchedReason === 'RULE_NOT_FOUND' || judgment.isInference ?
-  'NO_RULE' :
   null;
   // 수정했다면 규칙 엔진이 낸 마지막 판정을 함께 보여준다 (이력은 최신순)
   const engine = overridden ?
@@ -238,7 +250,7 @@ export function JudgmentDetailPanel({
         {reviewState &&
         <div className="mt-2 rounded-xl border border-line bg-canvas px-3.5 py-3 text-small text-ink2">
             <p>{REVIEW_MESSAGE[reviewState]}</p>
-            {reviewState === 'QUESTION' &&
+            {(reviewState === 'QUESTION' || reviewState === 'PRESUMED') &&
           <Link
             to="/questions"
             className="mt-1.5 inline-flex items-center gap-1 font-semibold text-accent hover:underline">
@@ -251,7 +263,9 @@ export function JudgmentDetailPanel({
         }
         <p className="mt-2 text-small leading-6 text-ink2">
           {overridden ?
+          engine ?
           '직접 수정한 판정입니다. 규칙 엔진의 판정은 아래와 같고, 이력에도 그대로 남아 있습니다.' :
+          '직접 수정한 판정입니다. 규칙 엔진이 낸 판정은 이력에 그대로 남아 있습니다.' :
           judgment.explanation ??
           '적용된 규칙 카드에 설명 문구가 없습니다. 근거 조문을 확인해 주세요.'}
         </p>
@@ -274,7 +288,10 @@ export function JudgmentDetailPanel({
       </section>
 
       <section className="border-b border-line px-5 py-4">
-        <h3 className="text-small font-semibold text-ink">근거 조문</h3>
+        {/* 수정한 판정은 규칙 엔진의 근거를 그대로 들고 있다. 수정의 근거로 읽히지 않게 한다 */}
+        <h3 className="text-small font-semibold text-ink">
+          {overridden ? '규칙 엔진이 붙인 근거 조문' : '근거 조문'}
+        </h3>
         {judgment.citations.length > 0 ?
         <div className="mt-2.5 space-y-2">
             {judgment.citations.map((citation) =>

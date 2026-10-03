@@ -92,18 +92,19 @@ export function Results() {
 
   // 패널은 고른 거래의 현재 판정과 거래를 따로 읽는다. 수정하면 그 행이 목록 맨 위로
   // 올라가도(computedAt DESC) 패널은 그 거래에 머문다
+  // 응답과 실패 모두에 어느 거래의 것인지 붙인다. 다른 행을 고른 직후 이전 행의 응답·실패가
+  // 남아 있어도, 고른 거래의 것일 때만 그린다
   const panelQ = useApi(
-    () =>
-    selectedId ?
-    Promise.all([
-    api.judgments.list({ transactionId: selectedId }),
-    api.transactions.get(selectedId)]
-    ).then(([page, transaction]) => ({ judgment: page.items[0] ?? null, transaction })) :
-    Promise.resolve(null),
+    () => {
+      if (!selectedId) return Promise.resolve(null);
+      const id = selectedId;
+      return Promise.all([api.judgments.list({ transactionId: id }), api.transactions.get(id)]).
+      then(([page, transaction]) => ({ id, failed: false as const, judgment: page.items[0] ?? null, transaction })).
+      catch(() => ({ id, failed: true as const }));
+    },
     [selectedId]
   );
-  // 다른 거래를 고른 직후에는 이전 거래의 응답이 남아 있다. 고른 거래의 것일 때만 그린다
-  const panelData = panelQ.data?.transaction.id === selectedId ? panelQ.data : null;
+  const panelData = panelQ.data?.id === selectedId ? panelQ.data : null;
 
   // 처음에는 첫 행을 보여준다
   const firstId = judgments[0]?.transactionId;
@@ -223,6 +224,10 @@ export function Results() {
           <VerdictBadge verdict={row.verdict} />
           {row.origin.type === 'OVERRIDE' &&
       <span className="text-caption text-muted">직접 수정</span>
+      }
+          {/* ②(넘김)는 목록에서도 ①·③과 다르게 보여야 한다 (rule-card-fields.md) */}
+          {row.outOfScope && row.origin.type !== 'OVERRIDE' &&
+      <span className="text-caption text-muted">세무사에게 넘김</span>
       }
         </span>
 
@@ -377,27 +382,16 @@ export function Results() {
         {selectedId && !failed && !nothingJudged &&
         // 패널이 화면보다 길면 수정 버튼·이력이 접힌 아래로 밀린다. 화면 높이 안에서 따로 스크롤한다
         <aside className="lg:sticky lg:top-32 lg:max-h-[calc(100vh-9rem)] lg:self-start lg:overflow-y-auto">
-            {panelData?.judgment ?
-          <>
-                {/* 수정 뒤 다시 읽기가 실패하면 화면의 판정이 이전 것일 수 있다 */}
-                {panelQ.error && !panelQ.loading &&
-            <p role="alert" className="mb-3 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-small text-deny">
-                    판정을 다시 불러오지 못했습니다. 보이는 판정이 최신이 아닐 수 있습니다.{' '}
-                    <button type="button" onClick={panelQ.reload} className="font-semibold underline">
-                      다시 시도
-                    </button>
-                  </p>
-            }
-                <JudgmentDetailPanel
-              key={selectedId}
-              judgment={panelData.judgment}
-              transaction={panelData.transaction}
-              focusKey={focusKey}
-              onChanged={changed} />
-              </> :
+            {panelData && !panelData.failed && panelData.judgment ?
+          <JudgmentDetailPanel
+            key={selectedId}
+            judgment={panelData.judgment}
+            transaction={panelData.transaction}
+            focusKey={focusKey}
+            onChanged={changed} /> :
 
-          // 다른 행을 고른 직후에는 이전 행의 실패가 남아 있다. 지금 요청의 실패일 때만 알린다
-          panelQ.error && !panelQ.loading ?
+          // 수정 뒤 다시 읽기가 실패해도 이전 판정을 그리지 않고 실패를 알린다
+          panelData?.failed ?
           <div role="alert" className="rounded-2xl border border-deny-line bg-deny-bg p-5 text-body text-deny">
                 이 거래의 판정을 불러오지 못했습니다.{' '}
                 <button type="button" onClick={panelQ.reload} className="font-semibold underline">
