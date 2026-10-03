@@ -30,8 +30,8 @@ export function Results() {
   const [page, setPage] = useState(0);
   /** 고른 거래. 거래 정보를 아직 못 받은 행도 고를 수 있게 id 만 든다 */
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  /** 사용자가 직접 고른 경우에만 패널로 초점을 옮긴다. 처음 자동 선택은 초점을 뺏지 않는다 */
-  const [picked, setPicked] = useState(false);
+  /** 사용자가 고를 때마다 늘린다. 패널은 이 값이 바뀌면 제목으로 초점을 옮긴다. 처음 자동 선택은 0 이라 초점을 뺏지 않는다 */
+  const [focusKey, setFocusKey] = useState(0);
 
   const batchQ = useApi(
     () => batchId ? api.uploads.get(batchId) : Promise.resolve(null),
@@ -119,7 +119,7 @@ export function Results() {
   // 패널은 열릴 때 제목으로 초점을 옮긴다. 좁은 화면에서는 표 아래에 있으므로 그때 함께 스크롤된다
   const select = (transactionId: string) => {
     setSelectedId(transactionId);
-    setPicked(true);
+    setFocusKey((key) => key + 1);
   };
 
   const changed = () => {
@@ -172,7 +172,13 @@ export function Results() {
       pending('w-32');
       return (
         <span className="block min-w-0">
-            <span className="block truncate font-medium text-ink">{transaction.merchantNorm}</span>
+            <span className="flex items-center gap-1.5 truncate font-medium text-ink">
+              {/* 고른 행은 옅은 바탕만으로는 잘 안 보여 점을 붙인다 */}
+              {row.transactionId === selectedId &&
+          <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-accent" />
+          }
+              <span className="truncate">{transaction.merchantNorm}</span>
+            </span>
             <span className="block truncate text-small text-muted">
               {/* 승인일 열은 좁은 화면에서 숨기므로, 그 정보를 여기로 옮긴다 */}
               <span className="sm:hidden">{formatFullDate(transaction.approvedAt)} · </span>
@@ -333,8 +339,8 @@ export function Results() {
               확인 필요 {formatNumber(unresolved.count)}건 · {formatWon(unresolved.amount)}
             </span>
             <span className="mt-0.5 block text-small text-ink2">
-              질문 {formatNumber(questionGroups)}개에 답하면 정리됩니다. 같은 사유끼리 묶어
-              물어보고, 답하면 묶인 거래를 바로 다시 판정합니다.
+              같은 사유끼리 묶은 질문 {formatNumber(questionGroups)}개가 남았습니다. 답하면 묶인
+              거래를 바로 다시 판정합니다.
             </span>
           </span>
           <ArrowRightIcon className="h-4 w-4 shrink-0 text-warn" aria-hidden="true" />
@@ -372,14 +378,26 @@ export function Results() {
         // 패널이 화면보다 길면 수정 버튼·이력이 접힌 아래로 밀린다. 화면 높이 안에서 따로 스크롤한다
         <aside className="lg:sticky lg:top-32 lg:max-h-[calc(100vh-9rem)] lg:self-start lg:overflow-y-auto">
             {panelData?.judgment ?
-          <JudgmentDetailPanel
-            key={selectedId}
-            judgment={panelData.judgment}
-            transaction={panelData.transaction}
-            focusOnMount={picked}
-            onChanged={changed} /> :
+          <>
+                {/* 수정 뒤 다시 읽기가 실패하면 화면의 판정이 이전 것일 수 있다 */}
+                {panelQ.error && !panelQ.loading &&
+            <p role="alert" className="mb-3 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-small text-deny">
+                    판정을 다시 불러오지 못했습니다. 보이는 판정이 최신이 아닐 수 있습니다.{' '}
+                    <button type="button" onClick={panelQ.reload} className="font-semibold underline">
+                      다시 시도
+                    </button>
+                  </p>
+            }
+                <JudgmentDetailPanel
+              key={selectedId}
+              judgment={panelData.judgment}
+              transaction={panelData.transaction}
+              focusKey={focusKey}
+              onChanged={changed} />
+              </> :
 
-          panelQ.error ?
+          // 다른 행을 고른 직후에는 이전 행의 실패가 남아 있다. 지금 요청의 실패일 때만 알린다
+          panelQ.error && !panelQ.loading ?
           <div role="alert" className="rounded-2xl border border-deny-line bg-deny-bg p-5 text-body text-deny">
                 이 거래의 판정을 불러오지 못했습니다.{' '}
                 <button type="button" onClick={panelQ.reload} className="font-semibold underline">

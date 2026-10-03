@@ -42,15 +42,18 @@ export function StatuteCitation({
   statuteVersionId,
   showBody = true
 }: StatuteCitationProps) {
-  const { data: statute, error } = useApi(
+  const { data: statute, error, reload } = useApi(
     () => api.statutes.get(statuteVersionId),
     [statuteVersionId]
   );
-  // 불러오지 못한 조문을 조용히 빼면 근거가 없는 판정처럼 보인다
+  // 불러오지 못한 조문을 조용히 빼면 근거가 없는 판정처럼 보인다. 실패는 오류 상자로 알린다
   if (error)
   return (
-    <p className="rounded-xl border border-line bg-canvas p-3.5 text-small text-muted">
-        조문을 불러오지 못했습니다 (버전 #{statuteVersionId}).
+    <p role="alert" className="rounded-xl border border-deny-line bg-deny-bg p-3.5 text-small text-deny">
+        조문을 불러오지 못했습니다 (버전 #{statuteVersionId}).{' '}
+        <button type="button" onClick={reload} className="font-semibold underline">
+          다시 시도
+        </button>
       </p>);
 
   if (!statute) return <span className="block h-16 animate-pulse rounded-xl bg-line2" />;

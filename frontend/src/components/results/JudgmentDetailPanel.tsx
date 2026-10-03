@@ -26,7 +26,7 @@ type ReviewState = 'QUESTION' | 'HANDOFF' | 'FOLLOW_UP' | 'NO_RULE';
 const REVIEW_MESSAGE: Record<ReviewState, string> = {
   QUESTION: '답할 질문이 남아 있습니다. 답하면 바로 다시 판정합니다.',
   HANDOFF: '판정하지 않고 세무사에게 넘겼습니다. 규칙으로 다루지 않는 지출입니다.',
-  FOLLOW_UP: '인정되는 쪽입니다. 안분 비율이나 기간 같은 남은 조건이 정해지면 금액이 확정됩니다.',
+  FOLLOW_UP: '답을 반영했습니다. 비율이나 기간 같은 남은 조건이 정해지면 판정과 금액이 확정됩니다.',
   NO_RULE: '판정할 규칙이 없습니다. 근거를 지어내지 않고 확인 필요로 두었습니다.'
 };
 
@@ -57,8 +57,8 @@ interface JudgmentDetailPanelProps {
   /** 거래의 현재 판정 */
   judgment: Judgment;
   transaction: Transaction;
-  /** 사용자가 행을 골라 열었으면 제목으로 초점을 옮긴다 */
-  focusOnMount?: boolean;
+  /** 사용자가 행을 고를 때마다 늘어난다. 바뀌면 제목으로 초점을 옮긴다(같은 행을 다시 골라도) */
+  focusKey?: number;
   /** 수정·해제로 현재 판정이 바뀌었을 때 */
   onChanged: () => void;
 }
@@ -66,7 +66,7 @@ interface JudgmentDetailPanelProps {
 export function JudgmentDetailPanel({
   judgment,
   transaction,
-  focusOnMount = false,
+  focusKey = 0,
   onChanged
 }: JudgmentDetailPanelProps) {
   const [target, setTarget] = useState<Target | null>(null);
@@ -89,18 +89,25 @@ export function JudgmentDetailPanel({
     }),
     [judgment.transactionId, judgment.id]
   );
-  // 확인 필요라면 이 거래에 답하지 않은 질문이 남았는지 본다 (①)
-  const pendingQ = useApi(
+  // 확인 필요라면 이 거래에 남은 질문(①)과 이미 답한 질문(③)이 있는지 본다.
+  // ③을 origin 으로 판단하면 다시 판정(Run)한 뒤 origin 이 RUN 으로 바뀌어 안내가 사라진다
+  const reviewQ = useApi(
     () =>
     judgment.verdict.code === 'NEEDS_REVIEW' ?
-    api.questions.list({ transactionId: judgment.transactionId, status: 'PENDING', size: 1 }) :
+    Promise.all([
+    api.questions.list({ transactionId: judgment.transactionId, status: 'PENDING', size: 1 }),
+    api.questions.list({ transactionId: judgment.transactionId, status: 'ANSWERED', size: 1 })]
+    ).then(([pending, answered]) => ({
+      pending: pending.page.totalElements,
+      answered: answered.page.totalElements
+    })) :
     Promise.resolve(null),
     [judgment.transactionId, judgment.id]
   );
 
   useEffect(() => {
-    if (focusOnMount) title.current?.focus();
-  }, [focusOnMount]);
+    if (focusKey > 0) title.current?.focus();
+  }, [focusKey]);
 
   // 폼을 열면 첫 사유로 초점을 옮긴다
   useEffect(() => {
@@ -109,18 +116,25 @@ export function JudgmentDetailPanel({
 
   const overridden = judgment.origin.type === 'OVERRIDE';
   const asset = judgment.attributes['자산'] === true;
+  // 질문 조회가 끝나지 않았거나 실패했으면 ①·③을 가를 수 없다. 틀린 안내보다 안내 없음이 낫다
   const reviewState: ReviewState | null =
-  judgment.verdict.code !== 'NEEDS_REVIEW' || overridden || pendingQ.loading ?
+  judgment.verdict.code !== 'NEEDS_REVIEW' || overridden ?
   null :
   judgment.outOfScope ?
   'HANDOFF' :
-  (pendingQ.data?.page.totalElements ?? 0) > 0 ?
+  !reviewQ.data || reviewQ.loading || reviewQ.error ?
+  null :
+  reviewQ.data.pending > 0 ?
   'QUESTION' :
-  judgment.origin.type === 'USER_FACT' ?
+  reviewQ.data.answered > 0 ?
   'FOLLOW_UP' :
   judgment.unmatchedReason === 'RULE_NOT_FOUND' || judgment.isInference ?
   'NO_RULE' :
   null;
+  // 수정했다면 규칙 엔진이 낸 마지막 판정을 함께 보여준다 (이력은 최신순)
+  const engine = overridden ?
+  historyQ.data?.items.find((revision) => revision.origin.type !== 'OVERRIDE') :
+  undefined;
   const targets: Target[] = (['AVAILABLE', 'UNAVAILABLE'] as const).filter(
     (code) => code !== judgment.verdict.code
   );
@@ -178,7 +192,6 @@ export function JudgmentDetailPanel({
         <div className="flex flex-wrap items-center gap-2">
           <VerdictBadge verdict={judgment.verdict} size="md" />
           {judgment.outOfScope && <Badge tone="warn">판정 범위 밖</Badge>}
-          {judgment.isInference && <Badge>추론</Badge>}
           <Badge>{ORIGIN_LABEL[judgment.origin.type]}</Badge>
           <span className="text-caption tabular-nums text-muted">
             rev.{judgment.revision}
@@ -206,7 +219,7 @@ export function JudgmentDetailPanel({
         <div className="bg-surface px-5 py-3">
           {/* 자산은 그해 넣을 수 있는 한도다. 「넣으세요」가 아니라 「까지 넣을 수 있습니다」 (CONTEXT.md G4) */}
           <dt className="text-caption text-muted">
-            {asset ? '올해 넣을 수 있는 금액' : '필요경비 산입액'}
+            {asset ? `${transaction.approvedAt.slice(0, 4)}년에 넣을 수 있는 금액` : '필요경비 산입액'}
           </dt>
           <dd
             className={`mt-0.5 text-body-lg font-semibold tabular-nums ${
@@ -238,14 +251,19 @@ export function JudgmentDetailPanel({
         }
         <p className="mt-2 text-small leading-6 text-ink2">
           {overridden ?
-          '직접 수정한 판정입니다. 규칙 엔진이 낸 판정은 아래 이력에 그대로 남아 있습니다.' :
+          '직접 수정한 판정입니다. 규칙 엔진의 판정은 아래와 같고, 이력에도 그대로 남아 있습니다.' :
           judgment.explanation ??
           '적용된 규칙 카드에 설명 문구가 없습니다. 근거 조문을 확인해 주세요.'}
         </p>
-        {judgment.isInference && !overridden &&
-        <p className="mt-1 text-caption text-muted">
-            규칙으로 확정하지 못해 추론한 결과입니다.
-          </p>
+        {engine &&
+        <div className="mt-2 rounded-xl border border-line bg-canvas px-3.5 py-3 text-small text-ink2">
+            <p className="flex items-center gap-2 text-caption text-muted">
+              규칙 엔진의 판정 <VerdictBadge verdict={engine.verdict} />
+            </p>
+            <p className="mt-1.5 leading-6">
+              {engine.explanation ?? '적용된 규칙 카드에 설명 문구가 없습니다.'}
+            </p>
+          </div>
         }
         {judgment.blockedAtGate && !overridden &&
         <p className="mt-2 text-caption tabular-nums text-muted">
