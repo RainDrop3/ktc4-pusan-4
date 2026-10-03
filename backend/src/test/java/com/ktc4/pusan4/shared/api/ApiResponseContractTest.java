@@ -126,6 +126,11 @@ class ApiResponseContractTest {
         "questionText", "options", "status", "answeredFactId", "createdAt", "answeredAt");
     private static final Set<String> CLASSIFICATION_REVIEW_KEYS = Set.of("id", "batchId", "transactionId",
         "merchantRaw", "merchantNorm", "status", "suggestedCategories", "createdAt", "resolvedAt");
+    private static final Set<String> CLASSIFICATION_REVIEW_GROUP_KEYS = Set.of("groupKey", "merchantNorm",
+        "reviewIds", "count", "totalAmount", "merchantRaw", "suggestedCategories", "transactions");
+    private static final Set<String> CLASSIFICATION_GROUP_TRANSACTION_KEYS = Set.of("reviewId", "transactionId",
+        "approvedAt", "merchantRaw", "amount", "installmentMonths");
+    private static final Set<String> UNRESOLVED_KEYS = Set.of("count", "amount");
 
     /**
      * 응답 타입이 Map 이던 자리. 키 집합은 api.md 의 응답 예시에서 옮겼다.
@@ -138,7 +143,12 @@ class ApiResponseContractTest {
             Arguments.of("/api/v1/upload-batches/" + ID, "", UPLOAD_BATCH_KEYS),
             Arguments.of("/api/v1/judgments?batchId=" + ID, "/items/0", JUDGMENT_KEYS),
             Arguments.of("/api/v1/questions?batchId=" + ID, "/items/0", QUESTION_KEYS),
-            Arguments.of("/api/v1/classification-reviews", "/items/0", CLASSIFICATION_REVIEW_KEYS)
+            Arguments.of("/api/v1/classification-reviews", "/items/0", CLASSIFICATION_REVIEW_KEYS),
+            Arguments.of("/api/v1/classification-reviews", "/unresolved", UNRESOLVED_KEYS),
+            Arguments.of("/api/v1/classification-reviews?grouped=true", "/items/0", CLASSIFICATION_REVIEW_GROUP_KEYS),
+            Arguments.of("/api/v1/classification-reviews?grouped=true", "/items/0/transactions/0",
+                CLASSIFICATION_GROUP_TRANSACTION_KEYS),
+            Arguments.of("/api/v1/classification-reviews?grouped=true", "/unresolved", UNRESOLVED_KEYS)
         );
     }
 
