@@ -213,18 +213,23 @@ export function Summary() {
   }];
 
 
-  const unclassified = unclassifiedQ.data?.page.totalElements ?? 0;
-  const text = summary ?
-  handoffText(period, summary, unclassified, unresolved, contextQ.data) :
-  '';
+
   const answeredGroups = answeredQ.data?.page.totalElements ?? 0;
   // 문장에 들어갈 건수를 아직 다 읽지 못했으면 복사하지 않는다. 빠진 채로 넘기면 「남은 것 없음」으로 읽힌다
-  const settling = questionsQ.loading || unclassifiedQ.loading || contextQ.loading;
+  const settling = batchQ.loading || questionsQ.loading || unclassifiedQ.loading || contextQ.loading;
   const omitted = [
+  batchQ.error && '기간',
   questionsQ.error && '답하지 않은 질문',
   unclassifiedQ.error && '분류하지 못한 거래 수',
   contextQ.error && '문진 응답'].
   filter(Boolean);
+  const unclassified = unclassifiedQ.data?.page.totalElements ?? 0;
+  // 못 읽은 항목은 화면에만 알리지 않고, 붙여 넣은 문장에도 남긴다
+  const text = summary ?
+  `${handoffText(period, summary, unclassified, unresolved, contextQ.data)}${
+  omitted.length > 0 ? ` (불러오지 못해 빠진 항목: ${omitted.join(', ')})` : ''}` :
+  '';
+
 
   const copyText = async () => {
     try {
@@ -258,9 +263,15 @@ export function Summary() {
         {unresolved && unresolved.count > 0 &&
         <p className="mt-4 rounded-xl border border-warn-line bg-warn-bg px-4 py-3 text-small text-ink2">
             <strong className="font-semibold text-warn">
-              미확정 {formatWon(unresolved.amount)} · 답하지 않은 질문 {formatNumber(unresolved.count)}건
+              답하지 않은 질문 {formatNumber(unresolved.count)}건 · 관련 거래 {formatWon(unresolved.amount)}
             </strong>{' '}
-            — 답하면 판정과 위 합계가 바뀔 수 있습니다.
+            — 답하면 판정과 위 합계가 바뀔 수 있습니다. 직접 수정한 거래는 수정한 판정대로 위 합계에
+            들어 있습니다.
+          </p>
+        }
+        {questionsQ.error &&
+        <p className="mt-4 text-small text-deny">
+            답하지 않은 질문 수를 불러오지 못했습니다. 새로고침해 주세요.
           </p>
         }
         {unclassified > 0 &&
