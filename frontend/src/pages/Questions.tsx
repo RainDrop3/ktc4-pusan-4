@@ -77,13 +77,14 @@ export function Questions() {
       const ids = [...new Set(transactionIdOf.values())];
       const [transactions, currents] = await Promise.all([
       Promise.all(ids.map((id) => api.transactions.get(id).catch(() => null))),
-      // 사용자가 직접 수정한 거래는 답해도 현재 판정이 바뀌지 않는다(3.8). 카드에서 알린다
+      // 지금 판정을 본다. 직접 수정한 거래는 답해도 현재 판정이 바뀌지 않고(3.8),
+      // 불가인데 질문이 남은 거래는 소명 대기라 일괄 답변에서 빼야 한다(rule-card-fields.md)
       Promise.all(
         ids.map((id) =>
         api.judgments.
         list({ transactionId: id }).
-        then((page) => page.items[0]?.origin.type === 'OVERRIDE').
-        catch(() => false)
+        then((page) => page.items[0] ?? null).
+        catch(() => null)
         )
       )]
       );
@@ -98,13 +99,21 @@ export function Questions() {
           map(([questionId, transactionId]) => [questionId, byId.get(transactionId)] as const).
           filter((entry): entry is [string, Transaction] => entry[1] !== undefined)
         ),
-        overridden: new Set(ids.filter((_, index) => currents[index]))
+        overridden: new Set(ids.filter((_, index) => currents[index]?.origin.type === 'OVERRIDE')),
+        presumed: new Set(
+          ids.filter(
+            (_, index) =>
+            currents[index]?.verdict.code === 'UNAVAILABLE' && currents[index]?.origin.type !== 'OVERRIDE'
+          )
+        )
       };
     },
     [batchId, shownIds.join()]
   );
   const transactionOfQuestion = rowsQ.data?.transactions ?? new Map<string, Transaction>();
   const overridden = rowsQ.data?.overridden ?? new Set<string>();
+  const presumed = rowsQ.data?.presumed ?? new Set<string>();
+  const errorRef = useRef<HTMLParagraphElement>(null);
   /** 지금 보이는 페이지. 다음 페이지를 받는 동안에는 이전 페이지 번호로 센다 */
   const shownPage = pendingQ.data?.page.number ?? 0;
 
@@ -130,6 +139,12 @@ export function Questions() {
     window.setTimeout(() => noticeRef.current?.focus(), 0);
   };
 
+  // 실패해도 눌렀던 선택지가 막혀 초점이 사라진다. 오류 문구로 옮겨 읽어 준다
+  const fail = (message: string) => {
+    setError(message);
+    window.setTimeout(() => errorRef.current?.focus(), 0);
+  };
+
   const answer = async (group: QuestionGroup, value: string) => {
     if (busy) return;
     const key = groupId(group);
@@ -148,7 +163,7 @@ export function Questions() {
       );
       reload();
     } catch (caught) {
-      setError(errorMessage(caught, '답을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+      fail(errorMessage(caught, '답을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
       setBusy(null);
     }
@@ -175,14 +190,14 @@ export function Questions() {
       );
       reload();
     } catch (caught) {
-      setError(errorMessage(caught, '한 번에 답하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+      fail(errorMessage(caught, '한 번에 답하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
       setBusy(null);
     }
   };
 
   // 남은 질문이 적을 때만 factType 별로 묶어 일괄 답변을 연다
-  const bulkTargets =
+  const bulkCandidates =
   pendingTotal > 0 && pendingTotal <= BULK_THRESHOLD ?
   [...new Set(pending.map((group) => group.factType))].
   map((factType) => {
@@ -191,6 +206,12 @@ export function Questions() {
   }).
   filter((target) => target.groups.length > 1 && target.options.length > 0) :
   [];
+  // 소명 대기(불가인데 질문이 남음)가 섞인 종류는 한 번에 답하지 않는다. 같은 「용도」로 묶여
+  // 「전부 업무미팅」 한 번에 주말 불가 추정이 모두 풀린다 (rule-card-fields.md)
+  const hasPresumption = (group: QuestionGroup) =>
+  group.questionIds.some((id) => presumed.has(transactionOfQuestion.get(id)?.id ?? ''));
+  const bulkTargets = bulkCandidates.filter((target) => !target.groups.some(hasPresumption));
+  const heldBack = bulkCandidates.filter((target) => target.groups.some(hasPresumption));
 
   /** 카드 머리의 가맹점 이름과 아래 건별 줄 */
   const transactionsOf = (group: QuestionGroup) =>
@@ -290,24 +311,26 @@ export function Questions() {
         </p>
         {error &&
         <p
+          ref={errorRef}
           role="alert"
-          className="mt-3 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-body text-deny">
+          tabIndex={-1}
+          className="mt-3 rounded-xl border border-deny-line bg-deny-bg px-4 py-3 text-body text-deny outline-none">
 
             {error}
           </p>
         }
 
         {/* 뒤 페이지가 비면 첫 페이지로 돌아가므로, 그 사이에 「다 답했다」를 띄우지 않는다 */}
-        {!pendingQ.loading && pending.length === 0 && page === 0 ?
+        {!pendingQ.loading && pending.length === 0 && shownPage === 0 ?
         <Empty
           className="mt-4"
           tone="ok"
           icon={<CheckIcon className="h-5 w-5" />}
           title="확인할 질문이 없습니다"
           description={
-          answeredTotal > 0 ?
+          answeredTotal > 0 && !answeredQ.error ?
           '모든 질문에 답했습니다. 답을 바꾸려면 아래 답한 질문에서 고르세요.' :
-          answeredQ.data ?
+          answeredQ.data && !answeredQ.loading && !answeredQ.error ?
           '규칙으로 판정하면서 더 물어볼 것이 생기지 않았습니다.' :
           '지금 답할 질문은 없습니다.'
           } /> :
@@ -358,8 +381,8 @@ export function Questions() {
                         }
                           {rows.some((row) => overridden.has(row.id)) &&
                         <p className="mt-2 text-small text-ink2">
-                              직접 수정한 판정을 쓰는 거래가 있습니다. 답하면 기록은 남지만 그 거래의 현재
-                              판정은 수정한 값 그대로입니다.
+                              위 거래 중 직접 수정한 판정을 쓰는 거래가 있습니다. 답하면 기록은 남지만 그
+                              거래의 현재 판정은 수정한 값 그대로입니다.
                             </p>
                         }
                         </div>
@@ -400,13 +423,19 @@ export function Questions() {
 
         }
 
-        {bulkTargets.length > 0 &&
+        {(bulkTargets.length > 0 || heldBack.length > 0) &&
         <section className="mt-6 rounded-2xl border border-line bg-surface p-5">
             <h2 className="text-body font-semibold text-ink">남은 질문 한 번에 답하기</h2>
             <p className="mt-1 text-small text-muted">
               같은 종류의 질문에 같은 답을 한 번에 보냅니다. 한 번에 답한 뒤에도 질문마다 다시
               바꿀 수 있습니다.
             </p>
+            {heldBack.length > 0 &&
+          <p className="mt-2 text-small text-ink2">
+                {heldBack.map((target) => `「${target.factType}」`).join('·')} 질문에는 주말·공휴일처럼 추정으로
+                제외한 거래가 섞여 있어 한 번에 답하지 않습니다. 하나씩 답해 주세요.
+              </p>
+          }
             <div className="mt-4 space-y-5">
               {bulkTargets.map((target) =>
             <div key={target.factType}>
@@ -508,9 +537,9 @@ export function Questions() {
                       columns={group.options.length >= 3 ? 3 : 2}
                       value={chosen[key] ?? ''}
                       // 이미 고른 답을 다시 누르면 정정하지 않는다. 같은 판정 이력만 늘어난다
-                      onChange={(value) =>
-                      value === chosen[key] ? setEditing(null) : void answer(group, value)
-                      }
+                      onChange={(value) => {
+                        if (value !== chosen[key]) void answer(group, value);
+                      }}
                       options={group.options.map((option) => ({ value: option, label: option }))} />
 
                       </fieldset>
