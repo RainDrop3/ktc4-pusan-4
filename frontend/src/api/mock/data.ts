@@ -1673,14 +1673,14 @@ export const QUESTION_GROUPS: QuestionGroup[] = [
     options: ['사업 전용', '자택 겸용']
   },
   {
-    // R-101_구독서비스
-    groupKey: 'merchant:Adobe',
-    factType: '전용여부',
+    // R-107_해외SaaS_고액. 시드 판정(R-225)이 막힌 이유가 서비스 기간이라 기간을 묻는 카드다
+    groupKey: 'transaction:0199c8f2-0000-7000-8000-00000000001004',
+    factType: '기간',
     questionIds: ['0199a1b2-0000-7000-8000-00000000001004'],
     count: 1,
     totalAmount: 0,
-    questionText: '이 구독은 업무 전용인가요?',
-    options: ['업무 전용', '개인 전용', '업무·개인 혼용']
+    questionText: '이 결제는 몇 개월치인가요?',
+    options: ['월 단위 결제', '연간 일시불']
   }
 ];
 
@@ -1691,7 +1691,7 @@ export const QUESTION_TRANSACTIONS: Record<string, string[]> = {
   'transaction:0199c8f2-0000-7000-8000-00000000001006': ['0199c8f2-0000-7000-8000-00000000001006'],
   'merchant:SK텔레콤': ['0199c8f2-0000-7000-8000-00000000001007'],
   'merchant:자택 관리비': ['0199c8f2-0000-7000-8000-00000000001008'],
-  'merchant:Adobe': ['0199c8f2-0000-7000-8000-00000000001004']
+  'transaction:0199c8f2-0000-7000-8000-00000000001004': ['0199c8f2-0000-7000-8000-00000000001004']
 };
 
 /**
@@ -1705,7 +1705,61 @@ export const QUESTION_ANSWER_VERDICT: Record<string, Record<string, Verdict>> = 
   'transaction:0199c8f2-0000-7000-8000-00000000001006': { 업무출장: 'AVAILABLE', 개인: 'UNAVAILABLE' },
   'merchant:SK텔레콤': { 전용: 'AVAILABLE', 공용: 'NEEDS_REVIEW', 개인: 'UNAVAILABLE' },
   'merchant:자택 관리비': { '사업 전용': 'AVAILABLE', '자택 겸용': 'NEEDS_REVIEW' },
-  'merchant:Adobe': { '업무 전용': 'AVAILABLE', '개인 전용': 'UNAVAILABLE', '업무·개인 혼용': 'NEEDS_REVIEW' }
+  'transaction:0199c8f2-0000-7000-8000-00000000001004': { '월 단위 결제': 'AVAILABLE', '연간 일시불': 'NEEDS_REVIEW' }
+};
+
+interface QuestionCard {
+  ruleCardId: string;
+  ruleCardVersion: number;
+  /** 카드 citations 의 statuteVersionId */
+  citations: number[];
+  /** 선택지별 계정과목·근거. 선택지 citations 는 카드 citations 를 대신한다 (PR #68) */
+  options: Record<string, { account?: string; citations?: number[] }>;
+}
+
+/**
+ * 목업 전용: 질문 그룹 → 그 질문을 낸 카드(develop 의 rules/cards 기준).
+ * 답하면 카드 선택지대로 규칙 카드·계정과목·근거를 붙인다. 시드 판정은 다른 카드에서 온 것이라
+ * 그대로 두면 「가능」에 「가사 경비는 산입하지 않는다」가 근거로 붙었다.
+ * 목업 조문 목록에 없는 조문(§35①, 시행령 §61①)은 원문을 지어내지 않고 뺐다.
+ */
+export const QUESTION_CARDS: Record<string, QuestionCard> = {
+  'transaction:0199c8f2-0000-7000-8000-00000000001005': {
+    ruleCardId: 'R-300',
+    ruleCardVersion: 2,
+    citations: [1435],
+    options: { 업무미팅: { account: '접대비', citations: [] } }
+  },
+  'transaction:0199c8f2-0000-7000-8000-00000000001017': {
+    ruleCardId: 'R-303',
+    ruleCardVersion: 1,
+    citations: [1418, 1435],
+    options: { 업무용: { account: '소모품비' } }
+  },
+  'transaction:0199c8f2-0000-7000-8000-00000000001006': {
+    ruleCardId: 'R-208',
+    ruleCardVersion: 1,
+    citations: [1418, 1435],
+    options: { 업무출장: { account: '여비교통비' } }
+  },
+  'merchant:SK텔레콤': {
+    ruleCardId: 'R-205',
+    ruleCardVersion: 2,
+    citations: [1435],
+    options: { 전용: { account: '통신비', citations: [1418] } }
+  },
+  'merchant:자택 관리비': {
+    ruleCardId: 'R-103',
+    ruleCardVersion: 1,
+    citations: [1418, 1435],
+    options: { '사업 전용': { account: '수도광열비' } }
+  },
+  'transaction:0199c8f2-0000-7000-8000-00000000001004': {
+    ruleCardId: 'R-107',
+    ruleCardVersion: 1,
+    citations: [1418],
+    options: { '월 단위 결제': { account: '지급수수료' } }
+  }
 };
 
 

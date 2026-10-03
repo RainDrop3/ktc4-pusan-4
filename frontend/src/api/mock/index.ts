@@ -22,6 +22,7 @@ import {
   JUDGMENTS,
   JUDGMENT_RUN,
   QUESTION_ANSWER_VERDICT,
+  QUESTION_CARDS,
   QUESTION_GROUPS,
   QUESTION_TRANSACTIONS,
   TRANSACTIONS,
@@ -163,6 +164,16 @@ const transactionOf = (id: string) => store.transactions.find((t) => t.id === id
 const ratioOf = (answer: string): number | null =>
 /^\d+%$/.test(answer) ? Number(answer.replace('%', '')) : null;
 
+/** 그 질문 그룹의 지금 UserFact id. 정정할 때마다 version 이 올라간다 (3.10) */
+const factIdOf = (groupKey: string) =>
+`fact-${groupKey}-v${store.factVersions.get(groupKey) ?? 1}`;
+
+const citationsOf = (ids: number[]) =>
+ids.map((statuteVersionId) => ({
+  statuteVersionId,
+  statuteId: STATUTES.find((x) => x.statuteVersionId === statuteVersionId)?.statuteId ?? ''
+}));
+
 /** 답변 → 새 Revision. 서버 룰엔진이 하는 일을 흉내 낸다. */
 const rejudge = (transactionId: string, groupKey: string, answer: string): Judgment => {
   // 엔진은 사용자 수정이 아니라 자기 판정 위에서 다시 판정한다
@@ -170,14 +181,23 @@ const rejudge = (transactionId: string, groupKey: string, answer: string): Judgm
   filter((j) => j.transactionId === transactionId && j.origin.type !== 'OVERRIDE').
   sort((a, b) => b.revision - a.revision)[0];
   const verdict = QUESTION_ANSWER_VERDICT[groupKey]?.[answer] ?? 'NEEDS_REVIEW';
+  // 질문을 낸 카드의 선택지대로 규칙 카드·계정과목·근거를 붙인다
+  const card = QUESTION_CARDS[groupKey];
+  const option = card?.options[answer];
   const ratio = ratioOf(answer);
   const amount = transactionOf(transactionId)?.amount ?? 0;
   const next: Judgment = {
     ...prev,
     id: nextId('0199f1c3'),
     revision: latestOf(transactionId).revision + 1,
-    origin: { type: 'USER_FACT', id: `fact-${groupKey}` },
+    origin: { type: 'USER_FACT', id: factIdOf(groupKey) },
     verdict: { code: verdict, label: LABEL[verdict] },
+    ruleCardId: card?.ruleCardId ?? prev.ruleCardId,
+    ruleCardVersion: card?.ruleCardVersion ?? prev.ruleCardVersion,
+    appliedRuleIds: card ? [card.ruleCardId] : prev.appliedRuleIds,
+    // 불가는 필요경비가 아니라 계정과목을 붙이지 않는다
+    account: verdict === 'UNAVAILABLE' ? null : option?.account ?? prev.account,
+    citations: card ? citationsOf(option?.citations ?? card.citations) : prev.citations,
     blockedAtGate: verdict === 'NEEDS_REVIEW' ? prev.blockedAtGate : null,
     isInference: false,
     unmatchedReason: null,
@@ -355,8 +375,10 @@ export const mockApi: Api = {
       });
       // 지운 배치의 거래에 걸린 답과 수정만 지운다. 다른 배치의 답·수정은 남는다
       [...store.answers.keys()].forEach((groupKey) => {
-        if ((QUESTION_TRANSACTIONS[groupKey] ?? []).some((id) => txIds.has(id)))
-        store.answers.delete(groupKey);
+        if ((QUESTION_TRANSACTIONS[groupKey] ?? []).some((id) => txIds.has(id))) {
+          store.answers.delete(groupKey);
+          store.factVersions.delete(groupKey);
+        }
       });
       [...store.overrides].forEach(([overrideId, o]) => {
         if (txIds.has(o.transactionId)) store.overrides.delete(overrideId);
@@ -635,7 +657,7 @@ export const mockApi: Api = {
           status: answer ?
           { code: 'ANSWERED' as const, label: '응답' } :
           { code: 'PENDING' as const, label: '대기' },
-          answeredFactId: answer ? `fact-${g.groupKey}` : null,
+          answeredFactId: answer ? factIdOf(g.groupKey) : null,
           createdAt: '2026-09-12T14:05:00+09:00',
           answeredAt: answer?.at ?? null
         };
@@ -674,7 +696,7 @@ export const mockApi: Api = {
       // 명세 3.10: 새 JudgmentRun 은 만들지 않는다. runId 는 응답에서 제거됐다
       return delay({
         answeredCount: group.count,
-        factId: `fact-${group.groupKey}-v${version}`,
+        factId: factIdOf(group.groupKey),
         rejudgedTransactionCount: rejudged.length
       });
     },
@@ -693,6 +715,8 @@ export const mockApi: Api = {
       );
       const rejudged = new Set<string>();
       targets.forEach((group) => {
+        // 일괄 답변도 그룹마다 새 UserFact 다
+        store.factVersions.set(group.groupKey, (store.factVersions.get(group.groupKey) ?? 0) + 1);
         store.answers.set(group.groupKey, { value: answer.value, at: now() });
         (QUESTION_TRANSACTIONS[group.groupKey] ?? []).forEach((tid) => {
           if (rejudged.has(tid)) return;
@@ -706,7 +730,7 @@ export const mockApi: Api = {
         skippedCount: pending.
         filter((g) => g.factType !== factType).
         reduce((sum, g) => sum + g.count, 0),
-        factIds: targets.map((g) => `fact-${g.groupKey}`),
+        factIds: targets.map((g) => factIdOf(g.groupKey)),
         rejudgedTransactionCount: rejudged.size,
         unresolved: unresolvedIn(batchId)
       });
