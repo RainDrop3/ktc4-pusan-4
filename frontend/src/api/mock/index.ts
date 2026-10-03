@@ -92,8 +92,9 @@ const store = {
   // 비워 두면 그 세션으로 만든 판정 실행이 CONTEXT_NOT_FOUND 로 막힌다.
   contexts: [
   {
+    // 시드 판정·Run 이 문진 v4 로 만들어졌으므로 버전을 맞춘다
     id: '0199d3a1-0000-7000-8000-000000000001',
-    version: 1,
+    version: 4,
     industryCode: '62010',
     prevYearRevenue: 83_000_000,
     businessOpenDate: '2024-03-01',
@@ -279,7 +280,11 @@ export const mockApi: Api = {
 
   contexts: {
     create: (body) => {
-      const ref = { id: nextId('0199d3a1'), version: store.contexts.length + 1 };
+      // Context 는 고치지 않고 새 버전을 만든다 (3.2)
+      const ref = {
+        id: nextId('0199d3a1'),
+        version: Math.max(0, ...store.contexts.map((c) => c.version)) + 1
+      };
       store.contexts.push({ ...body, ...ref });
       return delay(ref);
     },
@@ -325,8 +330,11 @@ export const mockApi: Api = {
           store.failures.delete(runId);
         }
       });
-      store.answers.clear();
-      // 지운 배치의 거래에 걸린 수정만 지운다. 다른 배치의 수정은 남는다
+      // 지운 배치의 거래에 걸린 답과 수정만 지운다. 다른 배치의 답·수정은 남는다
+      [...store.answers.keys()].forEach((groupKey) => {
+        if ((QUESTION_TRANSACTIONS[groupKey] ?? []).some((id) => txIds.has(id)))
+        store.answers.delete(groupKey);
+      });
       [...store.overrides].forEach(([overrideId, o]) => {
         if (txIds.has(o.transactionId)) store.overrides.delete(overrideId);
       });
@@ -730,6 +738,6 @@ export const mockControls = {
 
 export const mockSeedSession = {
   batchId: UPLOAD_BATCH.id,
-  contextRef: { id: '0199d3a1-0000-7000-8000-000000000001', version: 1 },
+  contextRef: { id: '0199d3a1-0000-7000-8000-000000000001', version: 4 },
   runId: JUDGMENT_RUN.id
 };
