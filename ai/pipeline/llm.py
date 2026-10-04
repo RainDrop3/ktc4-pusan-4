@@ -38,6 +38,7 @@ def structured[T: BaseModel](system: str, user: str, schema: type[T], api: OpenA
         temperature=0,
         response_format=schema,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        name=schema.__name__,
     )
     out = res.choices[0].message.parsed
     if out is None:
