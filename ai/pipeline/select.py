@@ -171,7 +171,9 @@ def _check(ev: Evidence, pool: dict[str, list[tuple[str, str]]]) -> list[str]:
     for r in ev.refs:
         chunks = pool.get(r.statute_id) or []
         quote = _norm(_LEAD_NO.sub("", r.quote))
-        if len(quote) < MIN_QUOTE:
+        # 조항 문장 전체가 짧으면('14. 선급비용') 그 전체를 옮긴 건 통과시킨다
+        whole = any(quote == _LEAD_NO.sub("", _norm(b)[len(_norm(head)):]) for b, head in chunks)
+        if len(quote) < MIN_QUOTE and not whole:
             bad.append(f"{r.statute_id} 의 인용문이 너무 짧다. 한 문장을 통째로 복사해라.")
         elif not chunks:
             bad.append(f"{r.statute_id} 는 후보에 없다. 후보 밖 조문은 근거가 될 수 없으니 빼고 결론을 다시 세워라.")

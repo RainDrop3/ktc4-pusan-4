@@ -174,6 +174,13 @@ def test_머리말만_인용하면_걸린다():
     assert len(bad) == 1 and "머리말" in bad[0]
 
 
+@pytest.mark.parametrize(("quote", "ok"), [("14. 선급비용", True), ("선급", False)])
+def test_호_문장_전체가_짧으면_그_전체만_통과(quote, ok):
+    pool = _pool({"법령": [HO1, hit("소득세법-33-1-14", "법령", f"{머리}\n14. 선급비용")]})
+    bad = _check(ev([StatuteRef(statute_id="소득세법-33-1-14", quote=quote)]), pool)
+    assert (bad == []) is ok
+
+
 def test_머리말에_호_문장을_이어_적으면_통과():
     quote = "필요경비에 산입하지 아니한다. 5. 대통령령으로 정하는 가사의 경비"
     assert _check(ev([StatuteRef(statute_id="소득세법-33-1-5", quote=quote)]), _pool({"법령": [HO1, HO5]})) == []
