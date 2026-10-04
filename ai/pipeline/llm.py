@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
-from openai import OpenAI
+from langfuse import Langfuse
+from langfuse.openai import OpenAI
 from pydantic import BaseModel
 
 from app.config import settings
 
 MODEL = "gpt-4o-mini"
+
+# langfuse.openai 는 import 만으로 openai 를 전역 패치한다. 이 모듈을 import 한 프로세스는 임베딩도 기록된다.
+Langfuse(
+    public_key=settings.langfuse_public_key,
+    secret_key=settings.langfuse_secret_key,
+    base_url=settings.langfuse_base_url,
+    tracing_enabled=bool(settings.langfuse_public_key),
+)
 
 
 def client() -> OpenAI:
