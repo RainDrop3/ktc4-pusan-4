@@ -64,3 +64,17 @@
 남은 것:
 - 리뷰 추가 항목: trace 입출력 원문이 Langfuse Cloud 로 나간다. 지금 규칙 후보는 업종 정보뿐이다. 판정처럼
   사용자 거래가 들어가는 곳에 붙일 때는 카드 내역이 나가지 않게 따로 본다(SDK `mask` 옵션이 후보)
+
+## 16:48 PR #81 머지 뒤 RAG 하네스(run_draft)도 trace 로 묶기
+
+- 커밋: f764abd(develop 병합), 9be968d
+- develop 을 병합했다. #81 의 `run_draft.py` · `select.py` 변경이 들어왔고 충돌은 없었다
+- `run_draft.produce()` 에 `@observe()` 를 붙였다. 키 1개의 SearchPlan · 임베딩 · Evidence · RuleCardDraft 가
+  한 trace 로 묶인다. 전엔 32키 한 번에 trace 가 100개 남짓 흩어졌다
+
+왜:
+- 앞 절 "남은 것" 첫 항목이다. #81 이 같은 파일을 고치고 있어서 미뤘다
+- 입력 캡처는 기본값 그대로 둔다. 인자 중 가장 큰 `plans`(.plans.json)가 32키 8KB 라 부담이 없고, 입력에
+  카테고리 · 업종이 남아 어느 키의 trace 인지 바로 보인다
+
+확인: 카페/940909 1키(plan 캐시는 임시 경로) → `produce` 아래 4개, 13.4초. ruff · pytest 114 통과
