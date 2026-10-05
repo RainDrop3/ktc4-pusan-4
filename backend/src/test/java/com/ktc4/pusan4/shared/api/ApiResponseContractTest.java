@@ -4,8 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ktc4.pusan4.judgment.api.JudgmentMockData;
 import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
+import com.ktc4.pusan4.shared.auth.TemporaryCurrentUserProvider;
 import com.ktc4.pusan4.transaction.api.TransactionMockData;
 import com.ktc4.pusan4.user.api.UserMockData;
+import com.ktc4.pusan4.user.domain.AppUser;
+import com.ktc4.pusan4.user.persistence.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -16,13 +20,18 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.time.OffsetDateTime;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -33,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 목 응답이 api.md 의 상태 코드를 지키는지 확인한다. 값은 보지 않는다 — 서비스로 바꿔도 깨지지 않아야 한다.
  */
 @WebMvcTest
-@Import({ApiExceptionHandler.class, UuidV7Generator.class,
+@Import({ApiExceptionHandler.class, UuidV7Generator.class, TemporaryCurrentUserProvider.class,
     UserMockData.class, TransactionMockData.class, ClassificationMockData.class, JudgmentMockData.class})
 class ApiResponseContractTest {
 
@@ -44,6 +53,17 @@ class ApiResponseContractTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    /** 서비스로 바뀐 API 는 DB 없이 계약만 보도록 서비스를 대신한다. */
+    @MockitoBean
+    private UserService userService;
+
+    @BeforeEach
+    void stubServices() {
+        given(userService.get(any())).willReturn(new AppUser(
+            TemporaryCurrentUserProvider.TEMPORARY_USER_ID, "demo@example.com",
+            OffsetDateTime.parse("2026-09-01T10:00:00+09:00")));
+    }
 
     static Stream<Arguments> endpoints() {
         return Stream.of(
@@ -114,6 +134,7 @@ class ApiResponseContractTest {
         mockMvc.perform(request).andExpect(status().is(expectedStatus));
     }
 
+    private static final Set<String> USER_KEYS = Set.of("id", "email", "createdAt");
     private static final Set<String> CONTEXT_KEYS = Set.of("id", "userId", "version", "industryCode",
         "prevYearRevenue", "businessOpenDate", "bookkeepingDuty", "hasEmployee", "homeOfficeRatio", "createdAt");
     private static final Set<String> UPLOAD_BATCH_KEYS = Set.of("id", "sourceType", "cardIssuer", "periodStart",
@@ -137,6 +158,7 @@ class ApiResponseContractTest {
      */
     static Stream<Arguments> documentedShapes() {
         return Stream.of(
+            Arguments.of("/api/v1/users/me", "", USER_KEYS),
             Arguments.of("/api/v1/users/me/contexts/current", "", CONTEXT_KEYS),
             Arguments.of("/api/v1/users/me/contexts", "/0", CONTEXT_KEYS),
             Arguments.of("/api/v1/upload-batches", "/items/0", UPLOAD_BATCH_KEYS),
@@ -165,6 +187,15 @@ class ApiResponseContractTest {
         Set<String> actualKeys = new TreeSet<>();
         objectMapper.readTree(body).at(pointer).fieldNames().forEachRemaining(actualKeys::add);
         assertThat(actualKeys).containsExactlyInAnyOrderElementsOf(expectedKeys);
+    }
+
+    @Test
+    void users_me_looks_up_current_user() throws Exception {
+        // when
+        mockMvc.perform(get("/api/v1/users/me")).andExpect(status().isOk());
+
+        // then: 요청 값이 아니라 CurrentUserProvider 가 정한 사용자로 조회한다
+        verify(userService).get(TemporaryCurrentUserProvider.TEMPORARY_USER_ID);
     }
 
     @Test
