@@ -61,3 +61,32 @@
 - B2 도 `JudgmentSchemaIntegrationTest` 를 고친다(거래 삽입 헬퍼). 먼저 merge 되는 쪽 뒤에서 충돌을 풀어야 한다.
 - 뒤 PR(A1b, A2a, A2b)을 로컬에서 이어 구현하며 이 스키마를 검증하는 중이다. 바뀔 수 있는 곳은 `judgment_run_item` 의 PENDING 과 `judgment_override.transaction_id` 다.
 - docs/architecture.md "구현 범위" 의 "판정 영속성 미착수" 는 이미 낡았다. mock 교체 PR 에서 고치기로 한 계획대로 손대지 않았다.
+
+## 05:30 Codex 리뷰 반영: 참조 FK 는 커밋 때 검사, 업그레이드 테스트 (A1a)
+
+- 커밋: 1개
+- 주요파일: V7__judgment_runs_and_delete_policy.sql, JudgmentSchemaIntegrationTest.java, JudgmentRunsMigrationUpgradeIntegrationTest.java, docs/architecture.md
+
+### 한 일
+
+- Codex(gpt-5.6-sol, high) 리뷰를 받았다. 지적 3개 중 2개를 반영했다.
+- 참조 FK 를 `ON DELETE CASCADE` 에서 `NO ACTION DEFERRABLE INITIALLY DEFERRED` 로 바꿨다.
+  - 대상은 judgment origin 4개, `judgment_override.source_judgment_id`, `question_queue.answered_fact_id` 다.
+  - 소유 FK(batch → 거래 → 판정, batch → run 등)는 그대로 CASCADE 다.
+- 테스트 `batch_referenced_by_another_batchs_judgment_is_not_deleted`: 다른 batch 의 run 을 가리키는 판정이 있으면 그 batch 삭제가 거부되고, 판정과 batch 가 남는다.
+- 테스트 `JudgmentRunsMigrationUpgradeIntegrationTest`: V5 스키마에 판정, 질문(대기/응답/취소), fact 를 넣고 이 마이그레이션을 적용한다.
+  - 상태 변환, 행 보존, `state` 삭제, 그 뒤 batch 삭제 연쇄를 확인한다.
+  - 대상 버전은 파일 설명("judgment runs and delete policy")으로 찾는다. merge 직전에 번호를 바꿔도 테스트를 고치지 않아도 된다.
+- docs/architecture.md 삭제 정책을 "소유 FK 만 CASCADE, 참조 FK 는 막고 커밋 때 검사" 로 고쳤다.
+
+### 왜 이렇게 했나
+
+- 리뷰 지적: 참조 FK 가 CASCADE 면 잘못 이어진 참조 하나(코드 버그)가 다른 batch 의 판정 이력을 조용히 지운다. 지금 코드는 같은 batch 안에서만 잇지만, 버그가 생기면 데이터 손실로 번진다.
+- 즉시 검사하는 NO ACTION 으로 바꾸니 batch 삭제는 됐지만 탈퇴가 실패했다(`judgment_trigger_user_fact_id_fkey`). 탈퇴는 사용자 → UserFact 와 사용자 → batch → 거래 → 판정 두 경로로 함께 지우는데, UserFact 가 먼저 지워질 때 남은 판정에 걸린다. 그래서 커밋 때 검사(DEFERRABLE INITIALLY DEFERRED)로 했다. 정상 삭제는 통과하고 잘못된 참조만 막힌다.
+- 업그레이드 테스트: 기존 테스트는 빈 DB 에만 적용해서 기존 행 변환과 제약 재생성을 보지 못했다. 손으로 한 번 확인했지만 회귀를 막지 못한다는 지적이다.
+- 반영하지 않은 지적 1개: "V7 이 V6(B2)보다 먼저 배포될 수 있다". merge 직전에 develop 최신 +1 로 번호를 바꾸는 절차로 해결한다(사용자와 합의).
+
+### 확인한 것
+
+- `test`·`integrationTest` 전부 통과(204개).
+- 일부러 깨 봤다. origin `run_id` 를 다시 CASCADE 로 바꾸면 교차 참조 테스트가 실패한다.
