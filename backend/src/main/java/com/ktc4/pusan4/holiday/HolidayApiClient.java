@@ -56,9 +56,17 @@ class HolidayApiClient {
             throw new IllegalStateException("Holiday API error " + header.path("resultCode").asText() + " "
                 + header.path("resultMsg").asText() + gatewayError);
         }
+        // 받은 항목이 totalCount 보다 적으면 잘린 응답이다. 그대로 쓰면 빠진 공휴일이 표에서 지워진다.
+        List<JsonNode> items = items(root);
+        int totalCount = root.path("response").path("body").path("totalCount").asInt();
+        if (items.size() != totalCount) {
+            throw new IllegalStateException(
+                "Holiday API returned " + items.size() + " of " + totalCount + " items for " + year
+            );
+        }
         // 같은 날 공휴일이 둘이면 따로 온다(2025-05-05 어린이날·부처님오신날). 날짜당 한 행으로 합친다.
         Map<LocalDate, String> names = new LinkedHashMap<>();
-        for (JsonNode item : items(root)) {
+        for (JsonNode item : items) {
             if ("Y".equals(item.path("isHoliday").asText())) {
                 names.merge(
                     LocalDate.parse(item.path("locdate").asText(), DateTimeFormatter.BASIC_ISO_DATE),

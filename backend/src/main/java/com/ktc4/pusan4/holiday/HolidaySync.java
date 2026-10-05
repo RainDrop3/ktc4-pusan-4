@@ -58,7 +58,14 @@ class HolidaySync {
             log.info("{}년 공휴일 응답이 비어 기존 값을 유지한다", year);
             return;
         }
-        calendar.replaceYear(year, holidays);
+        // 저장 실패도 기동을 막지 않는다. 기동 직후 동기화는 ApplicationReadyEvent 에서 돌아서,
+        // 여기서 던지면 애플리케이션이 뜨지 못한다.
+        try {
+            calendar.replaceYear(year, holidays);
+        } catch (RuntimeException e) {
+            log.warn("{}년 공휴일을 저장하지 못해 기존 값을 유지한다", year, e);
+            return;
+        }
         log.info("{}년 공휴일 {}건을 반영했다", year, holidays.size());
     }
 }

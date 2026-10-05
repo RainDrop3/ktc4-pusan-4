@@ -89,6 +89,20 @@ class HolidayApiClientTest {
     }
 
     @Test
+    void truncated_response_fails_instead_of_returning_fewer_holidays() {
+        server.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+            .andRespond(withSuccess("""
+                {"response":{"header":{"resultCode":"00","resultMsg":"NORMAL SERVICE."},
+                "body":{"items":{"item":{"dateKind":"01","dateName":"한글날","isHoliday":"Y","locdate":20251009,"seq":1}},
+                "numOfRows":100,"pageNo":1,"totalCount":20}}}
+                """, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.fetch(2025))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("1 of 20");
+    }
+
+    @Test
     void configured_only_with_a_key() {
         assertThat(client.configured()).isTrue();
         assertThat(new HolidayApiClient(RestClient.builder(), BASE_URL, "").configured()).isFalse();
