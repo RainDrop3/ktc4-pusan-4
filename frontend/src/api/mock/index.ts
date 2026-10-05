@@ -12,6 +12,7 @@ import type {
   Page,
   Question,
   QuestionPage,
+  UnresolvedPage,
   Transaction,
   UploadBatch,
   UserInclusion,
@@ -195,6 +196,18 @@ const filterReviews = (status?: string) =>
 status ? store.reviews.filter((r) => r.status.code === status) : store.reviews;
 
 /** 페이지네이션과 무관한 미해소 집계 (3.9) */
+/** 3.5 분류 확인의 미해소 집계. PENDING 리뷰 전체 기준이라 page·size 와 무관하다 */
+const withReviewUnresolved = <T,>(page: Page<T>): UnresolvedPage<T> => {
+  const pending = filterReviews('PENDING');
+  return {
+    ...page,
+    unresolved: {
+      count: pending.length,
+      amount: pending.reduce((sum, r) => sum + (transactionOf(r.transactionId)?.amount ?? 0), 0)
+    }
+  };
+};
+
 const withUnresolved = <T,>(page: Page<T>): QuestionPage<T> => {
   const pending = liveGroups().filter((g) => !store.answers.has(g.groupKey));
   return {
@@ -578,7 +591,8 @@ export const mockApi: Api = {
   },
 
   classificationReviews: {
-    list: (q) => delay(paginate(filterReviews(q?.status), q?.page, q?.size ?? 20)),
+    list: (q) =>
+    delay(withReviewUnresolved(paginate(filterReviews(q?.status), q?.page, q?.size ?? 20))),
     grouped: (q) => {
       // 서버는 카드사 트랙(사업자번호/문자열)까지 섞어 묶으므로 같은 merchantNorm 이
       // 다른 그룹으로 갈릴 수 있다. 목업도 그 상황을 만들어 둔다 (#63 리뷰).
@@ -588,15 +602,32 @@ export const mockApi: Api = {
         const key = `merchant:${r.merchantNorm}${track}`;
         byMerchant.set(key, [...(byMerchant.get(key) ?? []), r]);
       });
-      const items: ClassificationReviewGroup[] = [...byMerchant].map(([groupKey, rows]) => ({
-        groupKey,
-        reviewIds: rows.map((r) => r.id),
-        count: rows.length,
-        totalAmount: rows.reduce((sum, r) => sum + (transactionOf(r.transactionId)?.amount ?? 0), 0),
-        merchantRaw: rows[0].merchantRaw,
-        suggestedCategories: rows[0].suggestedCategories
-      }));
-      return delay(paginate(items, q?.page, q?.size ?? 20));
+      const items: ClassificationReviewGroup[] = [...byMerchant].map(([groupKey, rows]) => {
+        // 승인일 오름차순, 같으면 transactionId 오름차순 (api.md 3.5)
+        const transactions = rows.
+        map((r) => ({ review: r, t: transactionOf(r.transactionId) })).
+        filter((x): x is { review: ClassificationReview; t: Transaction } => Boolean(x.t)).
+        map(({ review, t }) => ({
+          reviewId: review.id,
+          transactionId: t.id,
+          approvedAt: t.approvedAt,
+          merchantRaw: t.merchantRaw,
+          amount: t.amount,
+          installmentMonths: t.installmentMonths
+        })).
+        sort((a, b) => a.approvedAt.localeCompare(b.approvedAt) || a.transactionId.localeCompare(b.transactionId));
+        return {
+          groupKey,
+          merchantNorm: rows[0].merchantNorm,
+          reviewIds: rows.map((r) => r.id),
+          count: rows.length,
+          totalAmount: transactions.reduce((sum, t) => sum + t.amount, 0),
+          merchantRaw: transactions[0]?.merchantRaw ?? rows[0].merchantRaw,
+          suggestedCategories: rows[0].suggestedCategories,
+          transactions
+        };
+      });
+      return delay(withReviewUnresolved(paginate(items, q?.page, q?.size ?? 20)));
     },
     respond: ({ reviewIds, merchantCategory }) => {
       if (merchantCategory === '미분류')

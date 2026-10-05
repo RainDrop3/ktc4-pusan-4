@@ -181,14 +181,31 @@ export interface ClassificationReview {
   resolvedAt: string | null;
 }
 
+/** 그룹에 묶인 Review 하나의 거래 요약. 필드 뜻은 GET /transactions 와 같다 */
+export interface ClassificationReviewTransaction {
+  reviewId: string;
+  transactionId: string;
+  approvedAt: string;
+  merchantRaw: string;
+  amount: number;
+  installmentMonths: number;
+}
+
 export interface ClassificationReviewGroup {
+  /** 형식을 보장하지 않는다. 파싱하지 않는다 */
   groupKey: string;
+  /** 그룹 안 Review 들이 공유하는 정규화 이름. 그룹 제목은 이 값을 쓴다 */
+  merchantNorm: string;
   reviewIds: string[];
-  /** 항상 reviewIds.length 와 같다 */
+  /** 항상 reviewIds.length · transactions.length 와 같다 */
   count: number;
+  /** transactions[].amount 의 합 */
   totalAmount: number;
+  /** 그룹 대표 표기(첫 거래). 표기가 여러 개면 transactions[].merchantRaw 를 본다 */
   merchantRaw: string;
   suggestedCategories: string[];
+  /** 묶인 Review 마다 하나씩. 잘라내지 않고 전부 온다 */
+  transactions: ClassificationReviewTransaction[];
 }
 
 export interface ClassificationResponseRequest {
@@ -338,9 +355,13 @@ export interface UnresolvedSummary {
   amount: number;
 }
 
-export interface QuestionPage<T> extends Page<T> {
+/** 미해소 집계를 함께 주는 목록 응답. grouped 여부와 무관하게 항상 온다 (3.5 · 3.9) */
+export interface UnresolvedPage<T> extends Page<T> {
   unresolved: UnresolvedSummary;
 }
+
+/** 3.9 질문 목록. UnresolvedPage 와 같은 모양이다 */
+export type QuestionPage<T> = UnresolvedPage<T>;
 
 export interface QuestionResponseRequest {
   questionIds: string[];
