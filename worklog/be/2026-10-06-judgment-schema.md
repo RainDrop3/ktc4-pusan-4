@@ -183,3 +183,23 @@
 - 공휴일 집합은 rules_commit_sha 로 복원되지 않는다. 같은 SHA·같은 거래라도 공휴일 표가 바뀌면(임시공휴일 추가) 재판정 결과가 달라진다.
 - 운영 `statute_version` 이 `law_sync.py` 로 채워져 있지 않으면 인용이 있는 판정은 모두 실패한다. 배포 전에 확인해야 한다.
 - B2·B1b 브랜치를 로컬 merge 한 상태다. 두 PR 이 리뷰로 바뀌면 이 브랜치부터 다시 맞춰야 한다.
+
+## 03:40 java -jar 기동 시 rules 경로 변환 실패를 고친다 (A2a 후속)
+
+- 커밋: 1개
+- 주요파일: RuleSetConfiguration.java
+
+### 한 일
+
+- `@Value("${app.rules.dir}") Path` 주입을 `String` 으로 받아 `Path.of` 로 바꾸게 했다.
+
+### 왜 이렇게 했나
+
+- A2h 를 실제 키로 확인하려고 `java -jar` 로 띄우니 부팅이 실패했다. "The resource path [/../rules] has been normalized to [null]".
+  - Spring 이 문자열을 `Path` 로 바꿀 때 리소스 경로로 먼저 해석하는데, jar 안에서는 상대 경로 `../rules` 를 만들지 못한다.
+- 테스트(@SpringBootTest, 압축 안 푼 클래스패스)와 이미지(절대 경로 `/app/rules`)에서는 드러나지 않았다. 로컬 `bootJar` 실행에서만 걸린다.
+
+### 확인한 것
+
+- `bootJar` 로 만든 jar 를 backend/ 에서 빈 Postgres 에 붙여 띄웠다. 기동했다.
+- `test`·`integrationTest` 전부 통과.
