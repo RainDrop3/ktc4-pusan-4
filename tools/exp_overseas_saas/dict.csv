@@ -96,7 +96,6 @@ VULTR,Vultr,해외SaaS,comparedge:cloud-hosting
 LINODEAKAMAICLOUD,Linode (Akamai Cloud),해외SaaS,comparedge:cloud-hosting
 LINODE,Linode (Akamai Cloud),해외SaaS,comparedge:cloud-hosting
 GOOGLECLOUDPLATFORM,Google Cloud Platform,해외SaaS,comparedge:cloud-hosting
-CLOUD,Google Cloud Platform,해외SaaS,comparedge:cloud-hosting
 MICROSOFTAZURE,Microsoft Azure,해외SaaS,comparedge:cloud-hosting
 AZURE,Microsoft Azure,해외SaaS,comparedge:cloud-hosting
 A2HOSTING,A2 Hosting,해외SaaS,comparedge:cloud-hosting
@@ -112,7 +111,6 @@ INVISION,InVision,해외SaaS,comparedge:design-tools
 INVISIONAPP,InVision,해외SaaS,comparedge:design-tools
 PENPOT,Penpot,해외SaaS,comparedge:design-tools
 AFFINITYDESIGNER,Affinity Designer,해외SaaS,comparedge:design-tools
-AFFINITY,Affinity Designer,해외SaaS,comparedge:design-tools
 ADOBEILLUSTRATOR,Adobe Illustrator,해외SaaS,comparedge:design-tools
 ADOBEPHOTOSHOP,Adobe Photoshop,해외SaaS,comparedge:design-tools
 LUNACY,Lunacy,해외SaaS,comparedge:design-tools
@@ -144,7 +142,6 @@ HURDLR,Hurdlr,해외SaaS,comparedge:accounting
 PATRIOTSOFTWARE,Patriot Software,해외SaaS,comparedge:accounting
 ZOOM,Zoom,해외SaaS,comparedge:video-conferencing
 GOOGLEMEET,Google Meet,해외SaaS,comparedge:video-conferencing
-MEET,Google Meet,해외SaaS,comparedge:video-conferencing
 MICROSOFTTEAMS,Microsoft Teams,해외SaaS,comparedge:video-conferencing
 MICROSOFT,Microsoft Teams,해외SaaS,comparedge:video-conferencing
 WHEREBY,Whereby,해외SaaS,comparedge:video-conferencing
@@ -223,7 +220,6 @@ MAKE,Make (Integromat),해외SaaS,comparedge:ai-agents
 PERPLEXITYAI,Perplexity AI,해외SaaS,comparedge:ai-productivity
 PERPLEXITY,Perplexity AI,해외SaaS,comparedge:ai-productivity
 OPENAIAPI,OpenAI API,해외SaaS,comparedge:llm
-PLATFORM,OpenAI API,해외SaaS,comparedge:llm
 HUGGINGFACE,Hugging Face,해외SaaS,comparedge:llm
 REPLICATE,Replicate,해외SaaS,comparedge:llm
 WRITESONIC,Writesonic,해외SaaS,comparedge:ai-writing
@@ -235,7 +231,6 @@ SUDOWRITE,Sudowrite,해외SaaS,comparedge:ai-writing
 PROWRITINGAID,ProWritingAid,해외SaaS,comparedge:ai-writing
 COPYSMITH,Copysmith,해외SaaS,comparedge:ai-writing
 AI21STUDIO,AI21 Studio,해외SaaS,comparedge:ai-writing
-STUDIO,AI21 Studio,해외SaaS,comparedge:ai-writing
 CANVAAI,Canva AI,해외SaaS,comparedge:ai-image
 IDEOGRAM,Ideogram,해외SaaS,comparedge:ai-image
 KLINGAI,Kling AI,해외SaaS,comparedge:ai-image
@@ -276,7 +271,6 @@ ELICIT,Elicit,해외SaaS,comparedge:ai-productivity
 SUNO,Suno,해외SaaS,comparedge:ai-voice
 UDIO,Udio,해외SaaS,comparedge:ai-voice
 ADOBEPODCASTENHANCE,Adobe Podcast (Enhance),해외SaaS,comparedge:ai-voice
-PODCAST,Adobe Podcast (Enhance),해외SaaS,comparedge:ai-voice
 OTTERAI,Otter.ai,해외SaaS,comparedge:ai-productivity
 OTTER,Otter.ai,해외SaaS,comparedge:ai-productivity
 FIREFLIESAI,Fireflies.ai,해외SaaS,comparedge:ai-productivity
@@ -454,7 +448,6 @@ ADDTOANY,AddToAny,해외SaaS,companyenrich:technology
 NOUNPROJECT,Noun Project,해외SaaS,companyenrich:design
 THENOUNPROJECT,Noun Project,해외SaaS,companyenrich:design
 ZSTANDARD,Zstandard,해외SaaS,companyenrich:software
-FACEBOOK,Zstandard,해외SaaS,companyenrich:software
 BITDEFENDER,Bitdefender,해외SaaS,companyenrich:cybersecurity
 OPTIMIZELY,Optimizely,해외SaaS,companyenrich:software
 PODBEAN,Podbean,해외SaaS,companyenrich:podcasting
