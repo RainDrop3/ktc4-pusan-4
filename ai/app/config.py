@@ -13,5 +13,6 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
     law_api_oc: str = "test"
+    team_discord_webhook: str | None = None
 
 settings = Settings()
