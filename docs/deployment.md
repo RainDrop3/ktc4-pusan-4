@@ -25,7 +25,7 @@ Repository **Settings → Secrets and variables → Actions → Variables**에 �
 | `EC2_INSTANCE_ID` | 제공된 EC2의 `i-...` ID |
 | `DOMAIN` | DuckDNS에서 발급한 호스트 이름 |
 
-워크플로는 `id-token: write`와 `contents: read`로 OIDC 임시 자격증명을 얻는다. AWS 액세스 키나 SSH 개인키를 GitHub Secrets에 넣지 않는다. `release` 브랜치는 PR 검토를 요구하도록 보호한다. `AWS release`의 `backend`, `ai`, `web` 검증이 통과한 커밋만 승격한다.
+워크플로는 `id-token: write`와 `contents: read`로 OIDC 임시 자격증명을 얻는다. AWS 액세스 키나 SSH 개인키를 GitHub Secrets에 넣지 않는다. `release` 브랜치는 PR 검토를 요구하도록 보호한다. `AWS release`의 `backend`, `ai`, `web` 검증이 통과한 커밋만 승격한다. PR에서는 이 세 검증이 배포와 같은 Dockerfile로 이미지까지 빌드한다(push는 하지 않는다). 레포 구조가 바뀌어 Dockerfile이 깨지면 배포가 아니라 그 PR에서 실패한다. `release`로 가는 PR은 이 레포의 `develop`에서만 연다. `Release source`의 `release-source` 체크가 다른 브랜치나 fork에서 온 PR을 실패시키며, 이 체크도 `release` ruleset의 필수 체크로 등록한다. 이 체크는 `pull_request_target`으로 기본 브랜치(`develop`)에 있는 워크플로 파일을 실행하므로, PR 안에서 파일을 고쳐 통과시킬 수 없다. GitHub은 2025-12-08부터 `pull_request_target`을 base가 아닌 기본 브랜치의 파일로 실행한다([변경 공지](https://github.blog/changelog/2025-11-07-actions-pull_request_target-and-environment-branch-protections-changes/)).
 
 ## 3. EC2 최초 준비
 
@@ -60,6 +60,22 @@ curl -I "https://<도메인>/"
 ```
 
 `docker compose ps`에서 PostgreSQL·백엔드·AI가 healthy이고 웹 컨테이너가 running이어야 한다. 브라우저에서 `/`, `/upload`를 새로고침해 SPA 라우팅을 확인한다. 백엔드 `/actuator/health`와 AI `/health/db`는 컨테이너 내부 검사로 확인하며 외부에 공개하지 않는다. `docker stats`와 `df -h`로 4GB 메모리·50GB 디스크 사용량을 확인한다.
+
+Compose는 기존 백엔드를 내린 뒤 새 백엔드를 띄우고, 새 백엔드가 부팅하면서 Flyway를 실행한다. 마이그레이션이 실패하면 그 시점부터 서비스가 멈추므로 5절의 롤백 명령으로 이전 SHA를 다시 배포한다. 마이그레이션 작성 규칙은 `db/README.md`를 따른다.
+
+### PostgreSQL이 다시 시작되는 변경
+
+DB는 평소 배포에서 그대로 유지된다. 아래 변경이 포함된 배포에서만 postgres 컨테이너가 다시 만들어지며, 재시작하는 동안 백엔드와 AI가 DB에 접속하지 못한다. 데이터는 `postgres-data` 볼륨에 남는다. 이런 PR은 본문에 DB 재시작을 적고 리뷰한다.
+
+- `docker/postgres/` 아래 파일. 디렉터리 트리 해시가 이미지 태그라 태그가 바뀐다.
+- `deploy/compose.yaml`의 `postgres` 서비스 정의(이미지, 환경 변수, 볼륨, `mem_limit`, healthcheck).
+- `/etc/ktc4/production.env`의 `DB_NAME`·`DB_USERNAME`·`DB_PASSWORD`.
+
+다음은 재시작만으로 해결되지 않는다.
+
+- PostgreSQL 메이저 버전(`pgvector/pgvector:pg17`의 `17`)을 올리면 기존 데이터 디렉터리를 읽지 못해 DB가 뜨지 않는다. 덤프·복원을 포함한 별도 업그레이드 작업으로 진행한다.
+- `POSTGRES_*` 환경 변수와 `docker/postgres/init.sql`은 볼륨이 비어 있을 때 한 번만 적용된다. `DB_PASSWORD`를 바꾸려면 DB에서 `ALTER ROLE`로 먼저 바꾼 뒤 환경 파일을 맞추고, 확장을 추가하려면 운영 DB에 `CREATE EXTENSION`을 직접 실행한다.
+- 운영에서 `docker compose down -v`를 실행하지 않는다. `postgres-data` 볼륨이 삭제된다. `db/README.md`의 볼륨 삭제 안내는 로컬 전용이다.
 
 ## 5. 백업과 복구
 
