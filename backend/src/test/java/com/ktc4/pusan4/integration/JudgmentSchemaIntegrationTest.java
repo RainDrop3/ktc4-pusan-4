@@ -149,6 +149,32 @@ class JudgmentSchemaIntegrationTest {
     }
 
     @Test
+    void batch_referenced_by_another_batchs_judgment_is_not_deleted() {
+        UUID userId = UUID.randomUUID();
+        UUID batchId = UUID.randomUUID();
+        insertDerivedGraph(userId, batchId, "cross-origin");
+        UUID runId = jdbcTemplate.queryForObject(
+            "select id from judgment_run where batch_id = ?", UUID.class, batchId
+        );
+        UUID otherBatchId = UUID.randomUUID();
+        UUID otherTransactionId = UUID.randomUUID();
+        UUID wronglyLinkedJudgmentId = UUID.randomUUID();
+        insertBatch(otherBatchId, userId, "cross-origin-other-file-hash");
+        insertTransaction(otherTransactionId, otherBatchId, "cross-origin-other-natural-key");
+        // 다른 batch 의 run 을 origin 으로 가리키는 잘못된 판정
+        insertOriginJudgment(wronglyLinkedJudgmentId, otherTransactionId, 1, "run_id", runId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update("delete from upload_batch where id = ?", batchId))
+            .isInstanceOf(DataAccessException.class);
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from judgment where id = ?", Integer.class, wronglyLinkedJudgmentId
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from upload_batch where id = ?", Integer.class, batchId
+        )).isEqualTo(1);
+    }
+
+    @Test
     void transaction_can_have_only_one_active_override() {
         UUID userId = UUID.randomUUID();
         UUID batchId = UUID.randomUUID();

@@ -193,10 +193,16 @@ flowchart TD
 - **batch 삭제**: `upload_batch`를 지우면 그 업로드에서 파생된 행이 함께 지워진다. 거래, 분류 확인, run과 run 항목, 판정 revision 전부, 인용, 질문, batch 범위 UserFact, override, 미매칭 로그, 한도 배분이 대상이다(`api.md` §6).
 - **탈퇴**: `app_user`를 지우면 사용자 소유 행(문진 Context, batch와 위의 파생 행, UserFact, 개인 `merchant_dict`, 한도 배분)이 지워진다.
 - **남는 것**: 공용 `statute_version`, 전역 `merchant_dict`(`user_id IS NULL`), `rule_candidate`. 앞의 둘은 사용자 데이터가 아니고, `rule_candidate`는 사용자 FK 없이 집계만 담는다.
-- **revision을 직접 지우는 경로는 없다.** 판정 이력은 append-only이고, 지워지는 건 batch나 사용자를 지울 때뿐이다. 그래서 origin FK(`judgment.run_id` 등)도 CASCADE로 두었다. origin 행이 지워지는 건 같은 batch가 지워질 때뿐이다.
-- 질문의 `answered_fact_id`도 CASCADE다. SET NULL로 두면 "ANSWERED면 답변 fact 필수" CHECK와 부딪힌다.
+- **소유 FK만 CASCADE다.** 소유 경로는 batch → 거래 → 판정, batch → run, 사용자 → batch 같은 것이다. revision을 직접 지우는 경로는 없고(append-only), 판정은 거래를 거쳐서만 지워진다.
+- **참조 FK는 지우지 않고 막는다.** 판정의 origin 4개(`run_id` 등), override의 `source_judgment_id`, 질문의 `answered_fact_id`가 여기에 해당한다(NO ACTION).
+  - 참조까지 CASCADE면 잘못 이어진 참조 하나가 다른 batch의 이력을 조용히 지운다. 예를 들어 다른 batch의 run을 가리키는 판정이 있으면, 그 batch를 지울 때 이 판정까지 사라진다.
+  - 막아 두면 그런 삭제는 실패하고 데이터가 남는다.
+- **참조 FK는 커밋 때 검사한다**(`DEFERRABLE INITIALLY DEFERRED`). 즉시 검사하면 탈퇴처럼 여러 경로로 함께 지워질 때 순서에 따라 실패한다. 예를 들어 사용자 → UserFact가 batch → 거래 → 판정보다 먼저 지워지면 아직 남은 판정에 걸린다.
+- `answered_fact_id`를 SET NULL로 두지 않은 건 "ANSWERED면 답변 fact 필수" CHECK와 부딪히기 때문이다.
 
-`JudgmentSchemaIntegrationTest`가 테이블마다 행을 하나 이상 채운 뒤 batch 삭제와 탈퇴를 각각 확인한다.
+테스트가 세 가지를 확인한다.
+- `JudgmentSchemaIntegrationTest`: 테이블마다 행을 채운 뒤 batch 삭제와 탈퇴, 다른 batch를 잘못 가리키는 참조가 있을 때 삭제가 막히는지.
+- `JudgmentRunsMigrationUpgradeIntegrationTest`: 행이 있는 DB에 마이그레이션을 적용했을 때 기존 행이 보존·변환되는지.
 
 ### 관련 문서
 

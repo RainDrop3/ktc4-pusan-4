@@ -69,10 +69,11 @@ CREATE INDEX idx_classification_review_transaction
 -- 3) 사용자 판정 수정 (api.md §3.8). 해제해도 지우지 않고 active=false 로 남긴다.
 --    transaction_id 는 api.md 컬럼 목록에 없지만, "거래당 활성 Override 하나"를
 --    DB 가 보장하려면 부분 UNIQUE 를 걸 컬럼이 이 테이블에 있어야 한다.
+--    source_judgment_id 는 소유가 아니라 참조라 CASCADE 가 아니다. 아래 4) 의 "참조 FK" 설명을 본다.
 CREATE TABLE judgment_override (
     id uuid PRIMARY KEY,
     transaction_id uuid NOT NULL REFERENCES transaction(id) ON DELETE CASCADE,
-    source_judgment_id uuid NOT NULL REFERENCES judgment(id) ON DELETE CASCADE,
+    source_judgment_id uuid NOT NULL REFERENCES judgment(id) DEFERRABLE INITIALLY DEFERRED,
     to_verdict varchar(30) NOT NULL
         CHECK (to_verdict IN ('AVAILABLE', 'UNAVAILABLE', 'NEEDS_REVIEW')),
     reason text,
@@ -91,11 +92,19 @@ CREATE INDEX idx_judgment_override_source_judgment
 
 -- 4) judgment revision 의 직접 원인 (api.md §4). 다형 origin_type/origin_id 대신 실제 FK 4개를 둔다.
 --    지금은 nullable 이다. "정확히 하나" CHECK 는 저장 코드가 origin 을 채운 뒤 건다.
+--
+--    참조 FK (origin 4개, override.source_judgment_id, question_queue.answered_fact_id)
+--    판정은 거래를 거쳐서만 지워진다(transaction → judgment CASCADE). 참조 FK 까지 CASCADE 면
+--    잘못 이어진 참조 하나(다른 batch 의 run 을 가리키는 판정 등)가 다른 batch 의 이력을 조용히 지운다.
+--    그래서 참조 FK 는 지우지 않고 막는다(NO ACTION). DEFERRABLE INITIALLY DEFERRED 로 커밋 때 검사한다.
+--    즉시 검사하면 탈퇴처럼 여러 경로로 함께 지워질 때 순서에 따라 아직 남은 행에 걸려 실패한다
+--    (user_fact 가 판정보다 먼저 지워지는 경우를 테스트로 확인).
 ALTER TABLE judgment
-    ADD COLUMN run_id uuid REFERENCES judgment_run(id) ON DELETE CASCADE,
-    ADD COLUMN trigger_user_fact_id uuid REFERENCES user_fact(id) ON DELETE CASCADE,
-    ADD COLUMN classification_review_id uuid REFERENCES classification_review(id) ON DELETE CASCADE,
-    ADD COLUMN judgment_override_id uuid REFERENCES judgment_override(id) ON DELETE CASCADE;
+    ADD COLUMN run_id uuid REFERENCES judgment_run(id) DEFERRABLE INITIALLY DEFERRED,
+    ADD COLUMN trigger_user_fact_id uuid REFERENCES user_fact(id) DEFERRABLE INITIALLY DEFERRED,
+    ADD COLUMN classification_review_id uuid
+        REFERENCES classification_review(id) DEFERRABLE INITIALLY DEFERRED,
+    ADD COLUMN judgment_override_id uuid REFERENCES judgment_override(id) DEFERRABLE INITIALLY DEFERRED;
 
 CREATE INDEX idx_judgment_run ON judgment(run_id);
 CREATE INDEX idx_judgment_trigger_user_fact ON judgment(trigger_user_fact_id);
@@ -137,12 +146,13 @@ ALTER TABLE judgment
     ADD CONSTRAINT judgment_transaction_id_fkey
         FOREIGN KEY (transaction_id) REFERENCES transaction(id) ON DELETE CASCADE;
 
--- 답변 fact 가 지워지는 건 batch 삭제 때뿐이고, 그때 질문도 함께 지워진다.
+-- 답변 fact 도 참조 FK 다(4) 참고). 질문은 판정과 함께 지워지고, fact 는 batch 와 함께 지워진다.
+-- 커밋 때 검사하므로 두 경로로 함께 지워져도 통과한다.
 -- SET NULL 로 두면 "ANSWERED 면 fact 필수" CHECK 와 부딪힌다.
 ALTER TABLE question_queue
     DROP CONSTRAINT question_queue_answered_fact_id_fkey,
     ADD CONSTRAINT question_queue_answered_fact_id_fkey
-        FOREIGN KEY (answered_fact_id) REFERENCES user_fact(id) ON DELETE CASCADE;
+        FOREIGN KEY (answered_fact_id) REFERENCES user_fact(id) DEFERRABLE INITIALLY DEFERRED;
 
 -- 탈퇴(DELETE /users/me)하면 사용자 소유 데이터를 모두 지운다. 공용 statute_version·전역 merchant_dict 는 남는다.
 ALTER TABLE user_context
