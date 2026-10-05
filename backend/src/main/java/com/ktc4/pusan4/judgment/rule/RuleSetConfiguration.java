@@ -15,8 +15,10 @@ import java.nio.file.Path;
 @Configuration
 class RuleSetConfiguration {
 
+    // 문자열로 받아 직접 Path 로 바꾼다. Path 로 바로 주입하면 Spring 이 리소스 경로로 해석해,
+    // java -jar 로 띄울 때 상대 경로 "../rules" 를 변환하지 못하고 부팅이 실패한다(테스트에서는 드러나지 않는다).
     @Bean
-    RuleSet ruleSet(@Value("${app.rules.dir}") Path rulesDirectory) throws IOException {
-        return new RuleCardLoader().load(rulesDirectory);
+    RuleSet ruleSet(@Value("${app.rules.dir}") String rulesDirectory) throws IOException {
+        return new RuleCardLoader().load(Path.of(rulesDirectory));
     }
 }
