@@ -2,6 +2,10 @@ package com.ktc4.pusan4.shared.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ktc4.pusan4.judgment.api.JudgmentMockData;
+import com.ktc4.pusan4.judgment.domain.JudgmentRun;
+import com.ktc4.pusan4.judgment.domain.JudgmentRunFailure;
+import com.ktc4.pusan4.judgment.domain.JudgmentRunStatus;
+import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
 import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
 import com.ktc4.pusan4.shared.auth.TemporaryCurrentUserProvider;
@@ -19,6 +23,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,6 +41,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -67,6 +73,9 @@ class ApiResponseContractTest {
     @MockitoBean
     private BusinessContextService contextService;
 
+    @MockitoBean
+    private JudgmentRunService runService;
+
     @BeforeEach
     void stubServices() {
         given(userService.get(any())).willReturn(new AppUser(
@@ -79,6 +88,15 @@ class ApiResponseContractTest {
         given(contextService.create(any(), any())).willReturn(context);
         given(contextService.current(any())).willReturn(context);
         given(contextService.history(any())).willReturn(List.of(context));
+
+        JudgmentRun run = new JudgmentRun(UUID.fromString(ID), UUID.fromString(ID), UUID.fromString(ID), 1,
+            JudgmentRunStatus.QUEUED, 23, 0, 0, null, null);
+        given(runService.create(any(), any(), any())).willReturn(run);
+        given(runService.get(any(), any())).willReturn(run);
+        given(runService.failures(any(), any(), anyInt(),
+            anyInt())).willReturn(new PageImpl<>(List.of(new JudgmentRunFailure(
+                UUID.fromString(ID), "RULE_PROCESSING_FAILED", "조문 없음",
+                OffsetDateTime.parse("2026-09-12T14:05:00+09:00")))));
     }
 
     static Stream<Arguments> endpoints() {
