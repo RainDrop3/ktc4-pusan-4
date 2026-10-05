@@ -50,3 +50,33 @@
 - 마이그레이션 V6 은 B2(#84)와 번호가 겹친다. 나중에 merge 되는 쪽이 develop 최신 +1 로 이름을 바꾼다.
 - 운영 `/etc/ktc4/production.env` 에 `HOLIDAY_API_KEY`(Decoding 키)를 넣어야 동기화가 돈다.
 - 동기화로 공휴일이 바뀌어도 기존 판정을 자동으로 다시 돌리지는 않는다.
+
+## 06:00 Codex 리뷰 반영: 교체 직렬화, 잘린 응답 거부, 저장 실패 격리
+
+- 커밋: 1개
+- 주요파일: HolidayCalendar.java, PublicHolidayRepository.java, HolidayApiClient.java, HolidaySync.java
+
+### 한 일
+
+- Codex(gpt-5.6-sol, high) 리뷰 지적 3개를 모두 반영했다.
+- `replaceYear` 가 시작할 때 `lock table public_holiday in share row exclusive mode` 를 건다(`PublicHolidayRepository.lockForReplace`). 교체끼리만 막고 판정의 조회는 막지 않는다.
+- 받은 항목 수가 `totalCount` 와 다르면 `IllegalStateException` 을 던진다. 동기화는 이를 실패로 보고 기존 행을 유지한다.
+- `HolidaySync.syncYear` 가 저장 예외도 잡아 경고만 남긴다.
+- 테스트를 추가했다.
+  - 통합: 첫 교체가 쓰고 커밋하기 전에 두 번째 교체가 들어와도, 결과가 두 번째 응답과 정확히 같다(합집합이 아님).
+  - 단위: 잘린 응답("1 of 20")은 실패한다.
+  - 단위: 저장이 실패해도 예외가 밖으로 나가지 않고 나머지 해는 계속 동기화한다. 2026-01-01 00:30 KST(UTC 로는 2025년)에 2025·2026·2027 을 고르는 것도 함께 확인한다.
+
+### 왜 이렇게 했나
+
+- 동시 교체: 잠금이 없으면 뒤 교체의 삭제가 앞 교체가 넣은 행을 보지 못한다(READ COMMITTED). 뒤 교체의 저장은 merge 라 겹치는 날만 갱신한다. 그래서 두 응답의 합집합이 남는다. 기동 직후와 04:00 이 겹치거나 서버가 둘일 때 생길 수 있다.
+- 잘린 응답: 지금까지 그런 응답은 없었지만, 오면 빠진 공휴일이 조용히 지워진다. 검사는 한 줄이다.
+- 저장 실패: API 예외만 잡고 저장 예외는 잡지 않아서, 기동 순간의 DB 순단이 `ApplicationReadyEvent` 를 거쳐 애플리케이션 기동 실패로 이어졌다.
+- 기동이 최대 수십 초 늦어질 수 있다는 지적은 그대로 뒀다. 이 이벤트는 웹 서버가 요청을 받기 시작한 뒤에 돈다.
+
+### 확인한 것
+
+- `test`·`integrationTest` 전부 통과(212개).
+- 일부러 깨 봤다.
+  - 잠금 호출을 빼면 동시 교체 테스트가 실패한다(합집합이 남는다).
+  - 저장 예외 처리를 빼면 저장 실패 테스트가 실패한다.
