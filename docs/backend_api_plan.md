@@ -13,7 +13,7 @@
 | PR 크기 | 추가 줄 수는 1000줄 이하다. 테스트 코드, 마이그레이션 SQL, worklog를 모두 포함한 GitHub `+` 수치를 기준으로 한다. |
 | PR 수 | 기본 흐름은 27개(트랙 A 13, 트랙 B 14), 발표 기능은 3개(R1, R2, M1)다. 기본 흐름은 B10을 빼면 10/30에, B10까지 11/2에 끝난다. |
 | 시험 기간 | 10/19~10/23은 중간고사라 PR을 진행하지 않는다. 그 주에 있던 PR은 10/26 주로 한 주씩 미뤘다. |
-| 기본 흐름 범위 | 기본 흐름과 임시 사용자를 구현하고, 3주차에 인증을 도입한다. 리프레시 토큰 저장소로 Redis를 새로 도입한다. 공휴일 정적 YAML, 금액 계산 최소판, 분류 AI 연동, bulk-answer를 포함한다. |
+| 기본 흐름 범위 | 기본 흐름과 임시 사용자를 구현하고, 3주차에 인증을 도입한다. 리프레시 토큰 저장소로 Redis를 새로 도입한다. 공휴일 목록, 금액 계산 최소판, 분류 AI 연동, bulk-answer를 포함한다. |
 | 발표 기능 | 보고서(핸드오프 문서) 생성 1·2단계와 규칙 후보 관리자 API다. 발표에서 "AI 에이전트"를 설명하는 근거가 되는 기능이다. [발표 준비](#발표-준비)를 참고한다. |
 | 발표 이후 | 분류 웹 검색, 금액 계산 완전판, 승인 시 GitHub PR 자동 생성 |
 | 미룰 순서 | 기본 흐름이 밀리면 B10 분류 AI → A7 bulk-answer → A6 금액 계산 순서로 미룬다. 단, 인증 작업(B9a~B9c)은 미루지 않는다. |
@@ -68,7 +68,7 @@ gantt
     버퍼·회귀·데모 데이터        :buf, 2026-11-03, 3d
 
     section 결정 마감
-    공휴일 연도 범위             :milestone, d0, 2026-10-06, 0d
+    공휴일 방식·연도 범위        :milestone, d0, 2026-10-06, 0d
     인증·분류·금액·휴일 질문     :milestone, d1, 2026-10-16, 0d
     보고서 스펙·관리자 범위      :milestone, d2, 2026-10-26, 0d
 ```
@@ -210,7 +210,7 @@ flowchart LR
 | --- | --- | --- | --- |
 | A1a | A | 10/5 | 판정 쪽 스키마와 삭제 정책을 만든다. `judgment_run`, `judgment_run_item`, `judgment_override`, `classification_review` 테이블을 추가한다. `judgment`에는 origin 컬럼 4개를 추가하고 `state` 컬럼을 제거한다. `CHECK num_nonnulls(...)=1`은 기존 행을 채운 뒤 적용한다(운영 DB의 `judgment` 행 수를 먼저 확인한다). `user_fact.batch_id`를 추가하고 `question_queue.status`를 PENDING, ANSWERED, CANCELED로 변경한다. `judgment.transaction_id`처럼 cascade가 빠진 기존 FK도 api.md §6에 맞게 수정한다. |
 | A1b | A | 10/6 | 판정 엔티티와 저장 로직에 A1a의 변경 사항을 반영한다. `JudgmentService.save`가 origin을 받도록 변경하고 `JudgmentSchemaIntegrationTest`를 수정한다. |
-| A2a | A | 10/7 | 판정 실행기를 구현한다. `RuleCardLoader`를 통해 서버가 기동할 때 `RuleSet`을 한 번 로드해 빈으로 등록한다. 공휴일 정적 YAML(`rules/holidays/<연도>.yaml`)을 읽어 `judge(..., publicHolidays)`에 전달한다. 거래 1건을 판정하고 저장하는 `JudgmentExecutor`와 `rejudge(transactionIds, origin, contextVersion)`을 작성한다. `judge()` 자체는 순수 함수로 유지한다. |
+| A2a | A | 10/7 | 판정 실행기를 구현한다. `RuleCardLoader`를 통해 서버가 기동할 때 `RuleSet`을 한 번 로드해 빈으로 등록한다. 공휴일 목록을 [미리 정해야 할 것](#미리-정해야-할-것)에서 정한 방식으로 읽어 `judge(..., publicHolidays)`에 전달한다. 거래 1건을 판정하고 저장하는 `JudgmentExecutor`와 `rejudge(transactionIds, origin, contextVersion)`을 작성한다. `judge()` 자체는 순수 함수로 유지한다. |
 | A2b | A | 10/8 | `POST /judgment-runs`(202 QUEUED), `GET /judgment-runs/{id}`, `/failures`를 구현한다. 트랜잭션이 커밋된 뒤 `@Async`로 비동기 실행한다. 건별 실패 내역은 `judgment_run_item`에 기록한다. 대상은 `effectiveStatus=JUDGEABLE`이면서 `classificationStatus=CLASSIFIED`인 거래다. |
 | B2 | B | 10/5 | 거래 스키마를 api.md에 맞춘다. `transaction.user_id`를 추가하고 기존 행을 채운 뒤 FK를 적용한다. 전역 `UNIQUE(natural_key)`는 `UNIQUE(user_id, natural_key)`로 변경한다. `status` 하나를 `source_status`, `user_inclusion`, `classification_status`로 나눈다. `installment_months`는 기본값을 0으로, CHECK를 `>= 0`으로 변경한다. 업로드로 받는 `approval_no`, `biz_no`, `branch`, `branch_raw`, `memo`, `is_aggregated`, `needs_review`, `review_reason`, `source_card` 컬럼을 추가한다(`docs/schema_mapping.md`). `UNIQUE(user_id, file_hash)`는 `upload_batch`에 이미 있다. `TransactionRecordEntity`와 `UploadBatchEntity`에 전체 컬럼을 매핑한다. |
 | B1a | B | 10/6 | `CurrentUser` 리졸버와 임시 사용자 시드를 구현한다. `GET /users/me`를 구현하고 `app_user` 엔티티를 V1 테이블에 매핑한다. 첫 mock 교체 PR에서 패턴을 정한다. 탈퇴(`DELETE /users/me`)는 삭제 정책이 갖춰진 뒤 B6에서 구현한다. |
@@ -251,7 +251,7 @@ flowchart LR
 
 | PR | 트랙 | 날짜 | 내용 |
 | --- | --- | --- | --- |
-| B10 | B | 11/2 | 분류 AI를 연동한다. B3b 분류기에서 사전과 키워드로 분류하지 못한 가맹점만 모아 AI 서버의 분류 API를 한 번에 호출한다. 호출은 DB 트랜잭션을 열기 전에 수행한다. 타임아웃(3초 안팎)이 발생하거나 호출이 실패하면 해당 거래를 `미분류`로 둔다. 모델 결과는 전역 `merchant_dict`에 저장하지 않는다(`CONTEXT.md` 흔한 실수 #18). AI 쪽은 처음에 모두 `null`을 반환하는 stub으로 시작하고, 모델이 준비되면 AI 쪽만 교체한다. |
+| B10 | B | 11/2 | 분류 AI를 연동한다. B3b 분류기에서 사전과 키워드로 분류하지 못한 가맹점만 모아 분류 API를 한 번에 호출한다. 분류 API의 위치와 담당은 [미리 정해야 할 것](#미리-정해야-할-것)에서 정한다. 호출은 DB 트랜잭션을 열기 전에 수행한다. 타임아웃(3초 안팎)이 발생하거나 호출이 실패하면 해당 거래를 `미분류`로 둔다. 모델 결과는 전역 `merchant_dict`에 저장하지 않는다(`CONTEXT.md` 흔한 실수 #18). 분류 API는 처음에 모두 `null`을 반환하는 stub으로 시작하고, 모델이 준비되면 API 쪽만 교체한다. |
 | R2 | A | AI API 준비 후 | 보고서 2단계. AI 쪽 참고 조문 API가 11/2까지 준비되면 11/3에 진행한다. 늦어지면 11/4~11/5 버퍼로 옮긴다. |
 | 버퍼 | A·B | 11/3~11/5 | 밀린 PR, 회귀 수정, 누적 시나리오 테스트 보강, 데모 데이터(`CONTEXT.md` §15 히어로 시나리오) 준비 |
 
@@ -261,9 +261,9 @@ flowchart LR
 
 | 마감 | 결정 사항 | 대상 PR |
 | --- | --- | --- |
-| 10/6 | 공휴일 YAML 파일에 포함할 연도 범위 | A2a |
+| 10/6 | 공휴일 목록을 가져오는 방식과 연도 범위. 회의에서는 공휴일을 공공 API로 판단하기로 했다(`worklog/be/2026-09-30-holiday-flag.md`). 판정할 때마다 API를 호출할지, API 결과를 DB나 YAML에 저장해 두고 읽을지, 정적 YAML만 둘지 정한다. 판정할 때마다 호출하면 임시공휴일이 추가된 뒤 재판정 결과가 달라질 수 있고, API 장애가 판정 실패로 이어진다. | A2a |
 | 10/16 | 인증 방식(카카오 OAuth, 자체 JWT 등)과 인증 API 계약. 로그인·재발급·로그아웃 엔드포인트, 토큰 전달 위치(헤더 또는 쿠키), 액세스·리프레시 토큰 만료 기간, 로그아웃 범위를 api.md에 먼저 작성한다. 리프레시 토큰 저장소는 Redis로 확정했다. | B9b, B9c |
-| 10/16 | 분류 API 계약(AI 담당자와 협의). 배치 요청 `[{ merchantNorm, merchantRaw, bizNo? }]`, 응답 `[{ category 또는 null, confidence }]` 형태를 제안한다. cutoff 미만이면 `null`이다. AI 쪽 stub은 10/30까지 필요하다. | B10 |
+| 10/16 | 분류 단계 배치, 담당, 분류 API 계약(분류 실험 담당·AI 담당과 협의). 어느 분류 단계부터 AI 서버로 넘길지 먼저 정한다. `CONTEXT.md` §12는 분류를 AI 서버에 두지만, 단계별로 나눈 기록은 없고 서비스 구현도 아직 없다. 사전과 `keyword_rules.yaml`은 백엔드(B3b)에서 처리하고, 모델과 웹 검색만 AI 서버에 두는 것을 추천한다. 해외 SaaS 사전(PR #73)과 상권정보 매칭(PR #61)을 어느 쪽에 둘지, 분류 API를 누가 구현할지도 함께 정한다. AI 서버에 두는 경우 배치 요청 `[{ merchantNorm, merchantRaw, bizNo? }]`, 응답 `[{ category 또는 null, confidence }]` 형태를 제안한다. cutoff 미만이면 `null`이다. stub은 10/30까지 필요하다. | B10 |
 | 10/16 | 금액 계산 규칙. 안분과 부가세 중 무엇을 먼저 적용할지(`CONTEXT.md` 미결정 #6), 자산 판단과 상각방법 기본값을 정한다. | A6a |
 | 10/16 | 휴일 소명 질문의 bulk-answer 처리. 휴일 카드 4장(R-311~314)의 질문에 별도 fact_type(예: `휴일용도`)을 부여하는 방식을 추천한다. 그러면 api.md의 대상 규칙을 바꾸지 않아도 된다. 다른 방법은 api.md에 제외 규칙과 `skippedCount`의 의미를 추가하는 것이다. | A7 |
 | 10/26 | 보고서 스펙(AI 담당자와 협의). 1단계에 포함할 항목과 형식, 2단계 AI 참고 조문의 범위와 표시 방식, 핸드오프 임계값(`CONTEXT.md` 미결정 #8)을 정하고 api.md에 계약을 작성한다. | R1, R2 |
