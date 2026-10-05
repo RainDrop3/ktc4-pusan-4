@@ -47,3 +47,20 @@
 - 9/16 이후 만든 Langfuse 조직은 옛 조회 API(`GET /api/public/traces/...`)가 410 이다. 스크립트로 읽을 땐
   `observations.get_many(fields=...)` 를 쓴다
 - 후보 1건이 약 5 units 다
+
+## 15:59 PR #83 리뷰 반영 — 키 없을 때 경고 끄기, reindex 에 llm import 금지
+
+- 커밋: 30ec5b3 (1개)
+- 키가 없으면 langfuse 로거를 ERROR 로 올린다. 앞 절 "남은 것" 의 호출마다 찍히던
+  `Authentication error ... Client will be disabled` 경고가 사라진다. 키가 있을 때는 그대로다
+- `reindex.py` 의 import 자리에 `pipeline.llm` 을 import 하지 말라고 적었다
+
+왜:
+- 리뷰 2·3번 요청이다. 경고가 호출마다 찍히면 진짜 에러가 묻힌다
+- 로거 수준은 `Langfuse(...)` 생성 전에 올린다. 생성자가 찍는 첫 경고도 막아야 한다
+
+확인: 키 변수가 없을 때 · 빈 문자열일 때 모두 경고 없이 호출 정상, ruff · pytest 109 통과
+
+남은 것:
+- 리뷰 추가 항목: trace 입출력 원문이 Langfuse Cloud 로 나간다. 지금 규칙 후보는 업종 정보뿐이다. 판정처럼
+  사용자 거래가 들어가는 곳에 붙일 때는 카드 내역이 나가지 않게 따로 본다(SDK `mask` 옵션이 후보)
