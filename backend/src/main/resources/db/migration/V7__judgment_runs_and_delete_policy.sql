@@ -1,0 +1,171 @@
+-- 판정 실행·이력 테이블과 삭제 정책 (api.md §4 origin, §6 삭제, §7 테이블).
+--
+-- 이전 코드 호환 (db/README.md "이전 코드와 호환되게 쓴다")
+-- 이 마이그레이션 이전의 백엔드는 judgment·question_queue·user_fact 에 행을 쓰지 않는다.
+-- JudgmentService·UserFactPersistenceService 를 부르는 운영 코드가 없고 API 는 목 응답이다.
+-- 그래서 judgment.state 삭제(엔티티가 매핑하지 않음)와 question_queue.status 값 변경은
+-- 롤백해도 validate·INSERT 어느 쪽도 깨지 않는다.
+-- 이전 코드의 INSERT 를 깨는 제약(origin 정확히 하나, user_fact.batch_id NOT NULL)은
+-- 저장 코드가 그 값을 채우는 다음 마이그레이션에서 건다.
+
+-- 1) 판정 실행. 한 batch 에 여러 번 돌 수 있다 (api.md §3.6).
+--    context_version 은 run 을 만든 시점의 문진 버전을 고정한다. 재판정이 이 값을 다시 쓴다.
+--    context_id 도 CASCADE 다. Context 는 새 버전만 쌓이고 탈퇴 때만 지워지는데,
+--    NO ACTION 이면 탈퇴의 연쇄 삭제가 user_context 를 run 보다 먼저 지우려다 막힌다.
+CREATE TABLE judgment_run (
+    id uuid PRIMARY KEY,
+    batch_id uuid NOT NULL REFERENCES upload_batch(id) ON DELETE CASCADE,
+    context_id uuid NOT NULL REFERENCES user_context(id) ON DELETE CASCADE,
+    context_version integer NOT NULL CHECK (context_version > 0),
+    status varchar(20) NOT NULL
+        CHECK (status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'PARTIAL_FAILED', 'FAILED')),
+    total_count integer NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+    processed_count integer NOT NULL DEFAULT 0 CHECK (processed_count >= 0),
+    failed_count integer NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    started_at timestamptz,
+    completed_at timestamptz
+);
+
+CREATE INDEX idx_judgment_run_batch_created_at
+    ON judgment_run(batch_id, created_at DESC);
+
+-- run 대상 거래와 건별 결과. 대상은 run 을 만들 때 PENDING 으로 고정한다.
+-- 그래야 totalCount 와 실제 처리 대상이 어긋나지 않는다.
+-- PENDING 은 내부 상태이고 API 는 SUCCEEDED·FAILED 만 보인다 (NEEDS_REVIEW 판정도 SUCCEEDED).
+-- processed_at 은 /failures 의 failedAt 이다.
+CREATE TABLE judgment_run_item (
+    run_id uuid NOT NULL REFERENCES judgment_run(id) ON DELETE CASCADE,
+    transaction_id uuid NOT NULL REFERENCES transaction(id) ON DELETE CASCADE,
+    status varchar(20) NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'SUCCEEDED', 'FAILED')),
+    error_code varchar(50),
+    error_message text,
+    processed_at timestamptz,
+    PRIMARY KEY (run_id, transaction_id),
+    CONSTRAINT judgment_run_item_failure_has_error
+        CHECK (status <> 'FAILED' OR error_code IS NOT NULL)
+);
+
+CREATE INDEX idx_judgment_run_item_transaction
+    ON judgment_run_item(transaction_id);
+
+-- 2) 미분류 거래의 분류 확인 요청 (api.md §2.6, §3.5).
+CREATE TABLE classification_review (
+    id uuid PRIMARY KEY,
+    transaction_id uuid NOT NULL REFERENCES transaction(id) ON DELETE CASCADE,
+    status varchar(20) NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'RESOLVED')),
+    selected_category varchar(50),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    resolved_at timestamptz,
+    CONSTRAINT classification_review_resolved_has_category
+        CHECK (status <> 'RESOLVED' OR (selected_category IS NOT NULL AND resolved_at IS NOT NULL))
+);
+
+CREATE INDEX idx_classification_review_transaction
+    ON classification_review(transaction_id);
+
+-- 3) 사용자 판정 수정 (api.md §3.8). 해제해도 지우지 않고 active=false 로 남긴다.
+--    transaction_id 는 api.md 컬럼 목록에 없지만, "거래당 활성 Override 하나"를
+--    DB 가 보장하려면 부분 UNIQUE 를 걸 컬럼이 이 테이블에 있어야 한다.
+CREATE TABLE judgment_override (
+    id uuid PRIMARY KEY,
+    transaction_id uuid NOT NULL REFERENCES transaction(id) ON DELETE CASCADE,
+    source_judgment_id uuid NOT NULL REFERENCES judgment(id) ON DELETE CASCADE,
+    to_verdict varchar(30) NOT NULL
+        CHECK (to_verdict IN ('AVAILABLE', 'UNAVAILABLE', 'NEEDS_REVIEW')),
+    reason text,
+    active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    released_at timestamptz,
+    CONSTRAINT judgment_override_released_is_inactive
+        CHECK (active = (released_at IS NULL))
+);
+
+CREATE UNIQUE INDEX uq_judgment_override_active_transaction
+    ON judgment_override(transaction_id) WHERE active;
+
+CREATE INDEX idx_judgment_override_source_judgment
+    ON judgment_override(source_judgment_id);
+
+-- 4) judgment revision 의 직접 원인 (api.md §4). 다형 origin_type/origin_id 대신 실제 FK 4개를 둔다.
+--    지금은 nullable 이다. "정확히 하나" CHECK 는 저장 코드가 origin 을 채운 뒤 건다.
+ALTER TABLE judgment
+    ADD COLUMN run_id uuid REFERENCES judgment_run(id) ON DELETE CASCADE,
+    ADD COLUMN trigger_user_fact_id uuid REFERENCES user_fact(id) ON DELETE CASCADE,
+    ADD COLUMN classification_review_id uuid REFERENCES classification_review(id) ON DELETE CASCADE,
+    ADD COLUMN judgment_override_id uuid REFERENCES judgment_override(id) ON DELETE CASCADE;
+
+CREATE INDEX idx_judgment_run ON judgment(run_id);
+CREATE INDEX idx_judgment_trigger_user_fact ON judgment(trigger_user_fact_id);
+CREATE INDEX idx_judgment_classification_review ON judgment(classification_review_id);
+CREATE INDEX idx_judgment_override ON judgment(judgment_override_id);
+
+-- 잠정/확정은 limit_bucket_entry 가 관리한다 (api.md "Judgment state 제거").
+ALTER TABLE judgment DROP COLUMN state;
+
+-- 5) 질문 상태를 API code 와 같은 영문 값으로 저장한다 (judgment.verdict 와 같은 방식).
+ALTER TABLE question_queue
+    DROP CONSTRAINT question_queue_status_check,
+    DROP CONSTRAINT question_queue_check;
+
+UPDATE question_queue
+SET status = CASE status
+        WHEN '대기' THEN 'PENDING'
+        WHEN '응답' THEN 'ANSWERED'
+        WHEN '취소' THEN 'CANCELED'
+    END;
+
+ALTER TABLE question_queue
+    ALTER COLUMN status SET DEFAULT 'PENDING',
+    ADD CONSTRAINT question_queue_status_check
+        CHECK (status IN ('PENDING', 'ANSWERED', 'CANCELED')),
+    ADD CONSTRAINT question_queue_answered_has_fact
+        CHECK (status <> 'ANSWERED' OR (answered_fact_id IS NOT NULL AND answered_at IS NOT NULL));
+
+-- 6) UserFact 는 batch 범위다 (api.md §3.10). NOT NULL 과 UNIQUE 교체는 저장 코드가 batch 를 받은 뒤 한다.
+ALTER TABLE user_fact
+    ADD COLUMN batch_id uuid REFERENCES upload_batch(id) ON DELETE CASCADE;
+
+CREATE INDEX idx_user_fact_batch ON user_fact(batch_id);
+
+-- 7) 삭제 정책 (api.md §6). batch 를 지우면 그 업로드에서 파생된 데이터가 모두 지워진다.
+--    transaction → judgment 가 막혀 있어서, 판정이 하나라도 있는 batch 는 지워지지 않았다.
+ALTER TABLE judgment
+    DROP CONSTRAINT judgment_transaction_id_fkey,
+    ADD CONSTRAINT judgment_transaction_id_fkey
+        FOREIGN KEY (transaction_id) REFERENCES transaction(id) ON DELETE CASCADE;
+
+-- 답변 fact 가 지워지는 건 batch 삭제 때뿐이고, 그때 질문도 함께 지워진다.
+-- SET NULL 로 두면 "ANSWERED 면 fact 필수" CHECK 와 부딪힌다.
+ALTER TABLE question_queue
+    DROP CONSTRAINT question_queue_answered_fact_id_fkey,
+    ADD CONSTRAINT question_queue_answered_fact_id_fkey
+        FOREIGN KEY (answered_fact_id) REFERENCES user_fact(id) ON DELETE CASCADE;
+
+-- 탈퇴(DELETE /users/me)하면 사용자 소유 데이터를 모두 지운다. 공용 statute_version·전역 merchant_dict 는 남는다.
+ALTER TABLE user_context
+    DROP CONSTRAINT user_context_user_id_fkey,
+    ADD CONSTRAINT user_context_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE;
+
+ALTER TABLE upload_batch
+    DROP CONSTRAINT upload_batch_user_id_fkey,
+    ADD CONSTRAINT upload_batch_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE;
+
+ALTER TABLE user_fact
+    DROP CONSTRAINT user_fact_user_id_fkey,
+    ADD CONSTRAINT user_fact_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE;
+
+ALTER TABLE merchant_dict
+    DROP CONSTRAINT merchant_dict_user_id_fkey,
+    ADD CONSTRAINT merchant_dict_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE;
+
+ALTER TABLE limit_bucket_entry
+    DROP CONSTRAINT limit_bucket_entry_user_id_fkey,
+    ADD CONSTRAINT limit_bucket_entry_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE;

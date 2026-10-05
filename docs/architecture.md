@@ -186,6 +186,18 @@ flowchart TD
 
 `judge()`는 순수 함수이다. LLM도, DB나 현재 시각, 난수도 참조하지 않는다. 그래서 같은 입력에는 항상 같은 결과가 나온다. 분류 모델이 틀리더라도 규칙 매칭이 실패해 확인 필요로 떨어질 뿐, 틀린 판정이 나가지는 않는다.
 
+### 삭제 정책
+
+삭제는 DB의 `ON DELETE CASCADE`가 맡는다. 서비스 코드는 루트 행 하나만 지운다.
+
+- **batch 삭제**: `upload_batch`를 지우면 그 업로드에서 파생된 행이 함께 지워진다. 거래, 분류 확인, run과 run 항목, 판정 revision 전부, 인용, 질문, batch 범위 UserFact, override, 미매칭 로그, 한도 배분이 대상이다(`api.md` §6).
+- **탈퇴**: `app_user`를 지우면 사용자 소유 행(문진 Context, batch와 위의 파생 행, UserFact, 개인 `merchant_dict`, 한도 배분)이 지워진다.
+- **남는 것**: 공용 `statute_version`, 전역 `merchant_dict`(`user_id IS NULL`), `rule_candidate`. 앞의 둘은 사용자 데이터가 아니고, `rule_candidate`는 사용자 FK 없이 집계만 담는다.
+- **revision을 직접 지우는 경로는 없다.** 판정 이력은 append-only이고, 지워지는 건 batch나 사용자를 지울 때뿐이다. 그래서 origin FK(`judgment.run_id` 등)도 CASCADE로 두었다. origin 행이 지워지는 건 같은 batch가 지워질 때뿐이다.
+- 질문의 `answered_fact_id`도 CASCADE다. SET NULL로 두면 "ANSWERED면 답변 fact 필수" CHECK와 부딪힌다.
+
+`JudgmentSchemaIntegrationTest`가 테이블마다 행을 하나 이상 채운 뒤 batch 삭제와 탈퇴를 각각 확인한다.
+
 ### 관련 문서
 
 - [`CONTEXT.md`](../CONTEXT.md): 설계 논의·결정·대안 전체 (단일 원본)
