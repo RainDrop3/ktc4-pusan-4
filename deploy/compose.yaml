@@ -47,6 +47,7 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       LAW_API_OC: ${LAW_API_OC:-test}
+      TEAM_DISCORD_WEBHOOK: ${TEAM_DISCORD_WEBHOOK:-}
     depends_on:
       postgres:
         condition: service_healthy
