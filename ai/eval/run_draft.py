@@ -130,6 +130,7 @@ def produce(conn, cat: str, industry: str, meta: dict, plans: dict, search_only:
         return out | {"error": str(e)[:90]}
     return out | {
         "refs": [r.statute_id for r in ev.refs],
+        "evidence": ev.model_dump(),
         "gate": card.gate,
         "verdict": card.verdict,
         "hold": needs_review(ev, by_tier) or not ev.sufficient,
