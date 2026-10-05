@@ -1,5 +1,6 @@
 package com.ktc4.pusan4.judgment.persistence;
 
+import com.ktc4.pusan4.judgment.domain.TransactionInput;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -90,5 +91,29 @@ class TransactionRecordEntity {
     private OffsetDateTime createdAt;
 
     protected TransactionRecordEntity() {
+    }
+
+    UUID userId() {
+        return userId;
+    }
+
+    UUID batchId() {
+        return batchId;
+    }
+
+    LocalDate approvedAt() {
+        return approvedAt;
+    }
+
+    String merchantRaw() {
+        return merchantRaw;
+    }
+
+    String merchantCategory() {
+        return merchantCategory;
+    }
+
+    TransactionInput toInput() {
+        return new TransactionInput(id, approvedAt, merchantRaw, merchantNorm, merchantCategory, amount);
     }
 }

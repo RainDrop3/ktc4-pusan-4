@@ -11,6 +11,8 @@ import java.util.UUID;
 
 interface TransactionRecordRepository extends Repository<TransactionRecordEntity, UUID> {
 
+    Optional<TransactionRecordEntity> findById(UUID transactionId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select transaction
