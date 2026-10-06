@@ -7,7 +7,7 @@ import { Badge, Button, ChoiceGroup, Input } from '../ui';
 import { VerdictBadge } from '../VerdictBadge';
 import { StatuteCitation } from '../StatuteCitation';
 import { VERDICT_LABEL } from '../../utils/verdict';
-import { formatFullDate, formatWon } from '../../utils/format';
+import { formatFullDate, formatWon, ro } from '../../utils/format';
 
 /** 2.8 이 revision 이 생긴 직접 원인 */
 const ORIGIN_LABEL: Record<JudgmentOriginType, string> = {
@@ -44,13 +44,7 @@ const REASONS: Record<Target, string[]> = {
   UNAVAILABLE: ['개인적으로 사용한 비용입니다', '사업과 관련 없는 지출입니다']
 };
 
-/** 「가능으로」·「불가로」. 받침이 있으면(ㄹ 제외) 「으로」 */
-const toLabel = (code: Target) => {
-  const label = VERDICT_LABEL[code];
-  const last = label.charCodeAt(label.length - 1) - 0xac00;
-  const coda = last >= 0 && last < 11172 ? last % 28 : 0;
-  return `${label}${coda === 0 || coda === 8 ? '로' : '으로'}`;
-};
+const toLabel = (code: Target) => `${VERDICT_LABEL[code]}${ro(VERDICT_LABEL[code])}`;
 
 const errorMessage = (caught: unknown, fallback: string) =>
 caught instanceof ApiRequestError ? caught.message : fallback;
