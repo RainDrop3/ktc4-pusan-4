@@ -1778,6 +1778,7 @@ JudgmentOverride 생성
 
 ```
 id
+transaction_id
 source_judgment_id
 to_verdict
 reason
@@ -2537,6 +2538,7 @@ resolved_at
 
 ```
 id
+transaction_id
 source_judgment_id
 to_verdict
 reason
@@ -2544,6 +2546,8 @@ active
 created_at
 released_at
 ```
+
+`transaction_id`는 "거래당 활성 Override 하나"를 DB가 보장하려고 둔다. `source_judgment_id`는 같은 거래의 판정만 가리킨다.
 
 ---
 

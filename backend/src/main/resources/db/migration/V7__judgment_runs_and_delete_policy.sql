@@ -66,13 +66,17 @@ CREATE INDEX idx_classification_review_transaction
     ON classification_review(transaction_id);
 
 -- 3) 사용자 판정 수정 (api.md §3.8). 해제해도 지우지 않고 active=false 로 남긴다.
---    transaction_id 는 api.md 컬럼 목록에 없지만, "거래당 활성 Override 하나"를
---    DB 가 보장하려면 부분 UNIQUE 를 걸 컬럼이 이 테이블에 있어야 한다.
+--    transaction_id 는 "거래당 활성 Override 하나"를 DB 가 보장하려고 둔다.
+--    부분 UNIQUE 를 걸 컬럼이 이 테이블에 있어야 한다.
 --    source_judgment_id 는 소유가 아니라 참조라 CASCADE 가 아니다. 아래 4) 의 "참조 FK" 설명을 본다.
+--    원래 판정은 같은 거래의 판정이어야 해서 (source_judgment_id, transaction_id) 쌍으로 묶는다.
+ALTER TABLE judgment
+    ADD CONSTRAINT judgment_id_transaction_id_key UNIQUE (id, transaction_id);
+
 CREATE TABLE judgment_override (
     id uuid PRIMARY KEY,
     transaction_id uuid NOT NULL REFERENCES transaction(id) ON DELETE CASCADE,
-    source_judgment_id uuid NOT NULL REFERENCES judgment(id) DEFERRABLE INITIALLY DEFERRED,
+    source_judgment_id uuid NOT NULL,
     to_verdict varchar(30) NOT NULL
         CHECK (to_verdict IN ('AVAILABLE', 'UNAVAILABLE', 'NEEDS_REVIEW')),
     reason text,
@@ -80,7 +84,10 @@ CREATE TABLE judgment_override (
     created_at timestamptz NOT NULL DEFAULT now(),
     released_at timestamptz,
     CONSTRAINT judgment_override_released_is_inactive
-        CHECK (active = (released_at IS NULL))
+        CHECK (active = (released_at IS NULL)),
+    CONSTRAINT judgment_override_source_judgment_id_fkey
+        FOREIGN KEY (source_judgment_id, transaction_id) REFERENCES judgment(id, transaction_id)
+        DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE UNIQUE INDEX uq_judgment_override_active_transaction

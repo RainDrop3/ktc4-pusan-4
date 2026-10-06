@@ -197,6 +197,7 @@ flowchart TD
 - **참조 FK는 지우지 않고 막는다.** 판정의 origin 4개(`run_id` 등), run의 `context_id`, override의 `source_judgment_id`, 질문의 `answered_fact_id`가 여기에 해당한다(NO ACTION).
   - 참조까지 CASCADE면 잘못 이어진 참조 하나가 다른 batch의 이력을 조용히 지운다. 예를 들어 다른 batch의 run을 가리키는 판정이 있으면, 그 batch를 지울 때 이 판정까지 사라진다.
   - 막아 두면 그런 삭제는 실패하고 데이터가 남는다.
+  - override의 `source_judgment_id`는 `(source_judgment_id, transaction_id)` 쌍으로 판정을 가리킨다. 다른 거래의 판정을 원래 판정으로 둘 수 없다.
 - **참조 FK는 커밋 때 검사한다**(`DEFERRABLE INITIALLY DEFERRED`). 즉시 검사하면 탈퇴처럼 여러 경로로 함께 지워질 때 순서에 따라 실패한다. 예를 들어 사용자 → UserFact가 batch → 거래 → 판정보다 먼저 지워지면 아직 남은 판정에 걸린다.
 - `answered_fact_id`를 SET NULL로 두지 않은 건 "ANSWERED면 답변 fact 필수" CHECK와 부딪히기 때문이다.
 

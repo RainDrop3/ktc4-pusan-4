@@ -218,6 +218,23 @@ class JudgmentSchemaIntegrationTest {
     }
 
     @Test
+    void override_source_must_be_a_judgment_of_the_same_transaction() {
+        UUID userId = UUID.randomUUID();
+        UUID batchId = UUID.randomUUID();
+        UUID transactionId = UUID.randomUUID();
+        UUID judgmentId = UUID.randomUUID();
+        insertJudgmentFixture(userId, batchId, transactionId, judgmentId, "override-pair");
+        UUID otherTransactionId = UUID.randomUUID();
+        UUID otherJudgmentId = UUID.randomUUID();
+        insertTransaction(otherTransactionId, batchId, "override-pair-other-natural-key");
+        insertBareJudgment(otherJudgmentId, otherTransactionId);
+
+        insertOverride(transactionId, judgmentId, false);
+        assertThatThrownBy(() -> insertOverride(transactionId, otherJudgmentId, true))
+            .isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
     void question_status_accepts_only_api_codes() {
         UUID userId = UUID.randomUUID();
         UUID batchId = UUID.randomUUID();
