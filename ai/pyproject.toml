@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "psycopg[binary]>=3.2",
     "openai>=3.16",
+    "langfuse>=4.16",
     "pyyaml>=6",
 ]
 
