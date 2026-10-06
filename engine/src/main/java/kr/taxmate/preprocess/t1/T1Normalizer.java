@@ -266,6 +266,9 @@ public final class T1Normalizer {
             String rest = compact.substring(alias.length());
             // 'CU' 뒤에 'TE' 가 오면 CUTE 라는 다른 단어다. 숫자 뒤 숫자는 지점 패턴이 가른다.
             if (!rest.isEmpty() && asciiAlpha(alias.charAt(alias.length() - 1)) && asciiAlpha(rest.charAt(0))) continue;
+            // 짧은 표기는 바로 뒤에 공백·괄호가 있어야 브랜드다('씨유치과…' 는 CU 가 아니다).
+            if (!rest.isEmpty() && alias.length() <= intOf(step.get("short_alias_max_len"), 0)
+                    && !aliasBoundary(alias, ctx)) continue;
             if (ctx.isTruncated) {
                 // 20B·괄호 미닫힘. 뒤가 잘려 지점 모양인지 알 수 없다. 사전 앞부분이 맞으면 복원한다.
                 ctx.brandKey = brand;
@@ -299,6 +302,24 @@ public final class T1Normalizer {
             }
         }
         return s;
+    }
+
+    /** strip_special 직전 값에서 표기 바로 뒤가 공백·괄호·끝인지. 괄호는 그 단계가 지운다. */
+    private boolean aliasBoundary(String alias, Ctx ctx) {
+        int idx = -1;
+        for (int k = 0; k < steps.size(); k++) {
+            if ("strip_special".equals(String.valueOf(steps.get(k).get("id")))) { idx = k; break; }
+        }
+        if (idx < 0 || idx >= ctx.history.size()) return false;
+        Object chars = steps.get(idx).get("chars");
+        Pattern special = pattern(chars == null ? STRIP_SPECIAL_DEFAULT : String.valueOf(chars));
+        String pre = ctx.history.get(idx);
+        int i = 0, n = 0;
+        while (i < pre.length() && n < alias.length()) {
+            String c = String.valueOf(pre.charAt(i++));
+            if (!c.equals(" ") && !special.matcher(c).matches()) n++;
+        }
+        return i == pre.length() || " ()[]".indexOf(pre.charAt(i)) >= 0;
     }
 
     /** (대조용 표기, 브랜드 키) 를 긴 표기부터. 표기는 공백 제거 + ASCII 대문자. */

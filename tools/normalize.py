@@ -200,6 +200,10 @@ class Normalizer:
             # 'CU' 뒤에 'TE' 가 오면 CUTE 라는 다른 단어다. 숫자 뒤 숫자는 지점 패턴이 가른다.
             if rest and _ascii_alpha(alias[-1]) and _ascii_alpha(rest[0]):
                 continue
+            # 짧은 표기는 바로 뒤에 공백·괄호가 있어야 브랜드다('씨유치과…' 는 CU 가 아니다).
+            if rest and len(alias) <= int(step.get("short_alias_max_len", 0)) \
+                    and not self._alias_boundary(alias, ctx):
+                continue
             if ctx.get("is_truncated"):
                 # 20B·괄호 미닫힘. 뒤가 잘려 지점 모양인지 알 수 없다. 사전 앞부분이 맞으면 복원한다.
                 ctx["brand_key"] = brand
@@ -223,6 +227,21 @@ class Normalizer:
                     ctx["branch_raw"] = ""
                     return brand
         return s
+
+    def _alias_boundary(self, alias, ctx):
+        """strip_special 직전 값에서 표기 바로 뒤가 공백·괄호·끝인지. 괄호는 그 단계가 지운다."""
+        idx = next((i for i, st in enumerate(self.steps) if st.get("id") == "strip_special"), None)
+        if idx is None or idx >= len(ctx["history"]):
+            return False
+        special = re.compile(self.steps[idx].get("chars", r"[.*#/&,'\"()\[\]_~\\]"))
+        pre = ctx["history"][idx]
+        i = n = 0
+        while i < len(pre) and n < len(alias):
+            c = pre[i]
+            i += 1
+            if c != " " and not special.fullmatch(c):
+                n += 1
+        return i == len(pre) or pre[i] in " ()[]"
 
     def step_strip_branch(self, s, ctx, step):
         if ctx.get("brand_key"):
