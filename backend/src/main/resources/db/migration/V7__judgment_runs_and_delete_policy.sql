@@ -140,6 +140,9 @@ ALTER TABLE question_queue
         CHECK (status <> 'ANSWERED' OR (answered_fact_id IS NOT NULL AND answered_at IS NOT NULL));
 
 -- 6) UserFact 는 batch 범위다 (api.md §3.10). NOT NULL 과 UNIQUE 교체는 저장 코드가 batch 를 받은 뒤 한다.
+--    그때 batch_id 가 빈 기존 행은 채우지도 지우지도 않고 바로 NOT NULL 을 건다.
+--    운영 코드가 user_fact 에 쓰지 않아 0행이어야 하고, 행이 있으면 마이그레이션이 실패해 드러난다.
+--    채울 수도 없다. merchant·사용자 범위 답변은 어느 batch 의 것인지 정할 수 없다.
 ALTER TABLE user_fact
     ADD COLUMN batch_id uuid REFERENCES upload_batch(id) ON DELETE CASCADE;
 
