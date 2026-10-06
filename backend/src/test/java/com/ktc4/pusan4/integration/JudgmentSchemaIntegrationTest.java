@@ -175,6 +175,35 @@ class JudgmentSchemaIntegrationTest {
     }
 
     @Test
+    void context_version_used_by_a_run_is_not_deleted() {
+        UUID userId = UUID.randomUUID();
+        UUID batchId = UUID.randomUUID();
+        UUID contextId = UUID.randomUUID();
+        UUID runId = UUID.randomUUID();
+        jdbcTemplate.update(
+            "insert into app_user(id, email) values (?, ?)", userId, userId + "@example.com"
+        );
+        insertBatch(batchId, userId, "context-reference-file-hash");
+        jdbcTemplate.update("""
+            insert into user_context(
+                id, user_id, industry_code, prev_year_revenue, business_open_date,
+                bookkeeping_duty, has_employee, version
+            ) values (?, ?, '940909', 0, '2024-01-01', '간편장부', false, 1)
+            """, contextId, userId);
+        // 판정이 아직 없는 run 이다. 판정이 있으면 judgment.run_id 가 run 삭제를 막아서 이 FK 를 시험하지 못한다.
+        jdbcTemplate.update("""
+            insert into judgment_run(id, batch_id, context_id, context_version, status)
+            values (?, ?, ?, 1, 'QUEUED')
+            """, runId, batchId, contextId);
+
+        assertThatThrownBy(() -> jdbcTemplate.update("delete from user_context where id = ?", contextId))
+            .isInstanceOf(DataAccessException.class);
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from judgment_run where id = ?", Integer.class, runId
+        )).isEqualTo(1);
+    }
+
+    @Test
     void transaction_can_have_only_one_active_override() {
         UUID userId = UUID.randomUUID();
         UUID batchId = UUID.randomUUID();

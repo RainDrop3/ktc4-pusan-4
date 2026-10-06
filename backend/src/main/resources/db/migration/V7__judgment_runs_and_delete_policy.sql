@@ -10,12 +10,11 @@
 
 -- 1) 판정 실행. 한 batch 에 여러 번 돌 수 있다 (api.md §3.6).
 --    context_version 은 run 을 만든 시점의 문진 버전을 고정한다. 재판정이 이 값을 다시 쓴다.
---    context_id 도 CASCADE 다. Context 는 새 버전만 쌓이고 탈퇴 때만 지워지는데,
---    NO ACTION 이면 탈퇴의 연쇄 삭제가 user_context 를 run 보다 먼저 지우려다 막힌다.
+--    context_id 는 소유가 아니라 참조라 CASCADE 가 아니다. 아래 4) 의 "참조 FK" 설명을 본다.
 CREATE TABLE judgment_run (
     id uuid PRIMARY KEY,
     batch_id uuid NOT NULL REFERENCES upload_batch(id) ON DELETE CASCADE,
-    context_id uuid NOT NULL REFERENCES user_context(id) ON DELETE CASCADE,
+    context_id uuid NOT NULL REFERENCES user_context(id) DEFERRABLE INITIALLY DEFERRED,
     context_version integer NOT NULL CHECK (context_version > 0),
     status varchar(20) NOT NULL
         CHECK (status IN ('QUEUED', 'RUNNING', 'COMPLETED', 'PARTIAL_FAILED', 'FAILED')),
@@ -93,7 +92,7 @@ CREATE INDEX idx_judgment_override_source_judgment
 -- 4) judgment revision 의 직접 원인 (api.md §4). 다형 origin_type/origin_id 대신 실제 FK 4개를 둔다.
 --    지금은 nullable 이다. "정확히 하나" CHECK 는 저장 코드가 origin 을 채운 뒤 건다.
 --
---    참조 FK (origin 4개, override.source_judgment_id, question_queue.answered_fact_id)
+--    참조 FK (origin 4개, run.context_id, override.source_judgment_id, question_queue.answered_fact_id)
 --    판정은 거래를 거쳐서만 지워진다(transaction → judgment CASCADE). 참조 FK 까지 CASCADE 면
 --    잘못 이어진 참조 하나(다른 batch 의 run 을 가리키는 판정 등)가 다른 batch 의 이력을 조용히 지운다.
 --    그래서 참조 FK 는 지우지 않고 막는다(NO ACTION). DEFERRABLE INITIALLY DEFERRED 로 커밋 때 검사한다.
