@@ -49,6 +49,7 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LAW_API_OC: ${LAW_API_OC:-test}
+      TEAM_DISCORD_WEBHOOK: ${TEAM_DISCORD_WEBHOOK:-}
     depends_on:
       postgres:
         condition: service_healthy
