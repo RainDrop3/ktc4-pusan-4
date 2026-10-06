@@ -51,7 +51,8 @@ class HolidayApiClient {
 
         JsonNode header = root.path("response").path("header");
         if (!"00".equals(header.path("resultCode").asText())) {
-            // 키 오류 등 게이트웨이 오류는 response 없이 OpenAPI_ServiceResponse 로 온다.
+            // 키 오류는 403 이라 retrieve() 가 본문을 담은 예외를 먼저 던진다(2026-10 실제 응답으로 확인).
+            // 200 으로 온 게이트웨이 오류는 response 없이 OpenAPI_ServiceResponse 로 온다.
             String gatewayError = root.path("OpenAPI_ServiceResponse").path("cmmMsgHeader").path("errMsg").asText();
             throw new IllegalStateException("Holiday API error " + header.path("resultCode").asText() + " "
                 + header.path("resultMsg").asText() + gatewayError);

@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 판정에 넘길 공휴일 집합 (V9 public_holiday). 표가 비어 있으면 엔진은 토·일만 휴일로 본다.
+ * 판정에 넘길 공휴일 집합 (public_holiday). 표가 비어 있으면 엔진은 토·일만 휴일로 본다.
  */
 @Service
 public class HolidayCalendar {

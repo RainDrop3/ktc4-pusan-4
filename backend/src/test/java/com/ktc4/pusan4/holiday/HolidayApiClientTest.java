@@ -3,6 +3,7 @@ package com.ktc4.pusan4.holiday;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -12,6 +13,7 @@ import java.time.LocalDate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
@@ -75,8 +77,21 @@ class HolidayApiClientTest {
         assertThat(client.fetch(2030)).isEmpty();
     }
 
+    // 2026-10 실제 API 에 등록되지 않은 키로 보냈을 때의 응답이다.
     @Test
-    void gateway_error_fails_with_its_message() {
+    void key_error_fails_with_its_message() {
+        server.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
+            .andRespond(withStatus(HttpStatus.FORBIDDEN).contentType(MediaType.APPLICATION_JSON).body("""
+                {"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"SERVICE_KEY_IS_NOT_REGISTERED_ERROR",
+                "returnAuthMsg":"등록되지 않은 서비스키","returnReasonCode":"30"}}}
+                """));
+
+        assertThatThrownBy(() -> client.fetch(2025))
+            .hasMessageContaining("SERVICE_KEY_IS_NOT_REGISTERED_ERROR");
+    }
+
+    @Test
+    void gateway_error_sent_as_200_fails_with_its_message() {
         server.expect(requestTo(org.hamcrest.Matchers.startsWith(BASE_URL)))
             .andRespond(withSuccess("""
                 {"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"SERVICE_KEY_IS_NOT_REGISTERED_ERROR",
