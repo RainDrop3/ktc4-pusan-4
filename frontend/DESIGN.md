@@ -172,4 +172,4 @@
 Toast/알림, 파일 드롭존, Drawer, StatTile, Timeline.
 - Tabs 는 만들지 않았다. 목록 필터는 `FilterBar`(버튼 묶음)로 하고, 보여줄 패널이 갈리는 진짜 탭이 필요해지면 그때 만든다.
 - 진행 표시는 `AppShell` 의 단계 표시와, `Run`·`ClassificationPreview` 가 각자 그리는 진척 바가 있다. 같은 모양이 세 번째로 필요해지면 `Progress` 로 뽑는다.
-- `Upload`, `Interview`, `Questions`, `Summary` 는 아직 옛 클래스(생 px)가 남아 있다. 치오님과 나눠 교체한다. `Confirm`·`Run`·`Transactions`·`Uploads`·`ClassificationPreview`·`AppShell`·`Results` 는 토큰으로 옮겼다.
+- `Upload`, `Interview`, `Questions` 는 아직 옛 클래스(생 px)가 남아 있다. 치오님과 나눠 교체한다. `Confirm`·`Run`·`Transactions`·`Uploads`·`ClassificationPreview`·`AppShell`·`Results`·`Summary` 는 토큰으로 옮겼다.
