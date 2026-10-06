@@ -66,3 +66,14 @@
 - `normalize.py --selftest` 50/50, `--fixture` 20/20, `validate_rules.py` errors=0. Java 쪽은 이번 환경에 JDK 가 없어 돌리지 못했다.
 - 트레이드오프: 샘플에서 오분류 0건 대신 붙여 쓴 정상 CU 지점 3건이 안 묶임(77→74). 잘못 묶이는 것이 더 위험하다고 판단.
 - 후속: 붙여 쓴 지점 표기는 T4 2단계(사업자번호→브랜드 점포 테이블)에서 다시 묶는다.
+
+## 14:23 정정 — Java 검증
+
+- 14:20 절의 "JDK 가 없어 돌리지 못했다" 는 틀렸다. PATH 에 java 가 없었을 뿐, Android Studio 에 딸린
+  JetBrains Runtime(OpenJDK 21.0.6)이 있다.
+- 그 JDK 로 7d5c554 에서 다시 돌렸다(실행한 명령만 적는다):
+  - `javac -encoding UTF-8` (engine/.../t1) — 성공
+  - `T1Cli --selftest rules/normalize.yaml` — 50/50
+  - `T1Cli --fixture rules/normalize.yaml tools/fixtures/brand_layer1.yaml` — 20/20
+  - `analyze_unclassified.py --selftest` — ok
+- Python·Java 21필드 대조(불일치 16행)는 이번에 다시 돌리지 않았다. 1abadb9 이후 대조는 미검증.
