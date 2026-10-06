@@ -80,3 +80,39 @@
 - 일부러 깨 봤다.
   - 잠금 호출을 빼면 동시 교체 테스트가 실패한다(합집합이 남는다).
   - 저장 예외 처리를 빼면 저장 실패 테스트가 실패한다.
+
+## 22:24 develop 머지, PR 리뷰 반영: 키 오류 테스트를 실제 403 응답으로
+
+- 커밋: a1dc835..0b4c6bf (2개, 머지 1개 포함)
+- 주요파일: HolidayApiClientTest.java, HolidayApiClient.java, HolidayCalendar.java, docs/deployment.md
+
+### 한 일
+
+- develop 을 머지했다. `docs/deployment.md` 한 곳만 충돌했다. develop 이 §6 의 "두 단계"를 "세 단계"로 바꾼 줄 바로 아래에 이 브랜치가 §7 을 붙여서 생긴 충돌이다. develop 의 문장을 쓰고 §7 을 그대로 뒀다.
+- PR #99 리뷰(memoryhong) 지적 두 개를 반영했다.
+  - 키 오류 테스트 `key_error_fails_with_its_message` 를 추가했다. 실제 응답처럼 403 + JSON 을 보내고, 예외 메시지에 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 가 들어가는지 본다.
+  - 기존 200 + JSON 테스트는 `gateway_error_sent_as_200_fails_with_its_message` 로 이름만 바꿔 남겼다.
+  - `HolidayApiClient` 주석에 "키 오류는 403 이라 `retrieve()` 가 먼저 던진다"를 적었다.
+  - `HolidayCalendar` 주석의 `V9` 를 뺐다. 파일명(V6)과 달랐고, 번호는 머지 순서에 따라 또 바뀐다.
+
+### 왜 이렇게 했나
+
+- 리뷰 지적: 키 오류는 `_type=json` 과 상관없이 XML 로 와서 JSON 변환에서 먼저 깨지고, 원인이 로그에 안 남는다.
+- 실제 API 에 등록되지 않은 가짜 키로 불러 봤다.
+  - `_type=json` 이면 403 + JSON, 없으면 403 + XML 이다. 형식은 `_type` 을 따른다.
+  - 상태가 200 이 아니라 403 이다. 4xx 면 `retrieve()` 가 `HttpClientErrorException` 을 먼저 던져 JSON 변환까지 가지 않는다.
+  - 그래서 리뷰가 말한 변환 예외는 나지 않는다. 대신 키 오류용으로 만든 `OpenAPI_ServiceResponse` 분기도 키 오류 때는 돌지 않는다.
+- Spring 6.2 는 4xx 예외 메시지에 응답 본문을 글자 그대로 넣는다. `HolidaySync` 가 이 예외를 `log.warn(..., e)` 로 찍으므로 errMsg 는 로그에 남는다. 403 을 JSON·XML 두 형식으로 보낸 임시 테스트로 확인했다(확인 후 삭제).
+- 결국 동작은 원래도 괜찮았고, 기존 테스트가 실제로는 일어나지 않는 200 응답을 검증하고 있었다.
+- 200 분기는 지우지 않았다. 다른 게이트웨이 오류가 200 으로 오는지 모른다.
+
+### 확인한 것
+
+- `test` 184개, `integrationTest` 29개 모두 통과(213개).
+
+### 남은 것 · 아는 문제
+
+- 확인한 키 오류는 임의로 만든 가짜 키의 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 하나뿐이다. Encoding 키를 넣은 경우, 활용 신청 전이거나 기간이 끝난 키, 호출 한도 초과가 몇 번 상태로 오는지는 재현하지 못했다.
+- 이런 오류가 200 + XML 로 온다면 JSON 변환에서 깨지고, 그 예외 메시지에는 본문이 없을 것으로 본다(돌려 보지 않은 추측).
+- 마이그레이션은 이 브랜치와 #84 가 둘 다 V6, #98 이 V7 이다. 앞서 정한 대로 나중에 머지되는 쪽이 develop 최신 +1 로 바꾼다.
+- PR 리뷰 댓글에는 아직 답하지 않았다.
