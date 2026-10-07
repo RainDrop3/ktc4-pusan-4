@@ -52,7 +52,7 @@ def test_mention_falls_back_to_github_login_when_unmapped():
 
 
 def test_framed_puts_title_and_body_between_dividers():
-    assert framed("새 PR", "본문").split("\n") == ["-" * 102, "[새 PR]", "본문", "-" * 102]
+    assert framed("새 PR", "본문").split("\n") == ["-" * 51, "[새 PR]", "본문", "-" * 51]
 
 
 def test_new_pr_message_shows_pr_link_branches_and_reviewer_mentions():

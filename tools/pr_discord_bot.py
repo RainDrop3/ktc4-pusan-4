@@ -17,7 +17,7 @@ REVIEW_STATE_LABELS = {
     "COMMENTED": "comment",
     "CHANGES_REQUESTED": "request changes",
 }
-DIVIDER = "-" * 102
+DIVIDER = "-" * 51
 
 
 def framed(title: str, body: str) -> str:
