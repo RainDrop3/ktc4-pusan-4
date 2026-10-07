@@ -3,11 +3,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from tools.pr_discord_bot import (
+    build_new_issue_message,
     build_new_pr_message,
     build_reminder_message,
     build_review_notification,
     build_review_request_message,
+    collect_notification,
     collect_reminder,
+    collect_review_notification,
     due_reviewers,
     framed,
     is_late_review_request,
@@ -341,14 +344,91 @@ def test_authors_own_comment_notifies_mentioned_teammates():
     )
 
 
+def make_issue(author="cho104", body=None):
+    return {
+        "number": 101,
+        "title": "카드 분류 오류",
+        "html_url": "https://github.com/o/r/issues/101",
+        "body": body,
+        "user": {"login": author},
+    }
+
+
 @pytest.mark.parametrize(
     ("pr", "actor", "texts"),
     [
         (make_pr(), "yuyeol3", ["수정했습니다"]),
         (make_pr(), "outsider", ["@cho104 확인해 주세요"]),
         (make_pr(base="main"), "cho104", ["LGTM"]),
+        (make_issue(), "cho104", ["재현했어요"]),
+        (make_issue(), "outsider", ["@cho104 저도 그래요"]),
     ],
-    ids=["author-without-mention", "not-teammate", "mentor-review-to-main"],
+    ids=[
+        "author-without-mention",
+        "not-teammate",
+        "mentor-review-to-main",
+        "issue-author-without-mention",
+        "issue-not-teammate",
+    ],
 )
 def test_review_notification_is_skipped(pr, actor, texts):
     assert build_review_notification(pr, actor, "comment", texts, TEAM) is None
+
+
+ISSUE_LINK = "#101 [카드 분류 오류](https://github.com/o/r/issues/101)"
+
+
+def test_new_issue_message_lists_body_mentions_except_author():
+    message = build_new_issue_message(
+        make_issue(body="@yuyeol3 @cho104 @Jaeseong22 확인 부탁"), TEAM
+    )
+
+    assert message == framed("새 Issue", f"{ISSUE_LINK}\ncho104\nmention: <@111> <@333>")
+
+
+def test_new_issue_message_has_no_mention_line_without_tags():
+    assert build_new_issue_message(make_issue(), TEAM) == framed(
+        "새 Issue", f"{ISSUE_LINK}\ncho104"
+    )
+
+
+def test_new_issue_from_outsider_is_skipped():
+    assert build_new_issue_message(make_issue(author="outsider"), TEAM) is None
+
+
+def test_issue_comment_notifies_issue_author():
+    message = build_review_notification(
+        make_issue(), "yuyeol3", None, ["@Jaeseong22 같이 봐요"], TEAM
+    )
+
+    assert message == framed(
+        "댓글 알림",
+        f"<@222>\nIssue {ISSUE_LINK}에 yuyeol3의 댓글이 달렸습니다.\nmention: <@333>",
+    )
+
+
+def test_issue_authors_own_comment_notifies_mentioned_teammates():
+    message = build_review_notification(
+        make_issue(), "cho104", None, ["@yuyeol3 @Jaeseong22 확인 부탁"], TEAM
+    )
+
+    assert message == framed(
+        "멘션 알림",
+        f"<@111> <@333>\ncho104의 Issue {ISSUE_LINK}에서 yuyeol3, Jaeseong22를 멘션했어요.",
+    )
+
+
+def test_issue_events_are_handled_without_pr_api(monkeypatch):
+    def no_pr_api(url, token):
+        raise AssertionError(url)
+
+    monkeypatch.setattr("tools.pr_discord_bot.github_get", no_pr_api)
+    opened = {"action": "opened", "issue": make_issue()}
+    commented = {
+        "action": "created",
+        "issue": make_issue(),
+        "comment": {"user": {"login": "yuyeol3"}, "body": "확인"},
+    }
+
+    assert "[새 Issue]" in collect_notification(opened, "o/r", "token", TEAM, PR_CREATED, 0)
+    assert "[댓글 알림]" in collect_review_notification(commented, "o/r", "token", TEAM)

@@ -59,6 +59,18 @@ def build_new_pr_message(pr: dict, user_ids: dict[str, str]) -> str:
     )
 
 
+def build_new_issue_message(issue: dict, user_ids: dict[str, str]) -> str | None:
+    # public 레포라 팀원이 아닌 사람이 연 Issue 는 거른다.
+    author = issue["user"]["login"]
+    if author not in user_ids:
+        return None
+    mentioned = _body_mentions(issue, user_ids)
+    return framed(
+        "새 Issue",
+        f"{_pr_link(issue)}\n{author}" + (f"\nmention: {mentioned}" if mentioned else ""),
+    )
+
+
 def build_review_request_message(pr: dict, login: str, user_ids: dict[str, str]) -> str:
     return framed(
         "리뷰 요청",
@@ -170,23 +182,24 @@ def mentioned_logins(texts: list[str], user_ids: dict[str, str]) -> list[str]:
 
 
 def build_review_notification(
-    pr: dict, actor: str, review: str | None, texts: list[str], user_ids: dict[str, str]
+    item: dict, actor: str, review: str | None, texts: list[str], user_ids: dict[str, str]
 ) -> str | None:
+    kind = "PR" if "base" in item else "Issue"
     # main 대상은 운영진 notify-discord 워크플로가 알리고, public 레포라 팀원이 아닌 사람의 글은 거른다.
-    if pr["base"]["ref"] == "main" or actor not in user_ids:
+    if (kind == "PR" and item["base"]["ref"] == "main") or actor not in user_ids:
         return None
     mentions = [login for login in mentioned_logins(texts, user_ids) if login != actor]
     mentioned = " ".join(mention(login, user_ids) for login in mentions)
-    author = pr["user"]["login"]
+    author = item["user"]["login"]
     if actor == author:
         if not mentions:
             return None
         return framed(
             "멘션 알림",
             f"{mentioned}\n"
-            f"{author}의 PR {_pr_link(pr)}에서 {', '.join(mentions)}를 멘션했어요.",
+            f"{author}의 {kind} {_pr_link(item)}에서 {', '.join(mentions)}를 멘션했어요.",
         )
-    head = f"{mention(author, user_ids)}\nPR {_pr_link(pr)}에 {actor}의"
+    head = f"{mention(author, user_ids)}\n{kind} {_pr_link(item)}에 {actor}의"
     tail = f"mention: {mentioned or '없음'}"
     if review is None:
         return framed("댓글 알림", f"{head} 댓글이 달렸습니다.\n{tail}")
@@ -253,6 +266,8 @@ def collect_notification(
     now: datetime,
     settle_seconds: float,
 ) -> str | None:
+    if "issue" in event:
+        return build_new_issue_message(event["issue"], user_ids)
     api = f"https://api.github.com/repos/{repo}"
     pr_url = f"{api}/pulls/{event['pull_request']['number']}"
     if event["action"] != "review_requested":
@@ -324,12 +339,14 @@ def collect_review_notification(
         actor = event["comment"]["user"]["login"]
         label = None
         texts = [event["comment"]["body"]]
+        if "pull_request" not in event["issue"]:
+            return build_review_notification(event["issue"], actor, label, texts, user_ids)
     pr = github_get(f"{api}/pulls/{number}", token)
     return build_review_notification(pr, actor, label, texts, user_ids)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="팀 내부 PR 을 Discord 로 알린다.")
+    parser = argparse.ArgumentParser(description="팀 내부 PR·Issue 를 Discord 로 알린다.")
     parser.add_argument("command", choices=["notify", "remind", "review"])
     parser.add_argument(
         "--dry-run", action="store_true", help="기다리거나 전송하지 않고 출력만 한다"
