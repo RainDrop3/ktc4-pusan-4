@@ -72,15 +72,20 @@ def wanted() -> dict[tuple[str, str], dict]:
         if match.get("holiday") is True:
             continue
         industry = (match.get("industry") or [PERSONA])[0]
+        # 답마다 근거가 다르면 카드는 인용을 선택지에 둔다(docs/rule-card-fields.md). 그것도 정답이다.
+        options = (card.get("question") or {}).get("options") or []
+        cites = {
+            c["id"]
+            for c in (card.get("citations") or []) + [c for o in options for c in o.get("citations") or []]
+            if c.get("verified") is True
+        }
         for cat in match.get("category") or []:
             w = out[(cat, industry)]
             w["cards"].append(card["id"])
             w["gates"].add(card["gate"])
             if card.get("verdict"):
                 w["verdicts"].add(card["verdict"])
-            w["cites"] |= {
-                c["id"] for c in (card.get("citations") or []) if c.get("verified") is True
-            }
+            w["cites"] |= cites
     return dict(out)
 
 
