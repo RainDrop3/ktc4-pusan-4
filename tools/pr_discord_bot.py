@@ -34,6 +34,14 @@ def _pr_link(pr: dict) -> str:
     return f"#{pr['number']} [{pr['title']}]({pr['html_url']})"
 
 
+def _body_mentions(item: dict, user_ids: dict[str, str]) -> str:
+    return " ".join(
+        mention(login, user_ids)
+        for login in mentioned_logins([item["body"] or ""], user_ids)
+        if login != item["user"]["login"]
+    )
+
+
 def build_new_pr_message(pr: dict, user_ids: dict[str, str]) -> str:
     reviewers = (
         " ".join(
@@ -42,11 +50,12 @@ def build_new_pr_message(pr: dict, user_ids: dict[str, str]) -> str:
         )
         or "미지정"
     )
+    mentioned = _body_mentions(pr, user_ids)
     return framed(
         "새 PR",
         f"{_pr_link(pr)}\n"
         f"{pr['user']['login']} · {pr['head']['ref']} → {pr['base']['ref']}\n"
-        f"reviewer: {reviewers}",
+        f"reviewer: {reviewers}" + (f"\nmention: {mentioned}" if mentioned else ""),
     )
 
 

@@ -18,12 +18,18 @@ from tools.pr_discord_bot import (
 
 
 def make_pr(
-    number=45, reviewers=("cho104", "Jaeseong22"), base="develop", draft=False, state="open"
+    number=45,
+    reviewers=("cho104", "Jaeseong22"),
+    base="develop",
+    draft=False,
+    state="open",
+    body=None,
 ):
     return {
         "number": number,
         "title": "RAG 파이프라인",
         "html_url": f"https://github.com/o/r/pull/{number}",
+        "body": body,
         "user": {"login": "yuyeol3"},
         "head": {"ref": "feature/rag"},
         "base": {"ref": base},
@@ -281,6 +287,21 @@ def test_mentioned_logins_keeps_teammates_once_in_order():
     ]
 
     assert mentioned_logins(texts, TEAM) == ["Jaeseong22", "yuyeol3"]
+
+
+@pytest.mark.parametrize(
+    ("body", "last_line"),
+    [
+        ("@Jaeseong22 @yuyeol3 봐 주세요", "mention: <@333>"),
+        ("설명만 있음", "reviewer: <@222> <@333>"),
+        (None, "reviewer: <@222> <@333>"),
+    ],
+    ids=["teammate-tagged", "no-tag", "empty-body"],
+)
+def test_new_pr_message_lists_body_mentions_except_author(body, last_line):
+    message = build_new_pr_message(make_pr(body=body), TEAM)
+
+    assert message.split("\n")[-2] == last_line
 
 
 def test_review_notification_tags_author_with_state_and_mentions():
