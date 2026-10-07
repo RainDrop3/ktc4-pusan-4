@@ -34,7 +34,7 @@ import yaml
 from langfuse import observe
 
 from eval.run_search import cached_plan
-from pipeline.draft import draft
+from pipeline.draft import draft, missing_statutes
 from pipeline.query import category_meta, context
 from pipeline.search import FRAME, connect, retrieve
 from pipeline.select import _candidates, needs_review, select
@@ -135,12 +135,14 @@ def produce(conn, cat: str, industry: str, meta: dict, plans: dict, search_only:
         card = draft(block, ev)
     except (ValueError, RuntimeError) as e:
         return out | {"error": str(e)[:90]}
+    refs = [r.statute_id for r in ev.refs]
     return out | {
-        "refs": [r.statute_id for r in ev.refs],
+        "refs": refs,
         "evidence": ev.model_dump(),
         "gate": card.gate,
         "verdict": card.verdict,
-        "hold": needs_review(ev, by_tier) or not ev.sufficient,
+        # candidates.propose 의 보류 조건과 같아야 보류 지표가 운영을 잰다.
+        "hold": not ev.sufficient or needs_review(ev, by_tier) or bool(missing_statutes(conn, refs)),
     }
 
 
