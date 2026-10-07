@@ -9,6 +9,7 @@ from tools.pr_discord_bot import (
     build_review_request_message,
     collect_reminder,
     due_reviewers,
+    framed,
     is_late_review_request,
     latest_request_times,
     mention,
@@ -41,28 +42,34 @@ def test_mention_falls_back_to_github_login_when_unmapped():
     assert mention("RainDrop3", {}) == "@RainDrop3"
 
 
+def test_framed_puts_title_and_body_between_dividers():
+    assert framed("새 PR", "본문").split("\n") == ["-" * 102, "[새 PR]", "본문", "-" * 102]
+
+
 def test_new_pr_message_shows_pr_link_branches_and_reviewer_mentions():
     message = build_new_pr_message(make_pr(), {"cho104": "222"})
 
-    assert message == (
-        "🆕 새 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)\n"
+    assert message == framed(
+        "새 PR",
+        "#45 [RAG 파이프라인](https://github.com/o/r/pull/45)\n"
         "yuyeol3 · feature/rag → develop\n"
-        "리뷰어: <@222> @Jaeseong22"
+        "reviewer: <@222> @Jaeseong22",
     )
 
 
 def test_new_pr_message_says_unassigned_when_no_reviewer_requested():
     message = build_new_pr_message(make_pr(reviewers=()), {})
 
-    assert message.endswith("리뷰어: 미지정")
+    assert "\nreviewer: 미지정\n" in message
 
 
 def test_review_request_message_mentions_requested_reviewer():
     message = build_review_request_message(make_pr(), "cho104", {"cho104": "222"})
 
-    assert message == (
+    assert message == framed(
+        "리뷰 요청",
         "👀 <@222> 리뷰 요청: #45 [RAG 파이프라인](https://github.com/o/r/pull/45)"
-        " · yuyeol3"
+        " · yuyeol3",
     )
 
 
@@ -179,9 +186,10 @@ def test_due_reviewers_mentions_each_waiting_reviewer_once(
 def test_reminder_message_mentions_waiting_reviewers_on_authors_pr():
     message = build_reminder_message(make_pr(), ["cho104", "Jaeseong22"], {"cho104": "222"})
 
-    assert message == (
+    assert message == framed(
+        "리마인드",
         "!!리뷰 요청 후 24시간이 지났습니다.!!\n"
-        "yuyeol3님의 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45): <@222>, @Jaeseong22"
+        "yuyeol3님의 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45): <@222>, @Jaeseong22",
     )
 
 
@@ -195,7 +203,7 @@ def test_reminder_message_mentions_waiting_reviewers_on_authors_pr():
 def test_follow_up_reminder_adds_twelve_hours_and_two_bangs_each_side(nth, first_line):
     message = build_reminder_message(make_pr(), ["cho104"], {}, nth)
 
-    assert message.split("\n")[0] == first_line
+    assert message.split("\n")[2] == first_line
 
 
 HALF_DAY = timedelta(hours=12)
@@ -280,18 +288,24 @@ def test_review_notification_tags_author_with_state_and_mentions():
         make_pr(), "cho104", "request changes", ["@Jaeseong22 확인 부탁"], TEAM
     )
 
-    assert message == (
+    assert message == framed(
+        "리뷰 알림",
         "<@111>\n"
         "PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)에 cho104의 리뷰가 달렸습니다.\n"
         "review: request changes\n"
-        "mention: <@333>"
+        "mention: <@333>",
     )
 
 
-def test_review_notification_says_none_when_only_self_is_mentioned():
-    message = build_review_notification(make_pr(), "cho104", "none", ["@cho104 LGTM"], TEAM)
+def test_pr_comment_is_comment_notification_without_review_line():
+    message = build_review_notification(make_pr(), "cho104", None, ["@cho104 LGTM"], TEAM)
 
-    assert message.endswith("review: none\nmention: 없음")
+    assert message == framed(
+        "댓글 알림",
+        "<@111>\n"
+        "PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)에 cho104의 댓글이 달렸습니다.\n"
+        "mention: 없음",
+    )
 
 
 def test_authors_own_comment_notifies_mentioned_teammates():
@@ -299,9 +313,10 @@ def test_authors_own_comment_notifies_mentioned_teammates():
         make_pr(), "yuyeol3", "comment", ["@cho104 @Jaeseong22 반영했어요"], TEAM
     )
 
-    assert message == (
+    assert message == framed(
+        "멘션 알림",
         "<@222> <@333>\n"
-        "yuyeol3의 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)에서 cho104, Jaeseong22를 멘션했어요."
+        "yuyeol3의 PR #45 [RAG 파이프라인](https://github.com/o/r/pull/45)에서 cho104, Jaeseong22를 멘션했어요.",
     )
 
 

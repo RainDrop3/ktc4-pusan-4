@@ -17,6 +17,11 @@ REVIEW_STATE_LABELS = {
     "COMMENTED": "comment",
     "CHANGES_REQUESTED": "request changes",
 }
+DIVIDER = "-" * 102
+
+
+def framed(title: str, body: str) -> str:
+    return f"{DIVIDER}\n[{title}]\n{body}\n{DIVIDER}"
 
 
 def mention(login: str, user_ids: dict[str, str]) -> str:
@@ -37,15 +42,19 @@ def build_new_pr_message(pr: dict, user_ids: dict[str, str]) -> str:
         )
         or "미지정"
     )
-    return (
-        f"🆕 새 PR {_pr_link(pr)}\n"
+    return framed(
+        "새 PR",
+        f"{_pr_link(pr)}\n"
         f"{pr['user']['login']} · {pr['head']['ref']} → {pr['base']['ref']}\n"
-        f"리뷰어: {reviewers}"
+        f"reviewer: {reviewers}",
     )
 
 
 def build_review_request_message(pr: dict, login: str, user_ids: dict[str, str]) -> str:
-    return f"👀 {mention(login, user_ids)} 리뷰 요청: {_pr_link(pr)} · {pr['user']['login']}"
+    return framed(
+        "리뷰 요청",
+        f"👀 {mention(login, user_ids)} 리뷰 요청: {_pr_link(pr)} · {pr['user']['login']}",
+    )
 
 
 def opened_time(pr: dict, last_ready: datetime | None) -> datetime:
@@ -132,9 +141,10 @@ def build_reminder_message(
 ) -> str:
     reviewers = ", ".join(mention(login, user_ids) for login in logins)
     bangs = "!" * 2 * (nth + 1)
-    return (
+    return framed(
+        "리마인드",
         f"{bangs}리뷰 요청 후 {reminder_wait(nth) // timedelta(hours=1)}시간이 지났습니다.{bangs}\n"
-        f"{pr['user']['login']}님의 PR {_pr_link(pr)}: {reviewers}"
+        f"{pr['user']['login']}님의 PR {_pr_link(pr)}: {reviewers}",
     )
 
 
@@ -151,7 +161,7 @@ def mentioned_logins(texts: list[str], user_ids: dict[str, str]) -> list[str]:
 
 
 def build_review_notification(
-    pr: dict, actor: str, review: str, texts: list[str], user_ids: dict[str, str]
+    pr: dict, actor: str, review: str | None, texts: list[str], user_ids: dict[str, str]
 ) -> str | None:
     # main 대상은 운영진 notify-discord 워크플로가 알리고, public 레포라 팀원이 아닌 사람의 글은 거른다.
     if pr["base"]["ref"] == "main" or actor not in user_ids:
@@ -162,16 +172,16 @@ def build_review_notification(
     if actor == author:
         if not mentions:
             return None
-        return (
+        return framed(
+            "멘션 알림",
             f"{mentioned}\n"
-            f"{author}의 PR {_pr_link(pr)}에서 {', '.join(mentions)}를 멘션했어요."
+            f"{author}의 PR {_pr_link(pr)}에서 {', '.join(mentions)}를 멘션했어요.",
         )
-    return (
-        f"{mention(author, user_ids)}\n"
-        f"PR {_pr_link(pr)}에 {actor}의 리뷰가 달렸습니다.\n"
-        f"review: {review}\n"
-        f"mention: {mentioned or '없음'}"
-    )
+    head = f"{mention(author, user_ids)}\nPR {_pr_link(pr)}에 {actor}의"
+    tail = f"mention: {mentioned or '없음'}"
+    if review is None:
+        return framed("댓글 알림", f"{head} 댓글이 달렸습니다.\n{tail}")
+    return framed("리뷰 알림", f"{head} 리뷰가 달렸습니다.\nreview: {review}\n{tail}")
 
 
 def _github_request(
@@ -303,7 +313,7 @@ def collect_review_notification(
     else:
         number = event["issue"]["number"]
         actor = event["comment"]["user"]["login"]
-        label = "none"
+        label = None
         texts = [event["comment"]["body"]]
     pr = github_get(f"{api}/pulls/{number}", token)
     return build_review_notification(pr, actor, label, texts, user_ids)
