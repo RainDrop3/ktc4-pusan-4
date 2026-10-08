@@ -344,6 +344,86 @@ class JudgmentSchemaIntegrationTest {
     }
 
     @Test
+    void different_users_can_store_same_natural_key() {
+        UUID firstBatchId = insertUserWithBatch("other-user-1");
+        UUID secondBatchId = insertUserWithBatch("other-user-2");
+        insertTransaction(UUID.randomUUID(), firstBatchId, "shared-natural-key");
+        insertTransaction(UUID.randomUUID(), secondBatchId, "shared-natural-key");
+
+        assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from transaction where natural_key = 'shared-natural-key'", Integer.class
+        )).isEqualTo(2);
+    }
+
+    @Test
+    void transaction_owner_must_match_batch_owner() {
+        UUID batchId = insertUserWithBatch("owner");
+        UUID otherUserId = UUID.randomUUID();
+        jdbcTemplate.update(
+            "insert into app_user(id, email) values (?, ?)", otherUserId, otherUserId + "@example.com"
+        );
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+            insert into transaction(
+                id, batch_id, user_id, approved_at, merchant_raw, merchant_norm,
+                merchant_category, amount, natural_key, source_status, classification_status
+            ) values (?, ?, ?, '2025-03-14', '가맹점', '가맹점', '기타', 10000, 'owner-mismatch',
+                      'JUDGEABLE', 'CLASSIFIED')
+            """, UUID.randomUUID(), batchId, otherUserId)).isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void new_transaction_defaults_to_auto_inclusion_and_lump_sum() {
+        UUID batchId = insertUserWithBatch("defaults");
+        UUID transactionId = UUID.randomUUID();
+        insertTransaction(transactionId, batchId, "defaults-natural-key");
+
+        Map<String, Object> stored = jdbcTemplate.queryForMap("""
+            select user_inclusion, installment_months, is_aggregated, needs_review
+            from transaction
+            where id = ?
+            """, transactionId);
+        assertThat(stored)
+            .containsEntry("user_inclusion", "AUTO")
+            .containsEntry("installment_months", 0)
+            .containsEntry("is_aggregated", false)
+            .containsEntry("needs_review", false);
+    }
+
+    @Test
+    void canceled_offset_transaction_cannot_be_included() {
+        UUID batchId = insertUserWithBatch("canceled");
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+            insert into transaction(
+                id, batch_id, user_id, approved_at, merchant_raw, merchant_norm,
+                merchant_category, amount, natural_key, source_status, user_inclusion,
+                classification_status
+            )
+            select ?, b.id, b.user_id, '2025-03-14', '가맹점', '가맹점', '기타', 10000,
+                   'canceled-included', 'CANCELED_OFFSET', 'INCLUDED', 'CLASSIFIED'
+            from upload_batch b
+            where b.id = ?
+            """, UUID.randomUUID(), batchId)).isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void unclassified_transaction_must_need_review() {
+        UUID batchId = insertUserWithBatch("unclassified");
+
+        assertThatThrownBy(() -> jdbcTemplate.update("""
+            insert into transaction(
+                id, batch_id, user_id, approved_at, merchant_raw, merchant_norm,
+                merchant_category, amount, natural_key, source_status, classification_status
+            )
+            select ?, b.id, b.user_id, '2025-03-14', '가맹점', '가맹점', '미분류', 10000,
+                   'unclassified-classified', 'JUDGEABLE', 'CLASSIFIED'
+            from upload_batch b
+            where b.id = ?
+            """, UUID.randomUUID(), batchId)).isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
     void merchant_dictionary_has_no_judgment_columns() {
         List<String> columns = jdbcTemplate.queryForList("""
             select column_name
@@ -811,13 +891,29 @@ class JudgmentSchemaIntegrationTest {
             """, batchId, userId, fileHash);
     }
 
+    private UUID insertUserWithBatch(String fileHash) {
+        UUID userId = UUID.randomUUID();
+        UUID batchId = UUID.randomUUID();
+        jdbcTemplate.update(
+            "insert into app_user(id, email) values (?, ?)", userId, userId + "@example.com"
+        );
+        insertBatch(batchId, userId, fileHash);
+        return batchId;
+    }
+
+    /** 소유자는 batch 에서 가져온다. 거래와 batch 의 user_id 는 FK 로 묶여 있다. */
     private void insertTransaction(UUID transactionId, UUID batchId, String naturalKey) {
-        jdbcTemplate.update("""
+        int inserted = jdbcTemplate.update("""
             insert into transaction(
-                id, batch_id, approved_at, merchant_raw, merchant_norm,
-                merchant_category, amount, natural_key, status
-            ) values (?, ?, '2025-03-14', '가맹점', '가맹점', '기타', 10000, ?, '판정대상')
-            """, transactionId, batchId, naturalKey);
+                id, batch_id, user_id, approved_at, merchant_raw, merchant_norm,
+                merchant_category, amount, natural_key, source_status, classification_status
+            )
+            select ?, b.id, b.user_id, '2025-03-14', '가맹점', '가맹점', '기타', 10000, ?,
+                   'JUDGEABLE', 'CLASSIFIED'
+            from upload_batch b
+            where b.id = ?
+            """, transactionId, naturalKey, batchId);
+        assertThat(inserted).as("batch %s 가 먼저 있어야 한다", batchId).isEqualTo(1);
     }
 
     private void insertJudgmentFixture(
