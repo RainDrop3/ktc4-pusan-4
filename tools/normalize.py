@@ -364,7 +364,7 @@ def inject_brands(spec: dict, brands: list | None = None) -> None:
     """resolve_brand 단계에 브랜드 목록을 넣는다. 원본은 단계의 dict(rules/brands.yaml).
 
     PG 힌트와 같은 방식이다 — 규칙 파일은 하나만 두고 로더가 단계에 주입한다.
-    Java(T1Cli)도 같은 방식으로 같은 파일을 읽는다.
+    Java(backend NormalizeSpecLoader)도 같은 방식으로 같은 파일을 읽는다.
     """
     for step in spec.get("steps") or []:
         if step.get("id") != "resolve_brand":
@@ -414,7 +414,7 @@ def selftest(norm: Normalizer) -> int:
 def run_fixture(path) -> int:
     """fixture 파일의 brands 로 사전을 바꿔 끼우고 cases 의 기대 필드를 검사한다.
 
-    Java(T1Cli --fixture)가 같은 파일을 읽어 같은 기대값을 검사한다 — 두 구현이
+    Java(backend T1NormalizerRulesTest)가 같은 파일을 읽어 같은 기대값을 검사한다 — 두 구현이
     같은 출력을 내는지는 이 파일 하나로 확인된다.
     """
     with NORMALIZE_YAML.open(encoding="utf-8") as f:
@@ -963,7 +963,7 @@ def main() -> int:
     ap.add_argument("--text", help="문자열 하나를 정규화한다")
     ap.add_argument("--biz-no", default="", help="--text 와 함께 쓸 사업자번호")
     ap.add_argument("--selftest", action="store_true", help="normalize.yaml 의 test_cases 실행")
-    ap.add_argument("--fixture", help="브랜드 fixture 실행 (Java T1Cli --fixture 와 같은 파일)")
+    ap.add_argument("--fixture", help="브랜드 fixture 실행 (backend T1NormalizerRulesTest 와 같은 파일)")
     ap.add_argument("--report", action="store_true", help="docs/normalize_report.md 생성")
     args = ap.parse_args()
 

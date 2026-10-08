@@ -215,7 +215,7 @@ flowchart LR
 | B2 | B | 10/5 | 거래 스키마를 api.md에 맞춘다. `transaction.user_id`를 추가하고 기존 행을 채운 뒤 FK를 적용한다. 전역 `UNIQUE(natural_key)`는 `UNIQUE(user_id, natural_key)`로 변경한다. `status` 하나를 `source_status`, `user_inclusion`, `classification_status`로 나눈다. `installment_months`는 기본값을 0으로, CHECK를 `>= 0`으로 변경한다. 업로드로 받는 `approval_no`, `biz_no`, `branch`, `branch_raw`, `memo`, `is_aggregated`, `needs_review`, `review_reason`, `source_card` 컬럼을 추가한다(`docs/schema_mapping.md`). `UNIQUE(user_id, file_hash)`는 `upload_batch`에 이미 있다. `TransactionRecordEntity`와 `UploadBatchEntity`에 전체 컬럼을 매핑한다. |
 | B1a | B | 10/6 | `CurrentUser` 리졸버와 임시 사용자 시드를 구현한다. `GET /users/me`를 구현하고 `app_user` 엔티티를 V1 테이블에 매핑한다. 첫 mock 교체 PR에서 패턴을 정한다. 탈퇴(`DELETE /users/me`)는 삭제 정책이 갖춰진 뒤 B6에서 구현한다. |
 | B1b | B | 10/7 | `POST/GET /users/me/contexts`, `contexts/current`를 구현한다. `user_context` 엔티티를 V1 테이블에 매핑한다. |
-| B3a | B | 10/8 | `engine/.../T1Normalizer` 로직을 backend로 이전하고 `rules/normalize.yaml`을 읽는다. 순수 컴포넌트로 유지하며 fixture 기반 단위 테스트도 함께 옮긴다. |
+| B3a | B | 10/8 | `engine/.../T1Normalizer` 로직을 backend로 이전하고 `rules/normalize.yaml`을 읽는다. Python `load()`와 같이 `rules/brands.yaml`(브랜드 사전)과 `rules/pg_blocklist.yaml`(PG 힌트)도 단계에 넣는다. 순수 컴포넌트로 유지하며 fixture 기반 단위 테스트도 함께 옮긴다. `engine/`은 지운다(#79). |
 
 ### 2주차 (10/12~10/16): 업로드, 조회, 질문
 
