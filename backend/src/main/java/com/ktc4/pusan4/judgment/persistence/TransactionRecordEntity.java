@@ -10,7 +10,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * 카드 거래 한 건 (V6, api.md 3.3·3.4).
+ * 카드 거래 한 건 (V8, api.md 3.3·3.4).
  *
  * <p>상태 컬럼 3개는 api.md 의 enum 이름(code)을 문자열로 담는다. 허용값은 DB CHECK 가 지킨다.
  * effectiveStatus 는 저장하지 않고 sourceStatus·userInclusion 으로 계산한다(api.md 2.3).

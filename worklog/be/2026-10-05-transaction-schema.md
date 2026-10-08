@@ -2,11 +2,11 @@
 
 - 브랜치: feature/transaction-schema
 - 커밋: 1개
-- 주요파일: V6__align_transaction_with_upload_contract.sql, TransactionRecordEntity.java, UploadBatchEntity.java, JudgmentSchemaIntegrationTest.java
+- 주요파일: V8__align_transaction_with_upload_contract.sql, TransactionRecordEntity.java, UploadBatchEntity.java, JudgmentSchemaIntegrationTest.java
 
 ## 한 일
 
-- `transaction` 마이그레이션 V6 (docs/backend_api_plan.md B2)
+- `transaction` 마이그레이션 V8 (docs/backend_api_plan.md B2)
   - `user_id` 추가 → batch 에서 채움 → `NOT NULL` → `(batch_id, user_id)` 를 `upload_batch(id, user_id)` 에 FK 로 묶음
   - `UNIQUE(natural_key)` → `UNIQUE(user_id, natural_key)`
   - `status` 를 `source_status`·`user_inclusion`(기본 AUTO)·`classification_status` 로 나누고 기존 값을 옮긴 뒤 `status` 삭제
@@ -30,10 +30,10 @@
 
 ## 확인한 것
 
-- 로컬 Postgres 16 에 V1~V5 적용 → 행 3개 삽입 → V6 적용. 기존 값이 새 컬럼으로 옮겨짐(판정대상/취소상계/대상제외, 미분류→NEEDS_REVIEW).
-- 빈 DB 에 V1~V6 적용.
+- 로컬 Postgres 16 에 V1~V5 적용 → 행 3개 삽입 → V6 적용(이름 변경 전). 기존 값이 새 컬럼으로 옮겨짐(판정대상/취소상계/대상제외, 미분류→NEEDS_REVIEW).
+- develop(V7) 기준 rebase 후 V8 로 이름 변경. 빈 DB 에 V1~V8 적용(integrationTest 42건 통과).
 - 제약 11가지를 SQL 로 직접 확인(중복 키, 소유자 불일치, 취소상계 포함, 미분류, 허용값, 할부 음수, 기본값, batch 삭제 연쇄 등).
-- 두 엔티티의 컬럼 이름이 V6 이후 테이블 컬럼과 정확히 같음.
+- 두 엔티티의 컬럼 이름이 V8 이후 테이블 컬럼과 정확히 같음.
 - `gradlew test`·`integrationTest` 는 작업 환경에서 Gradle·Docker 이미지를 받을 수 없어 돌리지 못했다. PR 전에 로컬에서 돌려야 한다.
 
 ## 남은 것 · 아는 문제
