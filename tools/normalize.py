@@ -909,11 +909,22 @@ PG_SAFE_PATTERNS: list = []
 # 가맹점이 아닌 행. 카드사가 만든 정산·합산·마스킹 라벨이라 그대로 써도 된다.
 NON_MERCHANT = "^(교통|버스|지하철|시외버스|정상할인|포인트사용|의료_?마스킹|.*할인$)"
 
-# 분해 결과에서 흔하게 겹쳐 '같은 곳' 판정을 오염시키는 토큰
-GENERIC_TOKEN_PAT = "^(모바일.*|[0-9]+건|.*[0-9]+건)$"
-GENERIC_TOKENS = {"모바일", "대표", "청구", "일반", "비인증", "결제", "구매", "주문", "정기",
-                  "푸드코트", "매점", "자판기", "본점", "온라인", "선물하기", "클럽", "정보통신",
-                  "현장발권", "무한대패", "코인노래연습장"}
+# 분해 결과에서 흔하게 겹쳐 '같은 곳' 판정을 오염시키는 토큰.
+# 원본은 rules/pg_blocklist.yaml 의 hint_ignore 다(PG 힌트에서 빼는 구조 토큰과 같은 목록).
+# Java(merchant/pg/PgBlocklist)도 그 파일을 읽는다. 여기에 사본을 두지 않는다.
+def hint_ignore(pg_spec: dict | None) -> tuple[set, str]:
+    hi = (pg_spec or {}).get("hint_ignore") or {}
+    return set(hi.get("tokens") or []), hi.get("pattern") or "(?!)"
+
+
+def _load_hint_ignore() -> tuple[set, str]:
+    if not PG_YAML.exists():
+        return hint_ignore(None)
+    with PG_YAML.open(encoding="utf-8") as f:
+        return hint_ignore(yaml.safe_load(f))
+
+
+GENERIC_TOKENS, GENERIC_TOKEN_PAT = _load_hint_ignore()
 
 
 def report_category(name: str) -> str:
