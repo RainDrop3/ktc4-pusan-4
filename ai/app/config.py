@@ -5,7 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
+    # compose 는 서버 env 에 없는 변수를 빈 값으로 넘긴다. 빈 값은 없는 것으로 보고 기본값을 쓴다.
+    model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore", env_ignore_empty=True)
 
     database_url: str = "postgresql://ktc4:ktc4-local@localhost:15432/ktc4"
     agent_api_key: str | None = None
