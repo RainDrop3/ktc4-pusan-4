@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import java.time.OffsetDateTime;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -139,19 +140,30 @@ class ApiResponseContractTest {
         "prevYearRevenue", "businessOpenDate", "bookkeepingDuty", "hasEmployee", "homeOfficeRatio", "createdAt");
     private static final Set<String> UPLOAD_BATCH_KEYS = Set.of("id", "sourceType", "cardIssuer", "periodStart",
         "periodEnd", "transactionCount", "skippedDuplicateCount", "classificationPendingCount", "createdAt");
-    private static final Set<String> JUDGMENT_KEYS = Set.of("id", "transactionId", "revision", "origin", "verdict",
-        "outOfScope", "blockedAtGate", "account", "finalAmount", "isInference", "unmatchedReason", "attributes",
+    /** api.md 3.4 거래 요약. 거래를 함께 보여주는 응답은 이 필드를 모두 넣는다 */
+    private static final Set<String> TRANSACTION_SUMMARY_KEYS = Set.of("approvedAt", "merchantRaw", "merchantNorm",
+        "merchantCategory", "amount", "installmentMonths");
+    private static final Set<String> JUDGMENT_KEYS = Set.of("id", "transactionId", "transaction", "revision", "origin",
+        "verdict", "outOfScope", "blockedAtGate", "account", "finalAmount", "isInference", "unmatchedReason", "attributes",
         "ruleCardId", "ruleCardVersion", "appliedRuleIds", "rulesCommitSha", "userContextVersion", "explanation",
         "computedAt", "citations");
     private static final Set<String> QUESTION_KEYS = Set.of("id", "batchId", "transactionId", "groupKey", "factType",
-        "questionText", "options", "status", "answeredFactId", "createdAt", "answeredAt");
+        "questionText", "options", "status", "answeredFactId", "answer", "createdAt", "answeredAt");
+    private static final Set<String> QUESTION_GROUP_KEYS = Set.of("groupKey", "factType", "status", "questionIds",
+        "count", "totalAmount", "questionText", "options", "answer", "bulkAnswerable", "transactions");
+    private static final Set<String> QUESTION_GROUP_TRANSACTION_KEYS =
+        withTransactionSummary("questionId", "transactionId", "overridden");
     private static final Set<String> CLASSIFICATION_REVIEW_KEYS = Set.of("id", "batchId", "transactionId",
         "merchantRaw", "merchantNorm", "status", "suggestedCategories", "createdAt", "resolvedAt");
     private static final Set<String> CLASSIFICATION_REVIEW_GROUP_KEYS = Set.of("groupKey", "merchantNorm",
         "reviewIds", "count", "totalAmount", "merchantRaw", "suggestedCategories", "transactions");
-    private static final Set<String> CLASSIFICATION_GROUP_TRANSACTION_KEYS = Set.of("reviewId", "transactionId",
-        "approvedAt", "merchantRaw", "amount", "installmentMonths");
+    private static final Set<String> CLASSIFICATION_GROUP_TRANSACTION_KEYS =
+        withTransactionSummary("reviewId", "transactionId");
     private static final Set<String> UNRESOLVED_KEYS = Set.of("count", "amount");
+
+    private static Set<String> withTransactionSummary(String... keys) {
+        return Stream.concat(Stream.of(keys), TRANSACTION_SUMMARY_KEYS.stream()).collect(Collectors.toSet());
+    }
 
     /**
      * 응답 타입이 Map 이던 자리. 키 집합은 api.md 의 응답 예시에서 옮겼다.
@@ -164,7 +176,13 @@ class ApiResponseContractTest {
             Arguments.of("/api/v1/upload-batches", "/items/0", UPLOAD_BATCH_KEYS),
             Arguments.of("/api/v1/upload-batches/" + ID, "", UPLOAD_BATCH_KEYS),
             Arguments.of("/api/v1/judgments?batchId=" + ID, "/items/0", JUDGMENT_KEYS),
+            Arguments.of("/api/v1/judgments?batchId=" + ID, "/items/0/transaction", TRANSACTION_SUMMARY_KEYS),
+            Arguments.of("/api/v1/judgments/" + ID, "", JUDGMENT_KEYS),
             Arguments.of("/api/v1/questions?batchId=" + ID, "/items/0", QUESTION_KEYS),
+            Arguments.of("/api/v1/questions?batchId=" + ID + "&grouped=true", "/items/0", QUESTION_GROUP_KEYS),
+            Arguments.of("/api/v1/questions?batchId=" + ID + "&grouped=true", "/items/0/transactions/0",
+                QUESTION_GROUP_TRANSACTION_KEYS),
+            Arguments.of("/api/v1/questions?batchId=" + ID + "&grouped=true", "/unresolved", UNRESOLVED_KEYS),
             Arguments.of("/api/v1/classification-reviews", "/items/0", CLASSIFICATION_REVIEW_KEYS),
             Arguments.of("/api/v1/classification-reviews", "/unresolved", UNRESOLVED_KEYS),
             Arguments.of("/api/v1/classification-reviews?grouped=true", "/items/0", CLASSIFICATION_REVIEW_GROUP_KEYS),
