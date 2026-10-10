@@ -13,4 +13,5 @@ match:
 verdict: 불가
 citations:
   - { id: 소득세법-33-1-5, verified: true }
+  - { id: 소득세법시행령-61-1-1, verified: true }
 review: { by: 미검수, date: 2026-09-16 }
