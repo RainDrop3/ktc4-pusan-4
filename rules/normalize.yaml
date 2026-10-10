@@ -15,7 +15,7 @@ version: 1
 #   - string:   그 외
 #
 # ★ 이 블록을 읽는 코드는 아직 없다. normalize() 가 같은 로직을 하드코딩한다.
-#   Python(tools/normalize.py)·Java(T1Normalizer) 를 같이 고쳐야 한다.
+#   Python(tools/normalize.py)·Java(backend T1Normalizer) 를 같이 고쳐야 한다.
 # ─────────────────────────────────────────────────────────────
 key_strategy:
   - { track: 1, id: overseas, when: is_overseas, key: string_norm }
@@ -60,7 +60,7 @@ steps:
       - "\\(주\\)"
       - "\\(유\\)"
       # ㈜ 는 도달 불가능한 줄이다 — fullwidth_to_halfwidth(NFKC)가 먼저
-      # (주) 로 분해한다. 지우지 않고 남겨둔다 (engine README_T1.md 참고).
+      # (주) 로 분해한다. 지우지 않고 남겨둔다 (backend merchant/normalize/README.md 참고).
       - "㈜"
       - "주식회사"
       - "유한회사"
@@ -163,13 +163,13 @@ exceptions:
 # ─────────────────────────────────────────────────────────────
 # test_cases — 합성 케이스. 이 규칙 파일이 만드는 **모든 경로**를 덮는 것이 목적이다.
 #
-# 파이썬(tools/normalize.py --selftest)과 자바(T1Cli --selftest)가 이 파일을
+# 파이썬(tools/normalize.py --selftest)과 자바(backend T1NormalizerRulesTest)가 이 파일을
 # 같이 읽으므로, 여기에 케이스를 넣으면 양쪽이 함께 검증된다.
 #
 # ★ 새 규칙을 추가하면 그 규칙이 만드는 경로를 여기에 반드시 넣는다.
 #   엔진 폴더의 '실측 상호 43건 대조' 는 실데이터에서 뽑은 고정 목록이라,
 #   실데이터에 아직 없는 입력은 대조에 들어갈 수가 없다. 새 규칙이 만드는
-#   경로를 구조적으로 못 잡는다. (engine/.../README_T1.md 참고)
+#   경로를 구조적으로 못 잡는다. (backend merchant/normalize/README.md 참고)
 # ─────────────────────────────────────────────────────────────
 test_cases:
   - { in: "스타벅스코리아 강남대로점", out: "스타벅스" }

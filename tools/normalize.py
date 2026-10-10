@@ -364,7 +364,7 @@ def inject_brands(spec: dict, brands: list | None = None) -> None:
     """resolve_brand 단계에 브랜드 목록을 넣는다. 원본은 단계의 dict(rules/brands.yaml).
 
     PG 힌트와 같은 방식이다 — 규칙 파일은 하나만 두고 로더가 단계에 주입한다.
-    Java(T1Cli)도 같은 방식으로 같은 파일을 읽는다.
+    Java(backend NormalizeSpecLoader)도 같은 방식으로 같은 파일을 읽는다.
     """
     for step in spec.get("steps") or []:
         if step.get("id") != "resolve_brand":
@@ -414,7 +414,7 @@ def selftest(norm: Normalizer) -> int:
 def run_fixture(path) -> int:
     """fixture 파일의 brands 로 사전을 바꿔 끼우고 cases 의 기대 필드를 검사한다.
 
-    Java(T1Cli --fixture)가 같은 파일을 읽어 같은 기대값을 검사한다 — 두 구현이
+    Java(backend T1NormalizerRulesTest)가 같은 파일을 읽어 같은 기대값을 검사한다 — 두 구현이
     같은 출력을 내는지는 이 파일 하나로 확인된다.
     """
     with NORMALIZE_YAML.open(encoding="utf-8") as f:
@@ -909,11 +909,22 @@ PG_SAFE_PATTERNS: list = []
 # 가맹점이 아닌 행. 카드사가 만든 정산·합산·마스킹 라벨이라 그대로 써도 된다.
 NON_MERCHANT = "^(교통|버스|지하철|시외버스|정상할인|포인트사용|의료_?마스킹|.*할인$)"
 
-# 분해 결과에서 흔하게 겹쳐 '같은 곳' 판정을 오염시키는 토큰
-GENERIC_TOKEN_PAT = "^(모바일.*|[0-9]+건|.*[0-9]+건)$"
-GENERIC_TOKENS = {"모바일", "대표", "청구", "일반", "비인증", "결제", "구매", "주문", "정기",
-                  "푸드코트", "매점", "자판기", "본점", "온라인", "선물하기", "클럽", "정보통신",
-                  "현장발권", "무한대패", "코인노래연습장"}
+# 분해 결과에서 흔하게 겹쳐 '같은 곳' 판정을 오염시키는 토큰.
+# 원본은 rules/pg_blocklist.yaml 의 hint_ignore 다(PG 힌트에서 빼는 구조 토큰과 같은 목록).
+# Java(merchant/pg/PgBlocklist)도 그 파일을 읽는다. 여기에 사본을 두지 않는다.
+def hint_ignore(pg_spec: dict | None) -> tuple[set, str]:
+    hi = (pg_spec or {}).get("hint_ignore") or {}
+    return set(hi.get("tokens") or []), hi.get("pattern") or "(?!)"
+
+
+def _load_hint_ignore() -> tuple[set, str]:
+    if not PG_YAML.exists():
+        return hint_ignore(None)
+    with PG_YAML.open(encoding="utf-8") as f:
+        return hint_ignore(yaml.safe_load(f))
+
+
+GENERIC_TOKENS, GENERIC_TOKEN_PAT = _load_hint_ignore()
 
 
 def report_category(name: str) -> str:
@@ -963,7 +974,7 @@ def main() -> int:
     ap.add_argument("--text", help="문자열 하나를 정규화한다")
     ap.add_argument("--biz-no", default="", help="--text 와 함께 쓸 사업자번호")
     ap.add_argument("--selftest", action="store_true", help="normalize.yaml 의 test_cases 실행")
-    ap.add_argument("--fixture", help="브랜드 fixture 실행 (Java T1Cli --fixture 와 같은 파일)")
+    ap.add_argument("--fixture", help="브랜드 fixture 실행 (backend T1NormalizerRulesTest 와 같은 파일)")
     ap.add_argument("--report", action="store_true", help="docs/normalize_report.md 생성")
     args = ap.parse_args()
 
