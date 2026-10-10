@@ -1,4 +1,4 @@
-package kr.taxmate.preprocess.t1;
+package com.ktc4.pusan4.merchant.normalize;
 
 import java.nio.charset.Charset;
 import java.text.Normalizer;
@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
  *
  * <p>규칙은 이 클래스에 없다. YAML 이 단계 목록을 정하고 여기서는 그 이름에 해당하는
  * 동작만 제공한다. 규칙을 고치려면 YAML 을 고친다.
+ * 스펙은 {@link NormalizeSpecLoader} 가 브랜드 사전·PG 힌트를 넣어 만든다.
  *
  * <p>파이썬 구현({@code tools/normalize.py})과 문자 단위로 같은 결과를 내는 것이 목표다.
  * 두 구현이 갈라지면 사전에 쌓인 키가 조용히 무효가 되므로, 아래 세 가지는

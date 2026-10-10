@@ -2,7 +2,7 @@
 #
 # Python 과 Java 가 같은 파일로 같은 기대값을 검사한다. 두 구현의 동일 출력 테스트다.
 #   python tools/normalize.py --fixture tools/fixtures/brand_layer1.yaml
-#   java ... T1Cli --fixture rules/normalize.yaml tools/fixtures/brand_layer1.yaml
+#   cd backend && ./gradlew test --tests "*T1NormalizerRulesTest"
 #
 # brands 는 rules/brands.yaml 대신 쓰는 합성 사전이다. 실제 상호는 넣지 않는다.
 # 각 case 는 적은 필드만 비교한다. 이름은 Python Result 필드명(snake_case)이다.
