@@ -20,6 +20,8 @@ import java.util.UUID;
 class JudgmentRunItemEntity {
 
     static final String FAILURE_CODE = "RULE_PROCESSING_FAILED";
+    static final String INTERRUPTED_CODE = "RUN_INTERRUPTED";
+    static final String INTERRUPTED_MESSAGE = "서버가 다시 시작되어 판정이 중단되었습니다. 판정을 다시 실행해 주세요.";
 
     @EmbeddedId
     private Key key;
