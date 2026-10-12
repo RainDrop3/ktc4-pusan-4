@@ -16,5 +16,6 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     langfuse_base_url: str = "https://jp.cloud.langfuse.com"
     law_api_oc: str = "test"
+    team_discord_webhook: str | None = None
 
 settings = Settings()
