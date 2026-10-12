@@ -829,7 +829,7 @@ question:
   group_by: merchant_norm      # 같은 카페 12건을 한 화면에
   options:
     - { value: 업무미팅, verdict: 가능, account: 접대비,   limit_bucket: 접대비 }
-    - { value: 혼자작업, verdict: 가능, account: 소모품비 }
+    - { value: 혼자작업, verdict: 불가 }      # 1인 카페 작업은 원칙적으로 개인 비용 (세무사 자문 2026.09, #65)
     - { value: 개인,     verdict: 불가 }
 review: { by: 외부자문, date: 2026-09-05 }
 ```
