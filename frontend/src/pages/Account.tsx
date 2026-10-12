@@ -83,10 +83,11 @@ export function Account() {
         <Card as="section" padding="md" className="mt-4">
           <h2 className="text-h4 font-bold text-ink">탈퇴</h2>
           <p className="mt-1.5 text-body leading-6 text-ink2">
-            탈퇴하면 계정이 삭제되고 다시 로그인할 수 없습니다. 되돌릴 수 없습니다.
+            탈퇴하면 계정과 함께 올린 카드내역·거래, 판정 결과, 되묻기 질문과 답변,
+            사업자 문진이 모두 사라집니다. 되돌릴 수 없습니다.
           </p>
           <p className="mt-2 text-small leading-6 text-muted">
-            올린 카드내역을 먼저 지우고 싶으면 업로드 이력에서 지울 수 있습니다.
+            법령 데이터와 서비스 공용 가맹점 사전은 남습니다. 사용자 데이터가 아닙니다.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button
@@ -108,7 +109,7 @@ export function Account() {
           onClose={() => setConfirming(false)}
           tone="danger"
           title="정말 탈퇴할까요?"
-          description="되돌릴 수 없습니다. 계정이 삭제되고 이 이메일로 다시 로그인할 수 없습니다."
+          description="되돌릴 수 없습니다. 이 이메일로 다시 로그인할 수 없고, 아래 데이터가 함께 사라집니다."
           footer={
           <>
               <Button
@@ -138,6 +139,20 @@ export function Account() {
               {error}
             </p>
           }
+          <ul className="mb-4 space-y-1 text-small text-ink2">
+            {[
+            '올린 카드내역과 거래',
+            '판정 결과',
+            '되묻기 질문과 답변',
+            '사업자 문진'].
+            map((item) =>
+            <li key={item} className="flex gap-2">
+                <span aria-hidden="true" className="text-muted">·</span>
+                {item}
+              </li>
+            )}
+          </ul>
+
           {me &&
           <dl className="space-y-1.5 rounded-xl bg-canvas p-4 text-small">
               <div className="flex justify-between gap-3">
