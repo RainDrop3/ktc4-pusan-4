@@ -7,6 +7,7 @@ import com.ktc4.pusan4.judgment.domain.JudgmentOrigin;
 import com.ktc4.pusan4.judgment.domain.JudgmentOriginType;
 import com.ktc4.pusan4.judgment.domain.JudgmentRevision;
 import com.ktc4.pusan4.judgment.domain.JudgmentRun;
+import com.ktc4.pusan4.judgment.domain.JudgmentSummary;
 import com.ktc4.pusan4.judgment.domain.JudgmentRunFailure;
 import com.ktc4.pusan4.judgment.domain.JudgmentRunStatus;
 import com.ktc4.pusan4.judgment.domain.Verdict;
@@ -117,6 +118,8 @@ class ApiResponseContractTest {
             List.of(new JudgmentRevision.CitedStatute(1418, "소득세법-27-1")));
         given(judgmentQueryService.get(any(), any())).willReturn(judgment);
         given(judgmentQueryService.list(any(), any(), anyInt(), anyInt())).willReturn(new PageImpl<>(List.of(judgment)));
+        given(judgmentQueryService.summary(any(), any(), any(), any())).willReturn(JudgmentSummary.of(List.of(
+            new JudgmentSummary.Row(Verdict.AVAILABLE, "소모품비", 12_800L))));
     }
 
     static Stream<Arguments> endpoints() {
