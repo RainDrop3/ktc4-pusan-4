@@ -15,6 +15,8 @@ import com.ktc4.pusan4.judgment.domain.JudgmentRunStatus;
 import com.ktc4.pusan4.judgment.domain.Verdict;
 import com.ktc4.pusan4.judgment.persistence.JudgmentQueryService;
 import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
+import com.ktc4.pusan4.judgment.persistence.QuestionAnswerResult;
+import com.ktc4.pusan4.judgment.persistence.QuestionAnswerService;
 import com.ktc4.pusan4.judgment.persistence.QuestionQueryService;
 import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
@@ -93,6 +95,9 @@ class ApiResponseContractTest {
     @MockitoBean
     private QuestionQueryService questionQueryService;
 
+    @MockitoBean
+    private QuestionAnswerService questionAnswerService;
+
     @BeforeEach
     void stubServices() {
         given(userService.get(any())).willReturn(new AppUser(
@@ -131,6 +136,8 @@ class ApiResponseContractTest {
             UUID.fromString(ID), UUID.fromString(ID), "merchant:스타벅스", "용도", "용도가 무엇인가요?",
             List.of("사업", "개인", "혼용"), QuestionStatus.PENDING, null, null,
             OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false)));
+        given(questionAnswerService.answer(any(), any(), any()))
+            .willReturn(new QuestionAnswerResult(1, UUID.fromString(ID), 1));
     }
 
     static Stream<Arguments> endpoints() {
