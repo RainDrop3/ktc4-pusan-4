@@ -50,6 +50,16 @@ public class BusinessContextService {
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CONTEXT_NOT_FOUND", "문진 전입니다."));
     }
 
+    /** 재판정은 판정 당시 버전을 다시 쓴다 (api.md 3.5 판정 처리, 3.10 재판정 Context). */
+    @Transactional(readOnly = true)
+    public BusinessContext version(UUID userId, int version) {
+        return contextRepository.findByUserIdAndVersion(userId, version)
+            .map(UserContextEntity::toDomain)
+            .orElseThrow(() -> new ApiException(
+                HttpStatus.NOT_FOUND, "CONTEXT_NOT_FOUND", "문진 버전 " + version + " 이 없습니다."
+            ));
+    }
+
     @Transactional(readOnly = true)
     public List<BusinessContext> history(UUID userId) {
         return contextRepository.findByUserIdOrderByVersionAsc(userId).stream()

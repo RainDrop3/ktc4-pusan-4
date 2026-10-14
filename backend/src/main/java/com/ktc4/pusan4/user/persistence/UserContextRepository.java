@@ -14,6 +14,8 @@ interface UserContextRepository extends Repository<UserContextEntity, UUID> {
 
     Optional<UserContextEntity> findFirstByUserIdOrderByVersionDesc(UUID userId);
 
+    Optional<UserContextEntity> findByUserIdAndVersion(UUID userId, int version);
+
     List<UserContextEntity> findByUserIdOrderByVersionAsc(UUID userId);
 
     @Query("""

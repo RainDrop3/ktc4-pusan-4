@@ -129,3 +129,77 @@
 
 - 배포 전에 운영 DB 의 `judgment`·`user_fact` 행이 0 인지 확인해야 한다.
 - B2 가 merge 되면 `user_fact (batch_id, user_id)` 를 `upload_batch(id, user_id)` 에 복합 FK 로 묶는 것을 검토한다.
+
+## 02:40 거래 한 건을 판정해 저장하는 실행기 (A2a, feature/judgment-executor)
+
+- 브랜치: feature/judgment-executor (base: feature/judgment-origin + B2 feature/transaction-schema + B1b feature/business-context 로컬 merge)
+- 커밋: 84e62bb (1개, merge 2개 제외)
+- 주요파일: JudgmentExecutor.java, RuleSetConfiguration.java, HolidayCalendar.java, V9__create_public_holiday.sql
+
+### 한 일
+
+- `RuleSetConfiguration`: 기동 시 `app.rules.dir`(기본 `../rules`)에서 카드를 한 번 읽어 `RuleSet` 빈으로 둔다. 읽지 못하면 부팅이 실패한다.
+- V9 `public_holiday(holiday_date PK, name, fetched_at)` 와 `HolidayCalendar.publicHolidays()`(JdbcTemplate). 표를 채우는 동기화는 A2h 다.
+- `JudgmentExecutor`
+  - `judge(transactionId, BusinessContext, origin)` 를 한 트랜잭션으로 처리한다.
+    1. 거래를 `TransactionInput` 으로 바꾼다.
+    2. 그 batch 의 최신 UserFact, 공휴일 집합과 함께 엔진 5인자 `judge` 를 부른다.
+    3. `JudgmentService.save` 로 저장한다(taxYear·시행일 = 승인일).
+    4. 같은 거래의 다른 revision 에 남은 PENDING 질문을 CANCELED 로 바꾼다.
+  - Context 의 사용자가 거래의 사용자와 다르면 거부한다.
+  - `rejudge(userId, transactionIds, origin, contextVersion)`: `BusinessContextService.version` 으로 Context 를 찾아 거래마다 `judge` 를 부른다. 호출한 쪽 트랜잭션에 묶인다.
+- `BusinessContextService.version(userId, version)` 을 추가했다(B1b 코드). 없으면 404 `CONTEXT_NOT_FOUND`.
+- `TransactionRecordEntity` 에 접근자와 `toInput()` 을, 리포지토리에 `findById` 를 추가했다(B2 코드).
+- rules_commit_sha
+  - `app.rules.commit-sha` 의 기본값은 `local` 이다.
+  - Dockerfile 이 `ARG RULES_COMMIT_SHA` 를 `ENV APP_RULES_COMMIT_SHA` 로 넘기고, `APP_RULES_DIR=/app/rules` 를 둔다.
+  - aws-release 의 backend 이미지 빌드에 `--build-arg RULES_COMMIT_SHA="$GITHUB_SHA"` 를 붙였다.
+- 통합 테스트 `JudgmentExecutorIntegrationTest` 6개를 실제 카드(../rules)로 돌린다.
+  - 평일 카페 → R-300 확인필요, 질문 PENDING, run origin, context 버전, commit sha 가 남는다.
+  - 2025-10-09 를 공휴일 표에 넣으면 R-312 불가로 바뀌고 이전 질문이 CANCELED 된다.
+  - 다른 batch 의 fact 는 쓰지 않는다. 같은 batch 의 업무미팅 fact 가 있으면 가능·접대비다.
+  - `rejudge` 는 요청한 버전을 쓰고, 없는 버전이면 404 다.
+  - 조문이 없으면 예외가 나고 아무것도 저장되지 않는다.
+  - 다른 사용자의 Context 는 거부한다.
+
+### 왜 이렇게 했나
+
+- 실행기를 `judgment.persistence` 에 뒀다. 거래 엔티티와 질문 리포지토리가 package-private 이고, `JudgmentService` 도 여기 있다.
+- 대기 질문 취소는 `JudgmentService.save` 가 아니라 실행기에서 한다. save 는 override revision(A5)도 만드는데, override 가 질문을 취소해야 하는지는 아직 정하지 않았다.
+- `rejudge` 는 건별 트랜잭션이 아니라 호출한 쪽 트랜잭션에 묶었다. 질문 응답·분류 응답은 "fact 저장 + 재판정" 이 함께 성공하거나 함께 실패해야 한다. run 은 A2b 에서 건별로 `judge` 를 따로 부른다.
+- 공휴일은 매 판정마다 표 전체를 읽는다. 1년에 20건 안팎이라 캐시를 두지 않았다.
+- `rules_commit_sha` 용도: 판정 당시 rules/ 전체를 git checkout 으로 되찾기 위함이다(CONTEXT.md L1302). 카드 version 만으로는 그때 어떤 카드들이 함께 있었는지 알 수 없다. `.git` 이 dockerignore 라 빌드 인자로 넘긴다(사용자 결정).
+
+### 확인한 것
+
+- `test`·`integrationTest` 전부 통과(225개).
+- 일부러 깨 봤다. 엔진에 공휴일 대신 빈 집합을 넘기면 휴일 테스트가 실패한다.
+- `docker build -f deploy/backend.Dockerfile --build-arg RULES_COMMIT_SHA=abc123` 이미지를 확인했다.
+  - 환경변수 `/app/rules abc123`, 카드 51장.
+  - 빈 Postgres 에 붙여 띄웠다. V1~V9 를 적용하고 기동했다(규칙 로드 포함).
+
+### 남은 것 · 아는 문제
+
+- 공휴일 집합은 rules_commit_sha 로 복원되지 않는다. 같은 SHA·같은 거래라도 공휴일 표가 바뀌면(임시공휴일 추가) 재판정 결과가 달라진다.
+- 운영 `statute_version` 이 `law_sync.py` 로 채워져 있지 않으면 인용이 있는 판정은 모두 실패한다. 배포 전에 확인해야 한다.
+- B2·B1b 브랜치를 로컬 merge 한 상태다. 두 PR 이 리뷰로 바뀌면 이 브랜치부터 다시 맞춰야 한다.
+
+## 03:40 java -jar 기동 시 rules 경로 변환 실패를 고친다 (A2a 후속)
+
+- 커밋: 1개
+- 주요파일: RuleSetConfiguration.java
+
+### 한 일
+
+- `@Value("${app.rules.dir}") Path` 주입을 `String` 으로 받아 `Path.of` 로 바꾸게 했다.
+
+### 왜 이렇게 했나
+
+- A2h 를 실제 키로 확인하려고 `java -jar` 로 띄우니 부팅이 실패했다. "The resource path [/../rules] has been normalized to [null]".
+  - Spring 이 문자열을 `Path` 로 바꿀 때 리소스 경로로 먼저 해석하는데, jar 안에서는 상대 경로 `../rules` 를 만들지 못한다.
+- 테스트(@SpringBootTest, 압축 안 푼 클래스패스)와 이미지(절대 경로 `/app/rules`)에서는 드러나지 않았다. 로컬 `bootJar` 실행에서만 걸린다.
+
+### 확인한 것
+
+- `bootJar` 로 만든 jar 를 backend/ 에서 빈 Postgres 에 붙여 띄웠다. 기동했다.
+- `test`·`integrationTest` 전부 통과.
