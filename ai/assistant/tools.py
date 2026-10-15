@@ -4,6 +4,7 @@ UUID는 턴 단위 별칭(g1 질문 그룹, t1 거래, c1 분류 그룹)으로 �
 응답은 필요한 필드만 골라 넘긴다. 수입·이름·이메일은 모델로 보내지 않는다(QR-7).
 """
 
+import re
 from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -18,6 +19,17 @@ STATUTE_CHARS = 600
 WEEKDAYS = "월화수목금토일"
 VERDICTS = {"가능": "AVAILABLE", "불가": "UNAVAILABLE", "확인 필요": "NEEDS_REVIEW"}
 HELP: dict[str, str] = yaml.safe_load(Path(__file__).with_name("kb.yaml").read_text(encoding="utf-8"))
+# rules/categories.yaml 의 사본이다. AI 이미지에는 rules/ 가 없다. 원본과 같은지 테스트가 대조한다.
+CATEGORIES = [
+    "카페", "음식점", "편의점", "온라인쇼핑", "음식배달", "해외SaaS", "국내SW", "통신", "수도광열", "여비교통", "차량",
+    "도서", "교육", "광고", "사무용품", "의료", "금융", "지자체_과태료", "경찰청_범칙금", "조세", "PG_미상", "기타",
+    "게임", "구독서비스", "여가", "미용", "생활용품", "임차료", "전자기기", "전문가수수료", "보험", "수리비",
+]
+# 이동 카드를 만들 수 있는 화면과 카드에 쓸 이름. 판정 실행(/run)은 판정 전 확인을 건너뛰므로 뺀다.
+ROUTES = {"/upload": "카드내역", "/preview": "분류 확인", "/interview": "사업자 문진", "/confirm": "판정 전 확인",
+          "/results": "결과", "/questions": "질문", "/summary": "요약", "/transactions": "거래", "/uploads": "업로드 이력"}
+BULK_THRESHOLD = 5  # 질문 화면이 일괄 답변을 여는 기준과 같다(feature_f1_question_stack.md F1-c)
+NOTE_CHARS = 300
 
 
 class Reject(Exception):
@@ -70,7 +82,52 @@ TOOL_DEFS: dict[str, tuple[str, dict]] = {
         {"merchant": nullable("string", "가맹점 이름 일부")},
     ),
     "get_help": ("사용법·용어·서비스가 하지 않는 일 도움말을 가져온다.", {"topic": {"type": "string", "enum": list(HELP)}}),
+    "propose_answer": (
+        "질문 답을 제안 카드로 만든다. 실행은 사용자가 [적용]을 눌러야 된다. 근거가 없으면 거절된다.",
+        {"group": {"type": "string", "description": "질문 그룹 ref. 예: g1"},
+         "value": {"type": "string", "description": "선택지 중 하나"},
+         "basis": {"type": "string", "enum": ["user_said", "previous_answer"]},
+         "quote": nullable("string", "basis=user_said 일 때 사용자 메시지에서 그대로 인용한 문장")},
+    ),
+    "propose_bulk_answer": (
+        "남은 질문 중 같은 종류(fact_type)의 질문 전부에 같은 답을 넣는 카드를 만든다. 사용자가 전부 같은 답이라고 직접 말했을 때만 쓴다.",
+        {"fact_type": {"type": "string", "description": "list_questions 의 fact_type"},
+         "value": {"type": "string", "description": "선택지 중 하나"},
+         "quote": {"type": "string", "description": "사용자 메시지에서 그대로 인용한 문장"}},
+    ),
+    "propose_classification": (
+        "분류 확인을 기다리는 가맹점 그룹의 카테고리를 제안 카드로 만든다.",
+        {"group": {"type": "string", "description": "분류 그룹 ref. 예: c1"},
+         "category": {"type": "string", "enum": CATEGORIES},
+         "basis": {"type": "string", "enum": ["user_said", "suggested_category"]},
+         "quote": nullable("string", "basis=user_said 일 때 사용자 메시지에서 그대로 인용한 문장")},
+    ),
+    "propose_override": (
+        "판정을 사용자가 직접 바꾸는 카드를 만든다. 질문에 답해서 풀 수 없을 때만 쓰고, 사용자가 판정이 틀렸다고 직접 말한 문장이 근거여야 한다.",
+        {"transaction": {"type": "string", "description": "거래 ref. 예: t3"},
+         "to_verdict": {"type": "string", "enum": list(VERDICTS)},
+         "quote": {"type": "string", "description": "사용자 메시지에서 그대로 인용한 문장. 수정 사유로 저장된다"}},
+    ),
+    "add_handoff_note": (
+        "세무대리인에게 물을 질문을 목록에 넣는 카드를 만든다. 세무 판단·비율·세액 질문을 받았을 때 쓴다.",
+        {"text": {"type": "string", "description": "세무대리인에게 물을 질문 한두 문장"},
+         "transactions": {"type": "array", "items": {"type": "string"}, "description": "관련 거래 ref. 없으면 빈 배열"},
+         "quote": {"type": "string", "description": "사용자가 물은 문장 그대로"}},
+    ),
+    "propose_navigation": ("화면 이동 카드를 만든다.", {"route": {"type": "string", "enum": list(ROUTES)}}),
 }
+# 화면마다 9개 이하로 보여 준다. 도구가 많으면 모델이 고르기를 자주 틀린다.
+COMMON_TOOLS = ["get_status", "get_help", "find_transactions", "get_judgment", "add_handoff_note", "propose_navigation"]
+SCREEN_TOOLS = {
+    "/questions": ["list_questions", "propose_answer", "propose_bulk_answer"],
+    "/preview": ["list_unclassified", "propose_classification"],
+    "/results": ["get_summary", "propose_override"],
+}
+
+
+def tools_for(screen: str | None) -> list[str]:
+    root = "/" + (screen or "").strip("/").split("/")[0]
+    return COMMON_TOOLS + SCREEN_TOOLS.get(root, ["get_summary"])
 
 
 def tool_specs(names: list[str], strict: bool) -> list[dict]:
@@ -95,6 +152,26 @@ def pick(d: dict | None, *keys: str) -> dict | None:
 
 def matches(text: str, t: dict) -> bool:
     return text.lower() in f"{t.get('merchantNorm') or ''} {t.get('merchantRaw') or ''}".lower()
+
+
+def norm(s: str) -> str:
+    # 공백·문장부호 차이(끝 마침표, 금액 쉼표 등)는 인용 대조에서 무시한다
+    return re.sub(r"[\s.,!?~…'\"“”‘’]", "", s or "")
+
+
+def identifies(t: dict, quote: str) -> bool:
+    """인용 문장이 그 거래를 특정하는지. 날짜(9월 12일, 9/12, 12일)나 금액(12,800)이 들어 있어야 한다."""
+    m, d = int(t["approvedAt"][5:7]), int(t["approvedAt"][8:10])
+    keys = [f"{m}월{d}일", rf"{m}/{d}(?!\d)", f"{d}일", rf"{t['amount']}(?!\d)"]
+    return any(re.search(rf"(?<!\d){k}", norm(quote)) for k in keys)
+
+
+def what(transactions: list[dict], total: int) -> str:
+    """카드에 쓰는 대상 요약. 한 건이면 날짜와 금액, 여러 건이면 건수와 합계."""
+    t = transactions[0]
+    if len(transactions) == 1:
+        return f"{t['merchantRaw'][:20]} {int(t['approvedAt'][5:7])}/{int(t['approvedAt'][8:10])} {t['amount']:,}원"
+    return f"{t['merchantNorm'][:20]} {len(transactions)}건 {total:,}원"
 
 
 class Turn:
@@ -273,3 +350,107 @@ class Turn:
         if topic not in HELP:
             raise Reject("UNKNOWN_TOPIC", "없는 주제입니다.", topics=list(HELP))
         return {"topic": topic, "text": HELP[topic]}
+
+    # ── 제안 도구: 카드만 만들고 실행하지 않는다. 사용자가 [적용]을 눌러야 기존 API로 실행된다 ──
+    def _check_quote(self, quote: str | None) -> None:
+        q = norm(quote or "")
+        if not q or not any(q in norm(u) for u in self.user_texts):
+            raise Reject("QUOTE_NOT_FOUND", "quote 가 사용자 메시지에 그대로 없습니다. 사용자가 한 말을 그대로 인용하세요.")
+
+    def _propose(self, card: dict) -> dict:
+        self.proposals.append(card)
+        return {"status": "proposed", "card": card["card"]}
+
+    def propose_answer(self, group: str, value: str, basis: str, quote: str | None) -> dict:
+        g = self._get(group, "g", "질문 그룹")
+        if value not in g["options"]:
+            raise Reject("INVALID_OPTION", "선택지에 없는 값입니다.", allowed=g["options"])
+        presumed = not g["bulkAnswerable"]
+        if basis == "previous_answer":
+            if presumed:
+                raise Reject("NEEDS_USER_STATEMENT", "소명 대기 질문은 사용자가 직접 말한 사정만 근거가 됩니다.")
+            if self.tier_a.get(group) != value:
+                raise Reject("NO_BASIS", "이 질문은 지난번 답으로 채울 수 없습니다. "
+                                         "list_questions 의 previous 가 A등급이고 충돌이 없을 때 그 값으로만 됩니다.")
+        elif basis == "user_said":
+            self._check_quote(quote)
+            # 모델 판단에 맡기지 않고 코드로 막는다. 모델이 "토요일 스타벅스"를 여러 건에 붙이는 일이 있었다(8장).
+            if presumed and not all(identifies(t, quote or "") for t in g["transactions"]):
+                raise Reject("AMBIGUOUS_TARGET", "소명 대기 건은 인용 문장에 그 건의 날짜나 금액이 있어야 합니다. "
+                                                 "조건에 맞는 건이 여러 개면 제안하지 말고 사용자에게 어느 건인지 물어보세요.")
+        else:
+            raise Reject("NO_BASIS", "basis 는 user_said 나 previous_answer 여야 합니다.")
+        return self._propose({"kind": "answer", "questionIds": g["questionIds"], "value": value,
+                              "source": "PREVIOUS_ANSWER" if basis == "previous_answer" else "ASSISTANT",
+                              "card": f"{what(g['transactions'], g['totalAmount'])} → '{value}'"})
+
+    def propose_bulk_answer(self, fact_type: str, value: str, quote: str) -> dict:
+        self._check_quote(quote)
+        if not self.batch:
+            raise Reject("NO_BATCH", "지금 업로드가 정해지지 않아 일괄 답을 만들 수 없습니다.")
+        groups, _ = self._pages("/questions", batchId=self.batch, status="PENDING", grouped="true")
+        # 질문 화면의 일괄 답변 규칙을 그대로 따른다. 첫 화면부터 전부 닫아 버리지 않게 한다.
+        if len(groups) > BULK_THRESHOLD:
+            raise Reject("BULK_NOT_YET", f"남은 질문 그룹이 {len(groups)}개입니다. {BULK_THRESHOLD}개 이하일 때만 한 번에 답합니다. "
+                                         "하나씩 답하도록 안내하세요.")
+        targets = [g for g in groups if g["factType"] == fact_type]
+        if not targets:
+            raise Reject("NOTHING_TO_ANSWER", "이 종류의 남은 질문이 없습니다.", fact_types=sorted({g["factType"] for g in groups}))
+        if any(not g["bulkAnswerable"] for g in targets):
+            raise Reject("PRESUMED_MIXED", "소명 대기 질문이 섞인 종류라 한 번에 답할 수 없습니다. 건마다 답하도록 안내하세요.")
+        if len(targets) == 1:
+            raise Reject("USE_ANSWER", "이 종류의 남은 질문은 하나입니다. list_questions 로 찾아 propose_answer 를 쓰세요.")
+        common = [o for o in targets[0]["options"] if all(o in g["options"] for g in targets)]
+        if value not in common:
+            raise Reject("INVALID_OPTION", "이 종류의 질문 모두가 받는 선택지가 아닙니다.", allowed=common)
+        count, amount = sum(g["count"] for g in targets), sum(g["totalAmount"] for g in targets)
+        return self._propose({"kind": "bulk_answer", "batchId": self.batch, "factType": fact_type, "value": value,
+                              "card": f"남은 '{fact_type}' 질문 {count}건 {amount:,}원 → '{value}'"})
+
+    def propose_classification(self, group: str, category: str, basis: str, quote: str | None) -> dict:
+        g = self._get(group, "c", "분류 그룹")
+        if category not in CATEGORIES:
+            raise Reject("INVALID_CATEGORY", "없는 카테고리입니다.", allowed=CATEGORIES)
+        if basis == "suggested_category":
+            if category not in g["suggestedCategories"]:
+                raise Reject("NO_BASIS", "후보 카테고리 밖입니다. 사용자가 직접 설명했을 때만 user_said 로 제안하세요.",
+                             suggested=g["suggestedCategories"])
+        elif basis == "user_said":
+            self._check_quote(quote)
+        else:
+            raise Reject("NO_BASIS", "basis 는 user_said 나 suggested_category 여야 합니다.")
+        return self._propose({"kind": "classification", "reviewIds": g["reviewIds"], "merchantCategory": category,
+                              "card": f"{what(g['transactions'], g['totalAmount'])} → {category}"})
+
+    def propose_override(self, transaction: str, to_verdict: str, quote: str) -> dict:
+        self._check_quote(quote)
+        tid = self._get(transaction, "t", "거래")["id"]
+        if to_verdict not in VERDICTS:
+            raise Reject("INVALID_VERDICT", "없는 판정입니다.", allowed=list(VERDICTS))
+        if self.be.get("/questions", transactionId=tid, status="PENDING")["items"]:
+            raise Reject("USE_QUESTION", "이 거래에는 답하지 않은 질문이 있습니다. 판정을 바꾸지 말고 질문에 답하도록 "
+                                         "질문 화면 이동을 제안하세요.")
+        items = self.be.get("/judgments", transactionId=tid)["items"]
+        if not items:
+            raise Reject("NO_JUDGMENT", "이 거래는 아직 판정이 없습니다.")
+        j = items[0]
+        if j["verdict"]["code"] == VERDICTS[to_verdict]:
+            raise Reject("SAME_VERDICT", f"이미 {to_verdict} 판정입니다.")
+        tx = j["transaction"]
+        return self._propose({"kind": "override", "judgmentId": j["id"], "toVerdict": VERDICTS[to_verdict],
+                              "reason": quote.strip(),
+                              "card": f"{what([tx], tx['amount'])} 판정 {j['verdict']['label']} → {to_verdict}"})
+
+    def add_handoff_note(self, text: str, transactions: list[str] | None, quote: str) -> dict:
+        self._check_quote(quote)
+        text = (text or "").strip()
+        if not text or len(text) > NOTE_CHARS:
+            raise Reject("BAD_TEXT", f"질문은 1~{NOTE_CHARS}자로 쓰세요.")
+        ids = [self._get(r, "t", "거래")["id"] for r in transactions or []]
+        return self._propose({"kind": "handoff_note", "text": text, "transactionIds": ids,
+                              "card": f"세무대리인 질문 추가: {text}"})
+
+    def propose_navigation(self, route: str) -> dict:
+        if route not in ROUTES:
+            raise Reject("INVALID_ROUTE", "없는 화면입니다.", allowed=list(ROUTES))
+        return self._propose({"kind": "navigation", "route": route, "card": f"{ROUTES[route]} 화면으로 이동"})
