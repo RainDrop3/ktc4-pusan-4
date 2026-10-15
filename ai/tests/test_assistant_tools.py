@@ -144,7 +144,7 @@ def test_말로_답하면_실제_질문_id_로_바꾼_카드를_만든다():
     t = turn(user="SK텔레콤은 가족이랑 같이 쓰는 공용 회선이야")
     g = groups_of(t)["q-skt"]
 
-    out = t.propose_answer(g, "공용", "user_said", "가족이랑 같이 쓰는 공용 회선이야.")
+    out = t.propose_answer(g, "공용", "user_said", "SK텔레콤은 가족이랑 같이 쓰는 공용 회선이야.")
 
     assert out == {"status": "proposed", "card": "SK텔레콤 9/15 78,000원 → '공용'"}
     assert t.proposals == [{"kind": "answer", "questionIds": ["q-skt"], "value": "공용", "source": "ASSISTANT",
@@ -175,6 +175,7 @@ def test_list_questions_없이는_지난번_답을_쓸_수_없다():
     ("", "q-sb-0912", "업무미팅", "previous_answer", None, "NEEDS_USER_STATEMENT"),
     ("토요일 스타벅스는 클라이언트 미팅이었어", "q-sb-0912", "업무미팅", "user_said", "토요일 스타벅스는 클라이언트 미팅이었어", "AMBIGUOUS_TARGET"),
     ("2일 스타벅스는 미팅", "q-sb-0912", "업무미팅", "user_said", "2일 스타벅스는 미팅", "AMBIGUOUS_TARGET"),  # 12일이 아니다
+    ("남은 질문 전부 개인이야", "q-skt", "개인", "user_said", "전부 개인이야", "AMBIGUOUS_TARGET"),  # 일괄 규칙 우회
 ])
 def test_근거가_없는_답_제안은_거절한다(user, qid, value, basis, quote, error):
     t = turn(user=user)
@@ -222,13 +223,15 @@ def test_일괄_답을_만들_수_없는_경우(qids, fact, error):
 
 
 def test_분류_제안은_후보_안이거나_사용자_설명이_근거여야_한다():
-    t = turn(user="XYZ PAYMENTS는 디자인 툴 결제라 국내 소프트웨어야")
+    t = turn(user="XYZ PAYMENTS는 디자인 툴 결제라 국내 소프트웨어야. 나머지도 다 기타야")
     c = t.list_unclassified(None)["groups"][0]["ref"]
 
     assert t.run("propose_classification", {"group": c, "category": "국내SW", "basis": "suggested_category"})["error"] == "NO_BASIS"
     assert t.run("propose_classification", {"group": c, "category": "없는것", "basis": "suggested_category"})["error"] == "INVALID_CATEGORY"
     assert t.propose_classification(c, "해외SaaS", "suggested_category", None)["status"] == "proposed"
-    assert t.propose_classification(c, "국내SW", "user_said", "국내 소프트웨어야")["card"] == "XYZ PAYMENTS 2건 97,000원 → 국내SW"
+    assert t.run("propose_classification", {"group": c, "category": "기타", "basis": "user_said", "quote": "나머지도 다 기타야"})["error"] == "AMBIGUOUS_TARGET"
+    quote = "XYZ PAYMENTS는 디자인 툴 결제라 국내 소프트웨어야"
+    assert t.propose_classification(c, "국내SW", "user_said", quote)["card"] == "XYZ PAYMENTS 2건 97,000원 → 국내SW"
     assert [p["reviewIds"] for p in t.proposals] == [["r-tx17", "r-tx18"]] * 2
 
 
@@ -243,12 +246,13 @@ def test_판정_수정_카드는_현재_판정_id_와_사용자_문장을_사유
     t = turn(user="넷플릭스는 강의 자료 조사용이라 업무용이야. 판정 바꿔 줘")
     ref = t.find_transactions(None, None, "넷플릭스", None, None)["items"][0]["ref"]
 
-    assert t.run("propose_override", {"transaction": ref, "to_verdict": "불가", "quote": "업무용이야"})["error"] == "SAME_VERDICT"
-    out = t.propose_override(ref, "가능", "강의 자료 조사용이라 업무용이야")
+    assert t.run("propose_override", {"transaction": ref, "to_verdict": "불가", "quote": "넷플릭스는"})["error"] == "SAME_VERDICT"
+    assert t.run("propose_override", {"transaction": ref, "to_verdict": "가능", "quote": "판정 바꿔 줘"})["error"] == "AMBIGUOUS_TARGET"
+    out = t.propose_override(ref, "가능", "넷플릭스는 강의 자료 조사용이라 업무용이야")
 
     assert out["card"] == "넷플릭스 9/28 17,000원 판정 불가 → 가능"
     assert t.proposals[0] | {"card": None} == {"kind": "override", "judgmentId": "j-tx08", "toVerdict": "AVAILABLE",
-                                               "reason": "강의 자료 조사용이라 업무용이야", "card": None}
+                                               "reason": "넷플릭스는 강의 자료 조사용이라 업무용이야", "card": None}
 
 
 def test_세무대리인_질문은_사용자가_물은_문장이_있어야_한다():

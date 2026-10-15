@@ -81,7 +81,10 @@ TOOL_DEFS: dict[str, tuple[str, dict]] = {
         "분류 확인을 기다리는 가맹점 그룹과 후보 카테고리(suggested)를 가져온다.",
         {"merchant": nullable("string", "가맹점 이름 일부")},
     ),
-    "get_help": ("사용법·용어·서비스가 하지 않는 일 도움말을 가져온다.", {"topic": {"type": "string", "enum": list(HELP)}}),
+    "get_help": (
+        "사용법·용어·서비스가 하지 않는 일 도움말을 가져온다. 청구내역이라 업로드가 막혔을 때도 이 도구로 안내한다.",
+        {"topic": {"type": "string", "enum": list(HELP)}},
+    ),
     "propose_answer": (
         "질문 답을 제안 카드로 만든다. 실행은 사용자가 [적용]을 눌러야 된다. 근거가 없으면 거절된다.",
         {"group": {"type": "string", "description": "질문 그룹 ref. 예: g1"},
@@ -103,7 +106,8 @@ TOOL_DEFS: dict[str, tuple[str, dict]] = {
          "quote": nullable("string", "basis=user_said 일 때 사용자 메시지에서 그대로 인용한 문장")},
     ),
     "propose_override": (
-        "판정을 사용자가 직접 바꾸는 카드를 만든다. 질문에 답해서 풀 수 없을 때만 쓰고, 사용자가 판정이 틀렸다고 직접 말한 문장이 근거여야 한다.",
+        ("사용자가 판정을 바꿔 달라고 하면 그 결정을 카드로 만든다. 판정을 바꾸는 것은 사용자의 결정이고 너는 카드만 만든다. "
+         "질문이 남은 거래는 질문에 답하도록 돌린다."),
         {"transaction": {"type": "string", "description": "거래 ref. 예: t3"},
          "to_verdict": {"type": "string", "enum": list(VERDICTS)},
          "quote": {"type": "string", "description": "사용자 메시지에서 그대로 인용한 문장. 수정 사유로 저장된다"}},
@@ -164,6 +168,25 @@ def identifies(t: dict, quote: str) -> bool:
     m, d = int(t["approvedAt"][5:7]), int(t["approvedAt"][8:10])
     keys = [f"{m}월{d}일", rf"{m}/{d}(?!\d)", f"{d}일", rf"{t['amount']}(?!\d)"]
     return any(re.search(rf"(?<!\d){k}", norm(quote)) for k in keys)
+
+
+def names(t: dict, quote: str) -> bool:
+    """인용 문장이 그 가맹점을 가리키는지. 정규화 이름이나 표기의 첫 낱말이 들어 있어야 한다."""
+    # shortcut: 줄임말(한전)은 못 알아본다. 평가에서 자주 걸리면 가맹점 별칭을 둔다.
+    q = norm(quote).lower()
+    return any(n and norm(n).lower() in q for n in (t.get("merchantNorm"), (t.get("merchantRaw") or "").split(" ")[0]))
+
+
+def target(transactions: list[dict], quote: str, presumed: bool = False) -> None:
+    """사용자 말이 이 대상을 두고 한 말인지. "전부 개인" 같은 말을 건마다 붙이면 일괄 답 규칙을 우회한다."""
+    if presumed:
+        # 모델 판단에 맡기지 않고 코드로 막는다. 모델이 "토요일 스타벅스"를 여러 건에 붙이는 일이 있었다(8장).
+        if not all(identifies(t, quote) for t in transactions):
+            raise Reject("AMBIGUOUS_TARGET", "소명 대기 건은 인용 문장에 그 건의 날짜나 금액이 있어야 합니다. "
+                                             "조건에 맞는 건이 여러 개면 제안하지 말고 사용자에게 어느 건인지 물어보세요.")
+    elif not all(identifies(t, quote) or names(t, quote) for t in transactions):
+        raise Reject("AMBIGUOUS_TARGET", "인용 문장에 그 가맹점 이름이나 날짜·금액이 있어야 합니다. "
+                                         "남은 질문을 한꺼번에 말했다면 propose_bulk_answer 를 쓰고, 아니면 어느 건인지 물어보세요.")
 
 
 def what(transactions: list[dict], total: int) -> str:
@@ -374,10 +397,7 @@ class Turn:
                                          "list_questions 의 previous 가 A등급이고 충돌이 없을 때 그 값으로만 됩니다.")
         elif basis == "user_said":
             self._check_quote(quote)
-            # 모델 판단에 맡기지 않고 코드로 막는다. 모델이 "토요일 스타벅스"를 여러 건에 붙이는 일이 있었다(8장).
-            if presumed and not all(identifies(t, quote or "") for t in g["transactions"]):
-                raise Reject("AMBIGUOUS_TARGET", "소명 대기 건은 인용 문장에 그 건의 날짜나 금액이 있어야 합니다. "
-                                                 "조건에 맞는 건이 여러 개면 제안하지 말고 사용자에게 어느 건인지 물어보세요.")
+            target(g["transactions"], quote, presumed)
         else:
             raise Reject("NO_BASIS", "basis 는 user_said 나 previous_answer 여야 합니다.")
         return self._propose({"kind": "answer", "questionIds": g["questionIds"], "value": value,
@@ -417,6 +437,7 @@ class Turn:
                              suggested=g["suggestedCategories"])
         elif basis == "user_said":
             self._check_quote(quote)
+            target(g["transactions"], quote)
         else:
             raise Reject("NO_BASIS", "basis 는 user_said 나 suggested_category 여야 합니다.")
         return self._propose({"kind": "classification", "reviewIds": g["reviewIds"], "merchantCategory": category,
@@ -433,10 +454,10 @@ class Turn:
         items = self.be.get("/judgments", transactionId=tid)["items"]
         if not items:
             raise Reject("NO_JUDGMENT", "이 거래는 아직 판정이 없습니다.")
-        j = items[0]
+        j, tx = items[0], items[0]["transaction"]
+        target([tx], quote)
         if j["verdict"]["code"] == VERDICTS[to_verdict]:
             raise Reject("SAME_VERDICT", f"이미 {to_verdict} 판정입니다.")
-        tx = j["transaction"]
         return self._propose({"kind": "override", "judgmentId": j["id"], "toVerdict": VERDICTS[to_verdict],
                               "reason": quote.strip(),
                               "card": f"{what([tx], tx['amount'])} 판정 {j['verdict']['label']} → {to_verdict}"})
