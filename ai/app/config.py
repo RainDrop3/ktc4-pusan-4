@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     agent_model: str = "gpt-4o-mini"
     # 추론 모델에만 준다. 받지 않는 모델에 보내면 게이트웨이가 400 으로 거절한다.
     agent_reasoning_effort: str | None = None
+    # 비서(Really). 규칙 후보 파이프라인의 AGENT_* 와 따로 둔다. 모델이 없으면 비서는 안내 문구로만 답한다.
+    assistant_model: str | None = None
+    assistant_base_url: str | None = None
+    assistant_api_key: str | None = None
+    assistant_reasoning_effort: str | None = None
+    # 비서 도구가 사용자 토큰으로 부르는 백엔드 공개 API.
+    backend_base_url: str = "http://localhost:8080/api/v1"
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
     langfuse_public_key: str | None = None
