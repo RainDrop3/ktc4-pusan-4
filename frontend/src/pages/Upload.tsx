@@ -139,6 +139,17 @@ export function Upload() {
     };
   }, []);
 
+  // 드롭존 밖에 떨어뜨려도 브라우저가 파일을 열어 화면을 떠나지 않게 한다. 미리보기 · 결과 단계에서도 막는다
+  useEffect(() => {
+    const block = (event: DragEvent) => event.preventDefault();
+    window.addEventListener('dragover', block);
+    window.addEventListener('drop', block);
+    return () => {
+      window.removeEventListener('dragover', block);
+      window.removeEventListener('drop', block);
+    };
+  }, []);
+
   const start = async (file: File) => {
     const mine = ++seq.current;
     setPhase({ kind: 'parsing', file });
@@ -271,17 +282,6 @@ export function Upload() {
 function DropZone({ onFiles }: {onFiles: (files: ArrayLike<File>) => void;}) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-
-  // 드롭존 밖에 떨어뜨려도 브라우저가 파일을 열어 화면을 떠나지 않게 한다
-  useEffect(() => {
-    const block = (event: DragEvent) => event.preventDefault();
-    window.addEventListener('dragover', block);
-    window.addEventListener('drop', block);
-    return () => {
-      window.removeEventListener('dragover', block);
-      window.removeEventListener('drop', block);
-    };
-  }, []);
 
   return (
     <div
