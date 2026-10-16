@@ -88,6 +88,27 @@ class UploadServiceIntegrationTest {
     }
 
     @Test
+    void unclassified_canceled_offset_and_excluded_transactions_get_no_classification_review() {
+        // given: 셋 다 미분류. 판정에 들어가는 JUDGEABLE 만 분류 검토를 받는다
+        UUID userId = newUser();
+        UploadResult result = uploadService.upload(userId, batch("hash-skip",
+            tx("k-judgeable", "성진이네 본점"),
+            tx("k-canceled", "성진이네 본점", SourceStatus.CANCELED_OFFSET),
+            tx("k-excluded", "성진이네 본점", SourceStatus.EXCLUDED)));
+
+        // then: 거래는 셋 다 미분류로 저장되고, 분류 검토는 JUDGEABLE 하나만 생긴다
+        assertThat(result.transactionCount()).isEqualTo(3);
+        assertThat(result.classificationPendingCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForList("""
+            select classification_status from transaction where batch_id = ?
+            """, String.class, result.id())).containsOnly("NEEDS_REVIEW");
+        assertThat(jdbcTemplate.queryForList("""
+            select t.natural_key from classification_review r join transaction t on t.id = r.transaction_id
+            where t.batch_id = ?
+            """, String.class, result.id())).containsExactly("k-judgeable");
+    }
+
+    @Test
     void optional_fields_are_stored_with_defaults() {
         UUID userId = newUser();
         NewTransaction full = new NewTransaction(LocalDate.parse("2026-01-03"), "스타벅스코리아 서면점", 11_000L, "k-full",
@@ -213,7 +234,11 @@ class UploadServiceIntegrationTest {
     }
 
     private static NewTransaction tx(String naturalKey, String merchantRaw) {
+        return tx(naturalKey, merchantRaw, SourceStatus.JUDGEABLE);
+    }
+
+    private static NewTransaction tx(String naturalKey, String merchantRaw, SourceStatus status) {
         return new NewTransaction(LocalDate.parse("2026-01-03"), merchantRaw, 11_000L, naturalKey,
-            SourceStatus.JUDGEABLE, 0, null, null, null, null, null, false, false, null, null);
+            status, 0, null, null, null, null, null, false, false, null, null);
     }
 }

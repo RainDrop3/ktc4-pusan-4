@@ -10,6 +10,7 @@ import com.ktc4.pusan4.merchant.classify.MerchantClassifier;
 import com.ktc4.pusan4.shared.UuidGenerator;
 import com.ktc4.pusan4.shared.api.ApiException;
 import com.ktc4.pusan4.transaction.api.ClassificationStatus;
+import com.ktc4.pusan4.transaction.api.SourceStatus;
 import com.ktc4.pusan4.transaction.domain.NewTransaction;
 import com.ktc4.pusan4.transaction.domain.NewUploadBatch;
 import com.ktc4.pusan4.transaction.domain.UploadResult;
@@ -33,6 +34,8 @@ import java.util.UUID;
  *
  * <p>순서: 사용자 잠금 → fileHash 중복(409) → naturalKey 중복 건너뛰기 → 분류 → 저장.
  * 전부 한 트랜잭션이다. 분류 실패는 업로드를 실패시키지 않고 미분류 + 분류 검토로 남긴다.
+ * 판정에 들어가지 않는 거래(CANCELED_OFFSET·EXCLUDED)는 미분류여도 분류 검토를 만들지 않는다.
+ * 사용자가 나중에 포함(B7)하면 그때 만든다.
  */
 @Service
 public class UploadService {
@@ -93,7 +96,7 @@ public class UploadService {
                 uuidGenerator.generate(), batch.id(), userId, fresh.get(i),
                 result.merchantNorm(), result.merchantCategory(), status, now);
             entityManager.persist(transaction);
-            if (status == ClassificationStatus.NEEDS_REVIEW) {
+            if (status == ClassificationStatus.NEEDS_REVIEW && fresh.get(i).status() == SourceStatus.JUDGEABLE) {
                 entityManager.persist(ClassificationReviewEntity.pending(uuidGenerator.generate(), transaction.id(), now));
                 pending++;
             }
