@@ -146,7 +146,7 @@ export function resolveCancellations(records: RawRecord[], stats: ParseStats): R
 }
 
 /**
- * 의료 업종 가림 표시. 한 업로드 안에서 처음 나온 순서대로 의료_마스킹_01, _02 … 를 준다.
+ * 의료 업종 상호 마스킹. 한 업로드 안에서 처음 나온 순서대로 의료_마스킹_01, _02 … 를 붙인다.
  * 사업자번호가 있으면 그것으로, 없으면 상호로 같은 곳을 묶는다.
  */
 export class MedicalMasker {
@@ -173,7 +173,7 @@ export async function toRows(records: RawRecord[], stats: ParseStats): Promise<P
   const rows: ParsedRow[] = [];
   const keys: Promise<string>[] = [];
 
-  // 가림 번호가 처음 나온 순서를 따르도록 동기로 먼저 한 바퀴 돈다
+  // 마스킹 번호가 처음 나온 순서를 따르도록 레코드를 동기로 먼저 한 번 훑는다
   for (const r of records) {
     let status = r.status ?? ST_TARGET;
     let reason = r.reviewReason;
@@ -201,7 +201,7 @@ export async function toRows(records: RawRecord[], stats: ParseStats): Promise<P
     const approvedAt = r.when ?? '';
     if (!approvedAt) stats.noDate += 1;
 
-    // 가림 행은 실제 상호 대신 고정 표시로 키를 만든다 (hash.ts naturalKey 참고)
+    // 마스킹한 행은 원래 상호 대신 고정 문자열 의료_마스킹 으로 키를 만든다 (hash.ts naturalKey 참고)
     keys.push(naturalKey(approvedAt, masked ? MEDICAL_PREFIX : r.merchant, r.amount, r.approvalNo));
 
     stats.kept += 1;

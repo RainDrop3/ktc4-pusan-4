@@ -198,7 +198,7 @@ async function compareWithPython(bytes: ArrayBuffer, filePath: string, workDir: 
     }
 
     if (tsRow.masked) {
-      // D13: 가림 행은 실제 상호 대신 고정 표시(의료_마스킹)로 키를 만든다
+      // 마스킹한 행은 원래 상호 대신 의료_마스킹 으로 키를 만든다 (docs/schema_mapping.md 4장)
       const expectedKey = await naturalKey(tsRow.approvedAt, MEDICAL_PREFIX, tsRow.amount, tsRow.approvalNo);
       if (tsRow.naturalKey !== expectedKey) {
         diffs.push(`row ${i}: natural_key(masked)`);

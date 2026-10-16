@@ -76,7 +76,7 @@ interface SendErrorView {
 }
 
 /**
- * 업로드 오류 → 문구와 다음 행동 (D18).
+ * 업로드 오류 → 문구와 다음 행동.
  * 응답을 못 받았거나 서버가 처리하지 못했으면 같은 키로 다시 보낸다. 서버가 첫 응답을 돌려주므로
  * 두 번 들어가지 않는다. 키가 이미 다른 요청에 쓰였거나 그 결과가 지워졌으면 새 키로 보낸다.
  */
@@ -193,7 +193,7 @@ export function Upload() {
     try {
       const created = await api.uploads.create(request, key);
       if (mine !== seq.current) return;
-      // 모두 중복이면 거래 없는 배치다. 세션을 바꾸지 않고 업로드 이력으로 안내한다 (D15)
+      // 모두 중복이면 거래 없는 배치다. 세션을 바꾸지 않고 업로드 이력으로 안내한다
       if (created.transactionCount > 0) {
         setBatchId(created.id);
         // 이전 배치의 실행을 들고 있으면 /run 이 그 실행을 계속 폴링한다
@@ -653,7 +653,7 @@ function ReadyCard({
         </ul>
       }
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        {/* 미분류 거래는 판정되지 않으므로 분류 확인이 먼저다 (D15) */}
+        {/* 미분류 거래는 판정되지 않으므로 분류 확인이 먼저다 */}
         <Button to={pending > 0 ? '/preview' : '/interview'}>
           {pending > 0 ? '다음: 분류 확인' : '다음: 사업자 문진'}
           <ArrowRightIcon className="h-4 w-4" aria-hidden="true" />
@@ -666,7 +666,7 @@ function ReadyCard({
 
 }
 
-/** 무엇이 서버로 가고 무엇이 남는지. 업로드 요청에 실제로 담기는 필드와 같아야 한다 (D4) */
+/** 무엇이 서버로 가고 무엇이 남는지. 업로드 요청에 실제로 담기는 필드와 같아야 한다 */
 function DataBoundary() {
   return (
     <aside className="h-fit rounded-2xl border border-line bg-surface p-5">

@@ -188,7 +188,7 @@ describe('MedicalMasker', () => {
 });
 
 describe('toRows', () => {
-  it('의료 행을 가리고, 키는 가림 표시로 만든다', async () => {
+  it('의료 행은 상호를 마스킹하고, 키도 의료_마스킹 으로 만든다', async () => {
     const records = [
     rec({ merchant: '가짜정형외과의원', amount: 15000, approvalNo: '10000002', when: '2026-01-05', memo: '메모', bizNo: '111-22-33333' }),
     rec({ merchant: '가짜온누리약국', amount: 4500, approvalNo: '10000003', when: '2026-01-06' }),

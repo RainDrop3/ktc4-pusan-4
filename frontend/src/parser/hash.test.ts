@@ -37,7 +37,7 @@ describe('naturalKey', () => {
     expect(await naturalKey('2026-01-12', '쿠팡', -39000, '20000009')).toBe('b9119080c84cc753');
   });
 
-  it('의료 업종은 상호 대신 가림 표시로 키를 만든다', async () => {
+  it('의료 업종은 원래 상호 대신 의료_마스킹 으로 키를 만든다', async () => {
     expect(await naturalKey('2026-01-05', MEDICAL_PREFIX, 15000, '10000002')).toBe('65d6a6efc6f1a70f');
   });
 
