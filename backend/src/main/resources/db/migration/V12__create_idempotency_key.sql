@@ -14,6 +14,7 @@ CREATE TABLE idempotency_key (
     idempotency_key varchar(128) NOT NULL,
     -- 정규화한 요청 본문의 SHA-256 (hex). 같은 키 + 다른 payload 를 409 로 가른다.
     request_hash varchar(64) NOT NULL,
+    -- NULL = batch 가 삭제됨. 같은 키로 다시 오면 410 IDEMPOTENCY_RESULT_DELETED.
     batch_id uuid REFERENCES upload_batch(id) ON DELETE SET NULL,
     transaction_count integer NOT NULL CHECK (transaction_count >= 0),
     skipped_duplicate_count integer NOT NULL CHECK (skipped_duplicate_count >= 0),
