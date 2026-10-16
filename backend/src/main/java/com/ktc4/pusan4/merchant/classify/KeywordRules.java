@@ -51,12 +51,14 @@ public final class KeywordRules {
         List<Rule> loaded = new ArrayList<>();
         int index = 0;
         for (Map<String, Object> r : listOfMaps(this.spec.get("rules"))) {
-            String source = String.valueOf(r.getOrDefault("match", ""));
+            // match 가 비면 빈 패턴이 모든 문자열에 걸려 그 priority 아래 룰을 전부 가로챈다. 기동 때 막는다.
+            String source = required(r, "match", index);
+            String category = required(r, "category", index);
             loaded.add(new Rule(
                     index++,
                     source,
                     Pattern.compile(source, FLAGS),
-                    String.valueOf(r.get("category")),
+                    category,
                     Integer.parseInt(String.valueOf(r.getOrDefault("priority", 0))),
                     r.get("hint") == null ? "" : String.valueOf(r.get("hint"))));
         }
@@ -92,6 +94,14 @@ public final class KeywordRules {
         return hits.values().stream()
                 .min(WINNER_FIRST)
                 .map(win -> new KeywordMatch(win.category(), win.source(), win.hint()));
+    }
+
+    private static String required(Map<String, Object> rule, String key, int index) {
+        Object value = rule.get(key);
+        if (value == null || String.valueOf(value).isBlank()) {
+            throw new IllegalArgumentException("keyword_rules.yaml rules[" + index + "]: " + key + " 가 없다: " + rule);
+        }
+        return String.valueOf(value);
     }
 
     @SuppressWarnings("unchecked")

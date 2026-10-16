@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 레포의 {@code rules/keyword_rules.yaml} 로 키워드 분류를 검사한다.
@@ -39,6 +40,18 @@ class KeywordRulesTest {
                     rules.classify(in, normalizer.normalize(in).stringNorm()).map(KeywordMatch::category))
                     .hasValue(want));
         });
+    }
+
+    @Test
+    void match_나_category_가_없는_룰은_로드할_때_실패한다() {
+        assertThatThrownBy(() -> new KeywordRules(Map.of("rules", List.of(
+                Map.of("priority", 700, "category", "온라인쇼핑")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("match");
+        assertThatThrownBy(() -> new KeywordRules(Map.of("rules", List.of(
+                Map.of("priority", 700, "match", "쿠팡")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("category");
     }
 
     @Test
