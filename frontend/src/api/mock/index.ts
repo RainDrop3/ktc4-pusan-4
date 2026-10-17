@@ -310,12 +310,12 @@ QUESTION_GROUPS.map((seed) => ({
 })).filter((g) => g.pairs.length > 0);
 
 /**
- * 조회·집계에 보이는 그룹. 사용자가 제외한 거래의 질문은 지우지 않고 여기서만 거른다.
- * 다시 포함하면 그대로 돌아온다 (#134)
+ * 조회·집계에 보이는 그룹. 판정 대상(§5)이 아닌 거래의 질문은 지우지 않고 여기서만 거른다.
+ * 현재 결과와 같은 조건이고, transactionId 를 줘도 거른다. 다시 포함하면 그대로 돌아온다 (#134)
  */
 const visibleGroups = (): LiveGroup[] =>
 liveGroups().
-map((g) => ({ ...g, pairs: g.pairs.filter((p) => p.transaction.effectiveStatus.code === 'JUDGEABLE') })).
+map((g) => ({ ...g, pairs: g.pairs.filter((p) => isJudgeable(p.transaction)) })).
 filter((g) => g.pairs.length > 0);
 
 const isAnswered = (g: LiveGroup) => store.answers.has(g.seed.groupKey);
