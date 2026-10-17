@@ -88,3 +88,17 @@
 ### 확인한 것
 
 - `gradlew -p backend check` 통과(test 288, integrationTest 64).
+
+## 19:10 develop merge 를 판정 실행 중단 브랜치로 올린다
+
+- 브랜치: feature/judgment-run-interruption
+- 커밋: f90ba6e (1개, #127 merge 뒤)
+- 주요파일: JudgmentRunInterruptionIntegrationTest.java
+
+### 한 일
+
+- #127 의 develop merge 를 받은 뒤, `JudgmentRunInterruptionIntegrationTest` 가 넣는 조문에 `소득세법시행령-61-1-1` 을 더했다. 카페 거래를 판정하는 테스트가 #127 과 같은 이유로 실패했다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 288, integrationTest 71).
