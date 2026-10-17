@@ -1482,7 +1482,8 @@ FAILED
 
 | errorCode | 뜻 |
 | --- | --- |
-| `RULE_PROCESSING_FAILED` | 그 거래를 판정하다 기술적으로 실패했다. `message`는 원인이다 |
+| `RULE_PROCESSING_FAILED` | 그 거래를 판정하다 기술적으로 실패했다. `message`는 고정 문구이고, 원인은 서버 로그에만 남긴다 |
+| `RUN_START_FAILED` | Run을 시작하지 못했다(Context를 읽지 못함 등). 대상 거래 전체가 이 코드로 끝난다. 다시 실행해야 한다 |
 | `RUN_INTERRUPTED` | 실행하던 서버가 내려가 Run이 멈췄다. 진행이 5분 넘게 없는 `QUEUED`·`RUNNING` Run의 남은 거래가 이 코드로 끝난다. Run은 이어 돌리지 않으므로 다시 실행해야 한다 |
 
 ---
@@ -1526,6 +1527,10 @@ true
 
 `latestOnly=true`는 현재 결과 호환 이름이다. 활성 Override가 최신 revision이 아니어도 현재 Judgment로 반환한다.
 
+조건은 모두 AND로 건다. `transactionId`·`batchId`·`year`·`runId`가 하나도 없으면 오류 없이 본인 전체의 현재 Judgment를 반환한다.
+
+다른 사용자의 `transactionId`·`batchId`·`runId`를 넘기면 404가 아니라 빈 목록이다.
+
 ### batchId / year
 
 ```
@@ -1536,7 +1541,7 @@ GET /api/v1/judgments?batchId=B1
 
 활성 JudgmentOverride가 있으면 해당 Override revision이 현재 Judgment다. 활성 Override가 없으면 latest non-override revision이 현재 Judgment다.
 
-사용자가 현재 `EXCLUDED`한 Transaction은 제외한다.
+사용자가 현재 `EXCLUDED`한 Transaction과 분류 확인이 끝나지 않은 Transaction은 제외한다(§5).
 
 ```
 GET /api/v1/judgments?year=2026
@@ -1552,6 +1557,10 @@ GET /api/v1/judgments?transactionId=T1&latestOnly=false
 
 해당 Transaction의 전체 revision 이력을 조회할 수 있다.
 
+`latestOnly=true`면 그 Transaction의 현재 Judgment다. 이때는 제외했거나 분류 확인 전인 Transaction이어도 현재 Judgment가 있으면 반환한다.
+
+`latestOnly=false`는 `transactionId` 없이도 쓸 수 있다. 그러면 다른 조건에 맞는 모든 revision을 반환한다.
+
 ### runId
 
 ```
@@ -1562,7 +1571,7 @@ R1이 직접 생성했던 Judgment만 반환한다.
 
 R1 이후 QuestionResponse나 Override로 생성된 revision은 포함하지 않는다.
 
-`runId`와 `latestOnly`는 함께 사용하지 않는다.
+`runId`와 `latestOnly`는 함께 사용하지 않는다. 함께 보내면 `latestOnly`는 무시한다.
 
 정렬:
 
@@ -1647,6 +1656,12 @@ GET /api/v1/judgments/summary?runId=R1
 }
 ```
 
+`byVerdict`는 세 verdict를 늘 담는다. 판정이 없는 verdict는 `count`·`finalAmount`가 0이다. `finalAmount`가 아직 없는 Judgment(금액 계산 전)는 0으로 더한다.
+
+`byAccount`는 `AVAILABLE`이면서 `account`가 있는 Judgment만 모은다. 정렬은 `finalAmount DESC`이고, 같으면 `account` 이름순이다.
+
+다른 사용자의 `batchId`·`runId`를 넘기면 404가 아니라 빈 집계(`totalCount` 0)다.
+
 ---
 
 ## `GET /api/v1/judgments/{judgmentId}`
@@ -1729,7 +1744,7 @@ GET /api/v1/judgments/summary?runId=R1
 | appliedRuleIds | 적용된 전체 RuleCard ID |
 | rulesCommitSha | 사용된 Rules revision |
 | userContextVersion | 판정에 사용된 Context 버전 |
-| explanation | RuleCard의 reason |
+| explanation | 판정 설명 문장. RuleCard에 설명 필드가 없어 지금은 늘 `null`이다 |
 | citations | 근거 법령 |
 
 ### Judgment `state` 제거
@@ -1889,6 +1904,10 @@ Question은 이후 revision에서도 추가될 수 있기 때문이다.
 createdAt ASC, id ASC
 ```
 
+지금 판정 대상이 아닌 Transaction의 Question은 목록과 미해소 집계에서 뺀다. 판정 대상 조건은 3.7 현재 결과와 같다(분류 완료이면서 §2.3 최종 판정 대상). 사용자가 제외한 거래는 결과·요약 화면에서 빠지므로, 질문 화면에 남으면 판정에 쓰지 않을 질문까지 답해야 미해소가 0이 된다. Question은 지우지 않으므로 거래를 다시 포함하면 그대로 돌아온다.
+
+3.7과 달리 `transactionId`를 지정해도 거른다. 판정 상세는 남은 질문이 있으면 질문 화면으로 안내하는데, 질문 화면(batch 단위)에는 제외한 거래의 질문이 나오지 않기 때문이다.
+
 ### grouped=false (기본)
 
 Question 개별 항목을 반환한다. `unresolved` 집계는 grouped 여부와 무관하게 항상 최상위에 포함한다(아래 "미해소 집계" 참고).
@@ -2011,6 +2030,14 @@ Question 개별 항목을 반환한다. `unresolved` 집계는 grouped 여부와
 `count`는 반드시 `questionIds.length`, `transactions.length`와 같다.
 
 `totalAmount`는 `transactions[].amount`의 합이다.
+
+그룹 정렬:
+
+```
+count DESC, totalAmount DESC, 그룹 첫 Question의 id ASC
+```
+
+첫 페이지에 효과가 큰 상호가 먼저 와야 해서 건수·금액 순으로 둔다(#54). 그룹 첫 Question은 아래 `transactions` 정렬의 첫 항목이다.
 
 | 필드 | 뜻 |
 | --- | --- |

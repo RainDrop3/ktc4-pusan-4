@@ -12,10 +12,12 @@ import java.util.stream.Collectors;
  */
 public record QuestionGroup(List<Question> questions) {
 
-    /** 그룹 순서는 그룹 첫 질문의 순서(createdAt, id)다. 그룹 안은 거래 순서(approvedAt, transactionId)다. */
+    /**
+     * 그룹 순서는 건수가 많은 순, 같으면 금액이 큰 순, 그다음 그룹 첫 질문 id 순이다(#54). 첫 페이지에 효과가 큰 상호가 먼저 온다.
+     * 그룹 안은 거래 순서(approvedAt, transactionId)다.
+     */
     public static List<QuestionGroup> group(List<Question> questions) {
         Map<List<Object>, List<Question>> groups = questions.stream()
-            .sorted(Comparator.comparing(Question::createdAt).thenComparing(Question::id))
             .collect(Collectors.groupingBy(
                 question -> List.of(question.batchId(), question.groupKey(), question.factType(), question.status()),
                 LinkedHashMap::new, Collectors.toList()));
@@ -24,6 +26,9 @@ public record QuestionGroup(List<Question> questions) {
                 .sorted(Comparator.comparing((Question question) -> question.transaction().approvedAt())
                     .thenComparing(Question::transactionId))
                 .toList()))
+            .sorted(Comparator.comparingInt(QuestionGroup::count).reversed()
+                .thenComparing(Comparator.comparingLong(QuestionGroup::totalAmount).reversed())
+                .thenComparing(group -> group.questions().getFirst().id()))
             .toList();
     }
 

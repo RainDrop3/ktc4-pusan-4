@@ -43,7 +43,7 @@ public class QuestionQueryService {
     }
 
     /**
-     * 본인 거래에 걸린 질문을 상태와 상관없이 모두 돌려준다. 정렬: createdAt ASC, id ASC.
+     * 지금 판정 대상인 본인 거래에 걸린 질문을 상태와 상관없이 모두 돌려준다. 정렬: createdAt ASC, id ASC.
      * status 거르기·묶기·페이지는 미해소 집계가 그 앞의 목록을 써야 해서 부르는 쪽이 한다.
      */
     @Transactional(readOnly = true)
