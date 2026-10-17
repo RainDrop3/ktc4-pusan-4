@@ -62,7 +62,7 @@ class JudgmentExecutorIntegrationTest {
             values (?, ?, '승인내역', '국민', '2025-01-01', '2025-12-31', ?)
             """, batchId, userId, batchId.toString());
         insertContext(1);
-        for (String statuteId : List.of("소득세법-33-1-5", "소득세법-35-1")) {
+        for (String statuteId : List.of("소득세법-33-1-5", "소득세법시행령-61-1-1", "소득세법-35-1")) {
             jdbcTemplate.update("""
                 insert into statute_version(
                     statute_id, doc_type, hierarchy, effective_from, body, body_hash,
