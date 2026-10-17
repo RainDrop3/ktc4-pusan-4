@@ -51,8 +51,8 @@ def test_mention_falls_back_to_github_login_when_unmapped():
     assert mention("RainDrop3", {}) == "@RainDrop3"
 
 
-def test_framed_puts_title_and_body_between_dividers():
-    assert framed("새 PR", "본문").split("\n") == ["-" * 51, "[새 PR]", "본문", "-" * 51]
+def test_framed_puts_title_on_top_and_divider_below():
+    assert framed("새 PR", "본문").split("\n") == ["[새 PR]", "본문", "-" * 51]
 
 
 def test_new_pr_message_shows_pr_link_branches_and_reviewer_mentions():
@@ -212,7 +212,7 @@ def test_reminder_message_mentions_waiting_reviewers_on_authors_pr():
 def test_follow_up_reminder_adds_twelve_hours_and_two_bangs_each_side(nth, first_line):
     message = build_reminder_message(make_pr(), ["cho104"], {}, nth)
 
-    assert message.split("\n")[2] == first_line
+    assert message.split("\n")[1] == first_line
 
 
 HALF_DAY = timedelta(hours=12)

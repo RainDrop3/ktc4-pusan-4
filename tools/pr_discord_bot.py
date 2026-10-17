@@ -21,7 +21,7 @@ DIVIDER = "-" * 51
 
 
 def framed(title: str, body: str) -> str:
-    return f"{DIVIDER}\n[{title}]\n{body}\n{DIVIDER}"
+    return f"[{title}]\n{body}\n{DIVIDER}"
 
 
 def mention(login: str, user_ids: dict[str, str]) -> str:
