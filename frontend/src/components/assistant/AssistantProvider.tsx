@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, invalidateAll } from '../../api';
 import type { AssistantProposal } from '../../types/domain';
@@ -155,6 +155,12 @@ export function AssistantProvider({ children }: {children: React.ReactNode;}) {
   }, []);
 
   const dismissNudge = useCallback(() => setNudge(null), []);
+
+  // 알림이 가리키는 화면에 오면 알림은 할 일을 다 했다. 그 화면이 같은 내용을 지금 값으로 보여 준다
+  // (질문 화면의 「지난번 답 한 번에 적용」). 메뉴로 왔거나 거기서 다 적용해도 알림이 남지 않게 한다
+  useEffect(() => {
+    if (nudge?.route === pathname) setNudge(null);
+  }, [nudge, pathname]);
 
   const value = useMemo<AssistantValue>(
     () => ({
