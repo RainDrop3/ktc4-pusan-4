@@ -5,6 +5,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 
 import java.io.Serializable;
@@ -19,22 +21,15 @@ import java.util.UUID;
 @Table(name = "judgment_run_item")
 class JudgmentRunItemEntity {
 
-    static final String FAILURE_CODE = "RULE_PROCESSING_FAILED";
-    // 응답으로 나가므로 예외 메시지 대신 고정 문구를 쓴다. 원인은 JudgmentRunner 가 로그에 남긴다.
-    static final String FAILURE_MESSAGE = "판정 처리 중 오류가 발생했습니다.";
-    static final String INTERRUPTED_CODE = "RUN_INTERRUPTED";
-    static final String INTERRUPTED_MESSAGE = "서버가 다시 시작되어 판정이 중단되었습니다. 판정을 다시 실행해 주세요.";
-    static final String START_FAILED_CODE = "RUN_START_FAILED";
-    static final String START_FAILED_MESSAGE = "판정을 시작하지 못했습니다. 판정을 다시 실행해 주세요.";
-
     @EmbeddedId
     private Key key;
 
     @Column(nullable = false)
     private String status;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "error_code")
-    private String errorCode;
+    private JudgmentRunItemError errorCode;
 
     @Column(name = "error_message")
     private String errorMessage;
@@ -57,13 +52,13 @@ class JudgmentRunItemEntity {
 
     void fail(OffsetDateTime now) {
         this.status = "FAILED";
-        this.errorCode = FAILURE_CODE;
-        this.errorMessage = FAILURE_MESSAGE;
+        this.errorCode = JudgmentRunItemError.RULE_PROCESSING_FAILED;
+        this.errorMessage = errorCode.message();
         this.processedAt = now;
     }
 
     JudgmentRunFailure toFailure() {
-        return new JudgmentRunFailure(key.transactionId, errorCode, errorMessage, processedAt);
+        return new JudgmentRunFailure(key.transactionId, errorCode.name(), errorMessage, processedAt);
     }
 
     @Embeddable
