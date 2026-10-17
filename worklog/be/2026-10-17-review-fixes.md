@@ -47,3 +47,24 @@
 ### 남은 것 · 아는 문제
 
 - 실제로 `start()` 가 예외를 내는 경로(Context 를 읽지 못함 등)는 재현하지 않았다. 테스트는 `fail()` 을 직접 부른다.
+
+## 18:35 판정 실행 항목의 실패 코드와 문구를 enum 으로 묶는다
+
+- 브랜치: feature/judgment-run-interruption
+- 커밋: 1b738a9 (1개)
+- 주요파일: JudgmentRunItemError.java, JudgmentRunItemEntity.java, JudgmentRunService.java
+
+### 한 일
+
+- `JudgmentRunItemEntity` 의 코드·문구 문자열 상수 6개를 `JudgmentRunItemError` enum(`RULE_PROCESSING_FAILED`, `RUN_START_FAILED`, `RUN_INTERRUPTED`, 각자 고정 문구) 으로 바꿨다.
+- `error_code` 는 `@Enumerated(EnumType.STRING)` 으로 저장한다. DB 값과 응답(`JudgmentRunFailure.errorCode` 문자열)은 그대로다.
+
+### 왜 이렇게 했나
+
+- 리뷰 반영으로 코드마다 문구가 하나로 고정돼 코드·문구를 한 곳에 두는 게 자연스러워졌다. 같은 패키지의 `JudgmentRunStatus` 와 같은 방식이다.
+- enum 은 모듈별로 두기로 했다. 판정 실행 항목에서만 쓰므로 judgment.persistence 안에 package-private 으로 뒀다.
+- `ApiException` 의 응답 오류 코드(전 모듈 문자열)는 이번 범위가 아니라 improvements 이슈로 남긴다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 288, integrationTest 69), PMD 19건 그대로. 세 코드 모두 기존 테스트가 저장값·응답으로 확인한다.
