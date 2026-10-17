@@ -42,7 +42,8 @@ public class QuestionController {
 
     @Operation(summary = "룰엔진 확인 질문 목록",
         description = "정렬: createdAt ASC, id ASC. runId 는 조회 기준으로 쓰지 않는다. "
-            + "grouped=true 이면 항목이 그룹 형태로 바뀐다")
+            + "grouped=true 이면 항목이 그룹 형태로 바뀌고, 그룹은 count DESC, totalAmount DESC, 그룹 첫 질문 id ASC 순이다. "
+            + "지금 판정 대상이 아닌 거래의 질문은 목록과 미해소 집계에서 뺀다")
     @ApiResponse(responseCode = "200", description = "grouped 값에 따라 두 형태 중 하나",
         content = @Content(schema = @Schema(oneOf = {QuestionPage.class, QuestionGroupPage.class})))
     @GetMapping("/questions")

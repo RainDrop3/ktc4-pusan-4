@@ -130,6 +130,37 @@ class QuestionQueryIntegrationTest {
     }
 
     @Test
+    void questions_of_transactions_not_judged_now_are_left_out_until_included_again() throws Exception {
+        // given: 대기 질문이 걸린 거래 둘 중 하나를 사용자가 판정 대상에서 뺐다
+        UUID kept = insertTransaction(batchId, "2025-10-08", 6_500L);
+        UUID keptQuestion = insertQuestion(insertJudgment(kept, "NEEDS_REVIEW"), "merchant:스타벅스", "용도",
+            "PENDING", null, "2025-10-09T10:00:00+09:00");
+        UUID excluded = insertTransaction(batchId, "2025-10-09", 3_000L);
+        UUID excludedQuestion = insertQuestion(insertJudgment(excluded, "NEEDS_REVIEW"), "merchant:스타벅스", "용도",
+            "PENDING", null, "2025-10-09T10:01:00+09:00");
+        jdbcTemplate.update("update transaction set user_inclusion = 'EXCLUDED' where id = ?", excluded);
+
+        // when / then: 목록·그룹·미해소 집계에서 빠지고, 거래를 지정해도 빠진다
+        mockMvc.perform(get("/api/v1/questions").param("batchId", batchId.toString()))
+            .andExpect(jsonPath("$.items[*].id", contains(keptQuestion.toString())))
+            .andExpect(jsonPath("$.unresolved.count").value(1))
+            .andExpect(jsonPath("$.unresolved.amount").value(6_500));
+        mockMvc.perform(get("/api/v1/questions")
+                .param("batchId", batchId.toString())
+                .param("grouped", "true"))
+            .andExpect(jsonPath("$.items[0].questionIds", contains(keptQuestion.toString())));
+        mockMvc.perform(get("/api/v1/questions").param("transactionId", excluded.toString()))
+            .andExpect(jsonPath("$.items").isEmpty())
+            .andExpect(jsonPath("$.unresolved.count").value(0));
+
+        // when / then: 다시 포함하면 질문이 그대로 돌아온다
+        jdbcTemplate.update("update transaction set user_inclusion = 'INCLUDED' where id = ?", excluded);
+        mockMvc.perform(get("/api/v1/questions").param("batchId", batchId.toString()))
+            .andExpect(jsonPath("$.items[*].id", contains(keptQuestion.toString(), excludedQuestion.toString())))
+            .andExpect(jsonPath("$.unresolved.count").value(2));
+    }
+
+    @Test
     void list_never_returns_another_users_questions() throws Exception {
         // given: 다른 사용자의 거래에 걸린 대기 질문
         UUID otherBatchId = insertBatch(insertUser());
