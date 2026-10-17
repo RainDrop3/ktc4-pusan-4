@@ -39,7 +39,7 @@ interface JudgmentRunItemRepository extends Repository<JudgmentRunItemEntity, Ju
         """)
     int failPending(
         @Param("runId") UUID runId,
-        @Param("errorCode") String errorCode,
+        @Param("errorCode") JudgmentRunItemError errorCode,
         @Param("message") String message,
         @Param("now") OffsetDateTime now
     );
