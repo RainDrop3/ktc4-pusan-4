@@ -9,9 +9,11 @@ import com.ktc4.pusan4.judgment.domain.JudgmentRevision;
 import com.ktc4.pusan4.judgment.domain.JudgmentRun;
 import com.ktc4.pusan4.judgment.domain.JudgmentRunFailure;
 import com.ktc4.pusan4.judgment.domain.JudgmentRunStatus;
+import com.ktc4.pusan4.judgment.domain.StatuteVersion;
 import com.ktc4.pusan4.judgment.domain.Verdict;
 import com.ktc4.pusan4.judgment.persistence.JudgmentQueryService;
 import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
+import com.ktc4.pusan4.judgment.persistence.StatuteService;
 import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
 import com.ktc4.pusan4.shared.auth.TemporaryCurrentUserProvider;
@@ -49,6 +51,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -86,6 +89,9 @@ class ApiResponseContractTest {
     @MockitoBean
     private JudgmentQueryService judgmentQueryService;
 
+    @MockitoBean
+    private StatuteService statuteService;
+
     @BeforeEach
     void stubServices() {
         given(userService.get(any())).willReturn(new AppUser(
@@ -117,6 +123,9 @@ class ApiResponseContractTest {
             List.of(new JudgmentRevision.CitedStatute(1418, "소득세법-27-1")));
         given(judgmentQueryService.get(any(), any())).willReturn(judgment);
         given(judgmentQueryService.list(any(), any(), anyInt(), anyInt())).willReturn(new PageImpl<>(List.of(judgment)));
+
+        given(statuteService.get(anyLong())).willReturn(new StatuteVersion(1523, "소득세법시행령-67-4",
+            "소득세법 시행령 제67조 제4항", "시행령", LocalDate.parse("2026-01-01"), null, "https://www.law.go.kr/", "..."));
     }
 
     static Stream<Arguments> endpoints() {

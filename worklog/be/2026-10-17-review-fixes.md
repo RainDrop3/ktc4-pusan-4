@@ -68,3 +68,37 @@
 ### 확인한 것
 
 - `gradlew -p backend check` 통과(test 288, integrationTest 69), PMD 19건 그대로. 세 코드 모두 기존 테스트가 저장값·응답으로 확인한다.
+
+## 19:07 develop 을 판정 스택 맨 아래에 merge 한다
+
+- 브랜치: feature/judgment-runs
+- 커밋: 17e40a4..64e5e84 (2개, develop merge 포함)
+- 주요파일: ApiResponseContractTest.java, JudgmentRunIntegrationTest.java
+
+### 한 일
+
+- #127 base 를 develop 으로 바꾸자 #131(statutes) 머지와 충돌해 develop 을 merge 했다.
+- `ApiResponseContractTest` 충돌은 양쪽을 모두 남겼다. `JudgmentRunService`·`StatuteService` 두 `@MockitoBean` 과 각자의 스텁(#131 리뷰에서 말한 대로).
+- `JudgmentRunIntegrationTest` 가 넣는 조문에 `소득세법시행령-61-1-1` 을 더했다.
+
+### 왜 이렇게 했나
+
+- develop 에서 카페 카드(#119) 인용에 시행령 61-1-1 이 더해져, merge 뒤 카페 거래 판정이 "Expected one effective statute version" 으로 실패했다. develop 의 실행기 테스트도 같은 이유로 2009062 에서 고쳤다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 288, integrationTest 64).
+
+## 19:10 develop merge 를 판정 실행 중단 브랜치로 올린다
+
+- 브랜치: feature/judgment-run-interruption
+- 커밋: f90ba6e (1개, #127 merge 뒤)
+- 주요파일: JudgmentRunInterruptionIntegrationTest.java
+
+### 한 일
+
+- #127 의 develop merge 를 받은 뒤, `JudgmentRunInterruptionIntegrationTest` 가 넣는 조문에 `소득세법시행령-61-1-1` 을 더했다. 카페 거래를 판정하는 테스트가 #127 과 같은 이유로 실패했다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 288, integrationTest 71).
