@@ -91,7 +91,7 @@ class UploadServiceIntegrationTest {
     void unclassified_canceled_offset_and_excluded_transactions_get_no_classification_review() {
         // given: 셋 다 미분류. 판정에 들어가는 JUDGEABLE 만 분류 검토를 받는다
         UUID userId = newUser();
-        UploadResult result = uploadService.upload(userId, batch("hash-skip",
+        UploadResult result = uploadService.upload(userId, key(), batch("hash-skip",
             tx("k-judgeable", "성진이네 본점"),
             tx("k-canceled", "성진이네 본점", SourceStatus.CANCELED_OFFSET),
             tx("k-excluded", "성진이네 본점", SourceStatus.EXCLUDED)));
