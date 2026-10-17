@@ -95,7 +95,7 @@ class JudgmentRunIntegrationTest {
         assertThat(failures).singleElement().satisfies(failure -> {
             assertThat(failure.transactionId()).isEqualTo(book);
             assertThat(failure.errorCode()).isEqualTo("RULE_PROCESSING_FAILED");
-            assertThat(failure.message()).contains("소득세법-27-1");
+            assertThat(failure.message()).isEqualTo("판정 처리 중 오류가 발생했습니다.");
             assertThat(failure.failedAt()).isNotNull();
         });
     }

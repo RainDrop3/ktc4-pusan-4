@@ -135,12 +135,12 @@ public class JudgmentRunService {
     }
 
     @Transactional
-    void recordFailure(UUID runId, UUID transactionId, String message) {
+    void recordFailure(UUID runId, UUID transactionId) {
         JudgmentRunEntity run = lock(runId);
         if (!run.isRunning()) {
             return;
         }
-        item(runId, transactionId).fail(message, now());
+        item(runId, transactionId).fail(now());
         run.recordFailure(now());
     }
 

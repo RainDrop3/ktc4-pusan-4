@@ -20,6 +20,8 @@ import java.util.UUID;
 class JudgmentRunItemEntity {
 
     static final String FAILURE_CODE = "RULE_PROCESSING_FAILED";
+    // 응답으로 나가므로 예외 메시지 대신 고정 문구를 쓴다. 원인은 JudgmentRunner 가 로그에 남긴다.
+    static final String FAILURE_MESSAGE = "판정 처리 중 오류가 발생했습니다.";
     static final String INTERRUPTED_CODE = "RUN_INTERRUPTED";
     static final String INTERRUPTED_MESSAGE = "서버가 다시 시작되어 판정이 중단되었습니다. 판정을 다시 실행해 주세요.";
 
@@ -51,10 +53,10 @@ class JudgmentRunItemEntity {
         this.processedAt = now;
     }
 
-    void fail(String message, OffsetDateTime now) {
+    void fail(OffsetDateTime now) {
         this.status = "FAILED";
         this.errorCode = FAILURE_CODE;
-        this.errorMessage = message;
+        this.errorMessage = FAILURE_MESSAGE;
         this.processedAt = now;
     }
 
