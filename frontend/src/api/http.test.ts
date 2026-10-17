@@ -114,6 +114,20 @@ describe('인증 (#139 가정)', () => {
     expect(lost).not.toHaveBeenCalled();
   });
 
+  it('다른 계정 로그인이 실패하면 앞 사람의 토큰도 남지 않는다', async () => {
+    const api = await fresh();
+    let loginStatus = 200;
+    route({
+      '/auth/login': () => loginStatus === 200 ? [200, { accessToken: 'a1' }] : [401, { code: 'INVALID_CREDENTIALS' }],
+      '/users/me': () => [200, { id: 'u' }]
+    });
+    await api.auth.login({ email: 'a@b.c', password: 'secret1' });
+    loginStatus = 401;
+    await expect(api.auth.login({ email: 'b@b.c', password: 'wrong12' })).rejects.toMatchObject({ status: 401 });
+    await api.users.me();
+    expect(bearer(callsTo('/users/me')[0][1])).toBeUndefined();
+  });
+
   it('로그아웃은 토큰을 실어 보내고, 바로 지운다', async () => {
     const api = await fresh();
     route({

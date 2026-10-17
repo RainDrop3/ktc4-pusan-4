@@ -131,6 +131,8 @@ const page = (query?: { page?: number; size?: number }): Query => ({
 export const httpApi: Api = {
   auth: {
     login: async (body) => {
+      // 다른 계정으로 로그인하다 실패해도 앞 사람의 토큰이 남지 않게 먼저 버린다
+      accessToken = null;
       const result = await post<{ accessToken: string }>('/auth/login', body);
       accessToken = result.accessToken;
     },

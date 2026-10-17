@@ -108,6 +108,9 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
   useEffect(() => api.auth.onLost(clear), [clear]);
 
   const signIn = useCallback(async (nextEmail: string, password: string) => {
+    // 로그인한 채로 /login 에서 다른 계정으로 들어오면 앞 사람의 배치·문진·실행이 남는다.
+    // start 는 이미 있는 배치를 덮지 않고, 문진 효과는 서버에 문진이 없으면 그대로 둔다 (#142 리뷰)
+    clear();
     await api.auth.login({ email: nextEmail, password });
     try {
       start(await api.users.me());
@@ -116,7 +119,7 @@ export function SessionProvider({ children }: {children: React.ReactNode;}) {
       void api.auth.logout().catch(() => undefined);
       throw caught;
     }
-  }, [start]);
+  }, [clear, start]);
 
   /**
    * 3.2 — 서버에 이미 문진이 있으면 그것을 쓴다. 저장만 하고 다시 읽지 않으면
