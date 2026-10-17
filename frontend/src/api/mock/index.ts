@@ -141,10 +141,16 @@ const store = {
   failures: new Map<string, JudgmentRunFailure[]>(),
   /** 다음 업로드를 이 오류로 실패시킨다 (개발용) */
   failUpload: null as ApiRequestError | null,
-  /** 로그인한 이메일. 목업은 비밀번호를 보지 않고 무엇이든 받는다 */
+  /** 로그인한 이메일. 로그아웃하면 null 이고, 그때 users.me 는 401 이다 */
   email: null as string | null,
   ruleCandidates: RULE_CANDIDATES.map((c) => ({ ...c })) as RuleCandidate[]
 };
+
+/**
+ * 목업 비밀번호. 이메일은 무엇이든 받고 비밀번호만 본다. 실서버 로컬 프로필의 고정 사용자 비밀번호와 같다(#155).
+ * 로그인 화면의 목업 전용 버튼과 안내도 이 값을 쓴다(Login.tsx)
+ */
+export const MOCK_PASSWORD = 'demo1234';
 
 /** 목업에서 관리자 화면을 보려면 admin@… 으로 로그인한다 */
 const isAdminEmail = (email: string | null) => email?.split('@')[0] === 'admin';
@@ -450,7 +456,11 @@ const reviewCandidate = (id: number, status: RuleCandidate['status']) => {
 
 export const mockApi: Api = {
   auth: {
-    login: ({ email }) => {
+    login: ({ email, password }) => {
+      if (password !== MOCK_PASSWORD)
+      return Promise.reject(
+        new ApiRequestError(401, 'INVALID_CREDENTIALS', '이메일 또는 비밀번호가 올바르지 않습니다.')
+      );
       store.email = email;
       return delay(undefined);
     },
@@ -466,9 +476,11 @@ export const mockApi: Api = {
 
   users: {
     me: () =>
+    store.email === null ?
+    Promise.reject(new ApiRequestError(401, 'UNAUTHORIZED', '로그인이 필요합니다.')) :
     delay({
       id: USER_ID,
-      email: store.email ?? 'dev@example.com',
+      email: store.email,
       createdAt: '2026-09-01T10:00:00+09:00',
       role: isAdminEmail(store.email) ? 'ADMIN' as const : 'USER' as const
     }),
