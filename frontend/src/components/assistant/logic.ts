@@ -33,6 +33,10 @@ export const ASSISTANT_ROUTES: Record<string, string> = {
   '/uploads': '업로드 이력'
 };
 
+/** 목록 안의 경로면 그 화면 이름. `in` 은 constructor·toString 같은 상속 키도 통과시켜 쓰지 않는다 */
+export const routeName = (route: string): string | undefined =>
+Object.prototype.hasOwnProperty.call(ASSISTANT_ROUTES, route) ? ASSISTANT_ROUTES[route] : undefined;
+
 export const PROPOSAL_LABEL: Record<AssistantProposal['kind'], string> = {
   answer: '질문 답',
   bulk_answer: '한 번에 답하기',
@@ -47,7 +51,7 @@ export const blockedReason = (proposal: AssistantProposal): string | null =>
 proposal.kind === 'override' && proposal.toVerdict === 'NEEDS_REVIEW' ?
 // 확인 필요로 되돌리면 질문 없는 확인 필요가 된다 (#62)
 '확인 필요로는 바꿀 수 없어 적용하지 않습니다. 결과 화면에서 가능·불가 중에 골라 주세요.' :
-proposal.kind === 'navigation' && !(proposal.route in ASSISTANT_ROUTES) ?
+proposal.kind === 'navigation' && routeName(proposal.route) === undefined ?
 '이동할 수 없는 화면입니다.' :
 null;
 

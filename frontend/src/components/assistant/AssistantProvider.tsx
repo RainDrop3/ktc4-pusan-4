@@ -6,7 +6,7 @@ import { useSession } from '../../contexts/SessionContext';
 import { AssistantContext } from './context';
 import type { AssistantValue, ChatEntry, Nudge, ProposalEntry } from './context';
 import { HELP_TOPICS } from './help';
-import { applyErrorText, applyProposal, ASSISTANT_ROUTES, chatErrorText, MESSAGE_CHARS, trimHistory } from './logic';
+import { applyErrorText, applyProposal, chatErrorText, MESSAGE_CHARS, routeName, trimHistory } from './logic';
 
 const entryId = () => crypto.randomUUID();
 
@@ -100,7 +100,7 @@ export function AssistantProvider({ children }: {children: React.ReactNode;}) {
         role: 'assistant',
         content: `다음 할 일은 「${next.label}」입니다.`,
         proposals: toEntries([
-        { kind: 'navigation', route: next.route, card: `${ASSISTANT_ROUTES[next.route] ?? next.label} 화면으로 이동` }]
+        { kind: 'navigation', route: next.route, card: `${routeName(next.route) ?? next.label} 화면으로 이동` }]
         )
       } :
       { id: entryId(), role: 'assistant', content: '지금 할 일이 남아 있지 않습니다.', proposals: [] }]

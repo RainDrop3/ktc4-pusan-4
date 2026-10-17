@@ -57,6 +57,11 @@ describe('applyProposal', () => {
     expect(blockedReason({ ...card, kind: 'navigation', route: '/run' })).not.toBeNull();
     expect(blockedReason({ ...card, kind: 'navigation', route: '/summary' })).toBeNull();
   });
+
+  it('목록 객체가 물려받은 키는 화면으로 치지 않는다', () => {
+    for (const route of ['constructor', 'toString', '__proto__', 'hasOwnProperty'])
+    expect(blockedReason({ ...card, kind: 'navigation', route })).not.toBeNull();
+  });
 });
 
 describe('chatErrorText', () => {
