@@ -45,7 +45,7 @@ class JudgmentRunner {
                 runService.judgeItem(runId, transactionId, start.context());
             } catch (RuntimeException e) {
                 log.warn("판정 실행 {} 의 거래 {} 판정 실패", runId, transactionId, e);
-                runService.recordFailure(runId, transactionId, String.valueOf(e.getMessage()));
+                runService.recordFailure(runId, transactionId);
             }
         }
         runService.complete(runId);

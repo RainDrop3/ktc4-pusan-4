@@ -114,8 +114,8 @@ public class JudgmentRunService {
     }
 
     @Transactional
-    void recordFailure(UUID runId, UUID transactionId, String message) {
-        item(runId, transactionId).fail(message, now());
+    void recordFailure(UUID runId, UUID transactionId) {
+        item(runId, transactionId).fail(now());
         runRepository.findById(runId).orElseThrow().recordFailure();
     }
 
