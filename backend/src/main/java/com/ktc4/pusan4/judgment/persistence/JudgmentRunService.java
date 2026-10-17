@@ -152,10 +152,14 @@ public class JudgmentRunService {
         }
     }
 
+    /** run 을 시작하지 못했다. 남은 PENDING 항목은 RUN_START_FAILED 실패가 되어 실패 목록에 보인다. */
     @Transactional
     void fail(UUID runId) {
         JudgmentRunEntity run = lock(runId);
         if (run.isQueued() || run.isRunning()) {
+            itemRepository.failPending(
+                runId, JudgmentRunItemEntity.START_FAILED_CODE, JudgmentRunItemEntity.START_FAILED_MESSAGE, now()
+            );
             run.fail(now());
         }
     }
