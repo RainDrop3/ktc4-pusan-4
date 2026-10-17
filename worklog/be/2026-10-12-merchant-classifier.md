@@ -31,3 +31,8 @@
 - JUnit·통합 테스트(Testcontainers)는 로컬 `./gradlew test integrationTest` 로 확인해야 한다.
 - 분류 결정(10/16)에서 사전·키워드룰을 AI 서버로 옮기기로 하면 이 PR 의 범위가 바뀐다.
 - 해외 SaaS 사전(PR #73)·상권정보 매칭(PR #61)은 아직 단계에 없다. 위 결정에 따라 붙인다.
+
+## 리뷰 반영 (10/17, PR #124)
+
+- develop 위로 리베이스했다. `application.yml` 충돌은 develop 에 이미 있는 `app.rules` 블록을 쓰고, 이 PR 이 넣었던 `RULES_DIR` 환경변수는 `APP_RULES_DIR` 로 대체돼 지웠다.
+- `match` 나 `category` 가 없는 키워드룰은 규칙을 읽을 때 실패시킨다. `match` 가 비면 빈 패턴이 모든 문자열에 걸려 그 priority 아래 룰을 전부 가로챈다(유렬 리뷰). 지금 `keyword_rules.yaml` 68개 룰은 모두 둘 다 있다.
