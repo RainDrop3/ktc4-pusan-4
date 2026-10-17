@@ -211,7 +211,12 @@ export const httpApi: Api = {
   },
 
   handoffNotes: {
-    list: () => get('/handoff-notes'),
+    // 저장 API 가 아직 없는 서버(404)는 저장한 질문이 없는 것과 같다. 다른 실패는 요약이 「빠진 항목」으로 알린다
+    list: () =>
+    get<Awaited<ReturnType<Api['handoffNotes']['list']>>>('/handoff-notes').catch((caught: unknown) => {
+      if (caught instanceof ApiRequestError && caught.status === 404) return [];
+      throw caught;
+    }),
     create: (body) => post('/handoff-notes', body)
   }
 };
