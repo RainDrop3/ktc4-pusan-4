@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { InboxIcon } from 'lucide-react';
 import { AppShell } from '../components/AppShell';
@@ -47,6 +47,11 @@ export function Admin() {
     () => isAdmin ? api.admin.ruleCandidates.list({ status: filter, page, size: 20 }) : Promise.resolve(null),
     [isAdmin, filter, page]
   );
+
+  // 마지막 쪽의 마지막 후보를 처리하면 그 쪽이 비는데 Pagination 이 사라져 되돌아갈 수 없다
+  useEffect(() => {
+    if (page > 0 && listQ.data && listQ.data.items.length === 0) setPage(0);
+  }, [page, listQ.data]);
 
   if (!isAdmin) return <Navigate to="/upload" replace />;
 
