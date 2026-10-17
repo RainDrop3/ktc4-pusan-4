@@ -114,6 +114,35 @@ describe('인증 (#139 가정)', () => {
     expect(lost).not.toHaveBeenCalled();
   });
 
+  it('재발급이 401 이 아닌 이유로 실패하면 로그인을 지우지 않고 그 오류를 올린다', async () => {
+    const api = await fresh();
+    const lost = vi.fn();
+    api.auth.onLost(lost);
+    let refreshStatus = 503;
+    route({
+      '/auth/login': () => [200, { accessToken: 'a1' }],
+      '/auth/refresh': () => [refreshStatus, refreshStatus === 200 ? { accessToken: 'a2' } : { code: 'SERVICE_UNAVAILABLE' }],
+      '/users/me': (init) => bearer(init) === 'Bearer a2' ? [200, { id: 'u' }] : [401, { code: 'UNAUTHORIZED' }]
+    });
+    await api.auth.login({ email: 'a@b.c', password: 'secret1' });
+    await expect(api.users.me()).rejects.toMatchObject({ status: 503 });
+    expect(lost).not.toHaveBeenCalled();
+
+    // 토큰을 그대로 두었으니 다음 요청이 다시 재발급하고 이어 간다
+    refreshStatus = 200;
+    await expect(api.users.me()).resolves.toEqual({ id: 'u' });
+    expect(bearer(callsTo('/users/me')[1][1])).toBe('Bearer a1');
+    expect(callsTo('/auth/refresh')).toHaveLength(2);
+  });
+
+  it('새로고침 뒤 이어 가기는 어떤 실패든 false 다', async () => {
+    const api = await fresh();
+    route({ '/auth/refresh': () => [503, { code: 'SERVICE_UNAVAILABLE' }] });
+    expect(await api.auth.restore()).toBe(false);
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await api.auth.restore()).toBe(false);
+  });
+
   it('다른 계정 로그인이 실패하면 앞 사람의 토큰도 남지 않는다', async () => {
     const api = await fresh();
     let loginStatus = 200;

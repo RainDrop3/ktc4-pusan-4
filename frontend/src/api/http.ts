@@ -47,15 +47,16 @@ const lose = () => {
   lostListeners.forEach((listener) => listener());
 };
 
-let refreshing: Promise<boolean> | null = null;
-/** 동시에 401 을 받은 요청들이 재발급을 한 번만 하도록 진행 중인 재발급을 나눠 쓴다 */
+let refreshing: Promise<void> | null = null;
+/**
+ * 동시에 401 을 받은 요청들이 재발급을 한 번만 하도록 진행 중인 재발급을 나눠 쓴다.
+ * 실패하면 그 오류로 거절한다. 401 이 아닌 실패(5xx·연결 끊김)는 리프레시 쿠키가 멀쩡할 수 있다
+ */
 const refresh = () => {
   refreshing ??= request<{ accessToken: string }>('POST', '/auth/refresh').
   then((result) => {
     accessToken = result.accessToken;
-    return true;
   }).
-  catch(() => false).
   finally(() => {
     refreshing = null;
   });
@@ -101,7 +102,15 @@ retried = false)
   }
 
   if (response.status === 401 && !retried && !isAuthPath(path) && accessToken !== null) {
-    if (await refresh()) return request<T>(method, path, options, true);
+    const refreshed = await refresh().then(
+      () => true,
+      (caught: unknown) => {
+        // 재발급도 401 이면 로그인이 풀렸다. 그 밖의 실패는 토큰을 두고 그 오류를 올린다 — 다음 요청이 다시 재발급한다
+        if (!(caught instanceof ApiRequestError && caught.status === 401)) throw caught;
+        return false;
+      }
+    );
+    if (refreshed) return request<T>(method, path, options, true);
     lose();
   }
 
@@ -136,7 +145,8 @@ export const httpApi: Api = {
       const result = await post<{ accessToken: string }>('/auth/login', body);
       accessToken = result.accessToken;
     },
-    restore: () => refresh(),
+    // 아직 로그인 전이라 잃을 것이 없다. 어떤 이유로든 못 이어 가면 로그인 화면이다
+    restore: () => refresh().then(() => true, () => false),
     logout: () => {
       // 헤더는 부르는 순간 만들어지므로 토큰을 실은 채로 보내고, 기다리지 않고 바로 지운다
       const sent = post<void>('/auth/logout');
