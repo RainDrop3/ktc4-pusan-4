@@ -224,9 +224,9 @@ export function Questions() {
           </span>
           {unresolved &&
           <span className="text-muted">
-              확인 필요{' '}
+              질문이 걸린 금액{' '}
               <strong className={`font-semibold ${unresolved.count > 0 ? 'text-warn' : 'text-ink'}`}>
-                {formatNumber(unresolved.count)}건 · {formatWon(unresolved.amount)}
+                {formatWon(unresolved.amount)}
               </strong>
             </span>
           }

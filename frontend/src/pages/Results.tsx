@@ -308,7 +308,8 @@ export function Results() {
           <CircleHelpIcon className="h-5 w-5 shrink-0 text-warn" aria-hidden="true" />
           <span className="min-w-0 flex-1">
             <span className="block text-body font-semibold tabular-nums text-ink">
-              확인 필요 {formatNumber(unresolved.count)}건 · {formatWon(unresolved.amount)}
+              {/* count 는 「확인 필요」 판정 수가 아니라 PENDING 질문 수다(3.9). 한 거래에 질문이 여럿이고, 불가에도 소명 질문이 남는다 */}
+              답할 질문 {formatNumber(unresolved.count)}개 · {formatWon(unresolved.amount)}
             </span>
             <span className="mt-0.5 block text-small text-ink2">
               같은 사유끼리 묶은 질문 {formatNumber(questionGroups)}개가 남았습니다. 답하면 묶인
