@@ -64,10 +64,15 @@ def build_new_issue_message(issue: dict, user_ids: dict[str, str]) -> str | None
     author = issue["user"]["login"]
     if author not in user_ids:
         return None
+    assignees = " ".join(
+        mention(assignee["login"], user_ids) for assignee in issue["assignees"]
+    )
     mentioned = _body_mentions(issue, user_ids)
     return framed(
         "새 Issue",
-        f"{_pr_link(issue)}\n{author}" + (f"\nmention: {mentioned}" if mentioned else ""),
+        f"{_pr_link(issue)}\n{author}"
+        + (f"\nAssignees: {assignees}" if assignees else "")
+        + (f"\nmention: {mentioned}" if mentioned else ""),
     )
 
 

@@ -344,13 +344,14 @@ def test_authors_own_comment_notifies_mentioned_teammates():
     )
 
 
-def make_issue(author="cho104", body=None):
+def make_issue(author="cho104", body=None, assignees=()):
     return {
         "number": 101,
         "title": "카드 분류 오류",
         "html_url": "https://github.com/o/r/issues/101",
         "body": body,
         "user": {"login": author},
+        "assignees": [{"login": login} for login in assignees],
     }
 
 
@@ -384,6 +385,16 @@ def test_new_issue_message_lists_body_mentions_except_author():
     )
 
     assert message == framed("새 Issue", f"{ISSUE_LINK}\ncho104\nmention: <@111> <@333>")
+
+
+def test_new_issue_message_lists_assignees_before_mentions():
+    message = build_new_issue_message(
+        make_issue(assignees=("yuyeol3", "outsider"), body="@Jaeseong22 확인 부탁"), TEAM
+    )
+
+    assert message == framed(
+        "새 Issue", f"{ISSUE_LINK}\ncho104\nAssignees: <@111> @outsider\nmention: <@333>"
+    )
 
 
 def test_new_issue_message_has_no_mention_line_without_tags():
