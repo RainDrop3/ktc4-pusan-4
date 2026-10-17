@@ -158,7 +158,7 @@ public class JudgmentRunService {
         JudgmentRunEntity run = lock(runId);
         if (run.isQueued() || run.isRunning()) {
             itemRepository.failPending(
-                runId, JudgmentRunItemEntity.START_FAILED_CODE, JudgmentRunItemEntity.START_FAILED_MESSAGE, now()
+                runId, JudgmentRunItemError.RUN_START_FAILED, JudgmentRunItemError.RUN_START_FAILED.message(), now()
             );
             run.fail(now());
         }
@@ -173,7 +173,7 @@ public class JudgmentRunService {
         OffsetDateTime now = now();
         for (JudgmentRunEntity run : runRepository.findStaleForUpdate(now.minus(STALE_AFTER))) {
             int interrupted = itemRepository.failPending(
-                run.id(), JudgmentRunItemEntity.INTERRUPTED_CODE, JudgmentRunItemEntity.INTERRUPTED_MESSAGE, now
+                run.id(), JudgmentRunItemError.RUN_INTERRUPTED, JudgmentRunItemError.RUN_INTERRUPTED.message(), now
             );
             run.interrupt(interrupted, now);
         }
