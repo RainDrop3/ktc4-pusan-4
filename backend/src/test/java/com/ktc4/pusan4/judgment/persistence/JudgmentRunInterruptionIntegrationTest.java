@@ -51,7 +51,8 @@ class JudgmentRunInterruptionIntegrationTest {
             insert into statute_version(
                 statute_id, doc_type, hierarchy, effective_from, body, body_hash,
                 doc_id, unit_level, title, source_url
-            ) values ('소득세법-33-1-5', '법령', '법률', '2024-01-01', '원문', 'hash', 'DOC', '호', '제33조', 'https://law.go.kr/test')
+            ) values ('소득세법-33-1-5', '법령', '법률', '2024-01-01', '원문', 'hash', 'DOC', '호', '제33조', 'https://law.go.kr/test'),
+                ('소득세법시행령-61-1-1', '법령', '시행령', '2024-01-01', '원문', 'hash', 'DOC', '호', '제61조', 'https://law.go.kr/test')
             on conflict do nothing
             """);
     }
