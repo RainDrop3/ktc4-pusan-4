@@ -67,11 +67,19 @@ export function ClassificationPreview() {
     try {
       await api.classificationReviews.respond({ reviewIds, merchantCategory: category });
     } catch (caught) {
+      // 409: 다른 탭·기기에서 이미 분류했다(CLASSIFICATION_ALREADY_RESOLVED). 남은 카드로 다시 읽는다
+      const resolvedElsewhere = caught instanceof ApiRequestError && caught.status === 409;
       setResolveError(
+        resolvedElsewhere ?
+        '이미 분류한 가맹점입니다. 목록을 다시 불러왔습니다.' :
         caught instanceof ApiRequestError ?
         caught.message :
         '업종을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'
       );
+      if (resolvedElsewhere) {
+        groupsQ.reload();
+        batchQ.reload();
+      }
       setResolving((prev) => {
         const next = { ...prev };
         delete next[groupKey];
