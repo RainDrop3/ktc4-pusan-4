@@ -5,12 +5,14 @@ import type { Api } from '../contract';
 // 목업 상태는 모듈 안에 있다. 테스트마다 모듈을 새로 읽어 시드 상태에서 시작한다
 let api: Api;
 let batchId: string;
+let controls: typeof import('./index').mockControls;
 
 beforeEach(async () => {
   vi.resetModules();
   const mock = await import('./index');
   api = mock.mockApi;
   batchId = mock.mockSeedSession.batchId;
+  controls = mock.mockControls;
 });
 
 /** 시드: 1016 은 소명 대기(자동 판정 불가인데 「용도」 질문이 남음), 1005 는 카페 「용도」 질문 */
@@ -209,5 +211,16 @@ describe('문진·판정 실행', () => {
     });
     const run = await api.runs.create({ batchId, contextId: seed.id });
     expect(run.contextVersion).toBe(seed.version);
+  });
+
+  it('실패를 예약할 때 실패 코드를 고를 수 있다 (3.6)', async () => {
+    const seed = await api.contexts.current();
+    if (!seed) throw new Error('시드 문진이 없다');
+    controls.failNextRun(1, 'RUN_START_FAILED');
+    const run = await api.runs.create({ batchId, contextId: seed.id });
+    expect((await api.runs.failures(run.id)).items.map((f) => f.errorCode)).toEqual(['RUN_START_FAILED']);
+
+    const next = await api.runs.create({ batchId, contextId: seed.id });
+    expect((await api.runs.failures(next.id)).items).toHaveLength(0);
   });
 });

@@ -133,8 +133,9 @@ const store = {
   /** overrideId → JudgmentOverride. 해제해도 지우지 않고 active 만 끈다 (api.md 3.8) */
   overrides: new Map<string, { transactionId: string; judgmentId: string; active: boolean }>(),
   reviews: CLASSIFICATION_REVIEWS.map((r) => ({ ...r })) as ClassificationReview[],
-  /** 다음 Run 에서 기술적으로 실패시킬 거래 수 (개발용) */
+  /** 다음 Run 에서 기술적으로 실패시킬 거래 수와 그 실패 코드 (개발용) */
   failNext: 0,
+  failNextCode: 'RULE_PROCESSING_FAILED',
   /** runId → 실패 목록 */
   failures: new Map<string, JudgmentRunFailure[]>(),
   /** 다음 업로드를 이 오류로 실패시킨다 (개발용) */
@@ -577,14 +578,16 @@ export const mockApi: Api = {
 
       // 기술적 실패 예약이 있으면 이 Run 의 실패 목록을 만든다
       const failCount = Math.min(store.failNext, total);
+      const failCode = store.failNextCode;
       store.failNext = 0;
+      store.failNextCode = 'RULE_PROCESSING_FAILED';
       if (failCount > 0) {
         const targets = store.transactions.filter(judgeable).slice(0, failCount);
         store.failures.set(
           run.id,
           targets.map((t) => ({
             transactionId: t.id,
-            errorCode: 'RULE_PROCESSING_FAILED',
+            errorCode: failCode,
             message: '판정 처리 중 오류가 발생했습니다.',
             failedAt: now()
           }))
@@ -979,11 +982,13 @@ export const mockApi: Api = {
 /**
  * 개발용 스위치. 실패 화면을 보려면 콘솔에서:
  *   (await import('/src/api/index.ts')).mockControls.failNextRun(2)
- * 그다음 판정을 실행하면 그 Run 이 부분 실패로 끝난다.
+ * 그다음 판정을 실행하면 그 Run 이 부분 실패로 끝난다. 실패 코드도 고를 수 있다(api.md 3.6):
+ *   mockControls.failNextRun(2, 'RUN_START_FAILED')
  */
 export const mockControls = {
-  failNextRun(count: number) {
+  failNextRun(count: number, code = 'RULE_PROCESSING_FAILED') {
     store.failNext = Math.max(0, count);
+    store.failNextCode = code;
   },
   /**
    * 다음 업로드 한 번을 이 오류로 실패시킨다. 콘솔에서:

@@ -22,6 +22,7 @@ import { VERDICT_LABEL, VERDICT_META } from '../utils/verdict';
  */
 const FAILURE_TEXT: Record<string, { label: string; detail: string }> = {
   RULE_PROCESSING_FAILED: { label: '처리 오류', detail: '판정 규칙을 적용하다 오류가 났습니다.' },
+  RUN_START_FAILED: { label: '시작 실패', detail: '판정을 시작하지 못했습니다. 다시 실행해 주세요.' },
   RUN_INTERRUPTED: { label: '중단됨', detail: '판정하던 서버가 멈춰 끝까지 처리하지 못했습니다.' }
 };
 const UNKNOWN_FAILURE = { label: '실패', detail: '처리하지 못했습니다.' };
