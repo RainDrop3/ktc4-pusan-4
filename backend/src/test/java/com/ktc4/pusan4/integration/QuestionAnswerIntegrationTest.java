@@ -61,7 +61,7 @@ class QuestionAnswerIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        for (String statuteId : List.of("소득세법-33-1-5", "소득세법-27-1", "소득세법-35-1",
+        for (String statuteId : List.of("소득세법-33-1-5", "소득세법시행령-61-1-1", "소득세법-27-1", "소득세법-35-1",
             "소득세법-160의2-2", "소득세법시행령-208의2-1-1", "소득세법-81의6-1")) {
             jdbcTemplate.update("""
                 insert into statute_version(
