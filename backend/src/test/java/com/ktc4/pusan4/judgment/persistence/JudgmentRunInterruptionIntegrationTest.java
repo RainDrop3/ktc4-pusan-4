@@ -91,6 +91,24 @@ class JudgmentRunInterruptionIntegrationTest {
     }
 
     @Test
+    void run_that_failed_to_start_lists_its_items_as_failures() {
+        UUID runId = insertRun("QUEUED", "1 minute");
+        UUID left = insertItem(runId, "PENDING");
+
+        runService.fail(runId);
+
+        assertThat(run(runId))
+            .containsEntry("status", "FAILED")
+            .containsEntry("failed_count", 1);
+        assertThat(item(runId, left))
+            .containsEntry("status", "FAILED")
+            .containsEntry("error_code", "RUN_START_FAILED");
+        assertThat(runService.failures(userId, runId, 0, 20).getContent())
+            .singleElement()
+            .satisfies(failure -> assertThat(failure.transactionId()).isEqualTo(left));
+    }
+
+    @Test
     void run_with_recent_progress_is_left_running() {
         UUID runId = insertRun("RUNNING", "1 minute");
         UUID left = insertItem(runId, "PENDING");
@@ -109,7 +127,7 @@ class JudgmentRunInterruptionIntegrationTest {
         runService.interruptStale();
 
         boolean judged = runService.judgeItem(runId, left, context);
-        runService.recordFailure(runId, left, "늦게 온 실패");
+        runService.recordFailure(runId, left);
         runService.complete(runId);
 
         assertThat(judged).isFalse();

@@ -1482,7 +1482,8 @@ FAILED
 
 | errorCode | 뜻 |
 | --- | --- |
-| `RULE_PROCESSING_FAILED` | 그 거래를 판정하다 기술적으로 실패했다. `message`는 원인이다 |
+| `RULE_PROCESSING_FAILED` | 그 거래를 판정하다 기술적으로 실패했다. `message`는 고정 문구이고, 원인은 서버 로그에만 남긴다 |
+| `RUN_START_FAILED` | Run을 시작하지 못했다(Context를 읽지 못함 등). 대상 거래 전체가 이 코드로 끝난다. 다시 실행해야 한다 |
 | `RUN_INTERRUPTED` | 실행하던 서버가 내려가 Run이 멈췄다. 진행이 5분 넘게 없는 `QUEUED`·`RUNNING` Run의 남은 거래가 이 코드로 끝난다. Run은 이어 돌리지 않으므로 다시 실행해야 한다 |
 
 ---
@@ -1526,6 +1527,10 @@ true
 
 `latestOnly=true`는 현재 결과 호환 이름이다. 활성 Override가 최신 revision이 아니어도 현재 Judgment로 반환한다.
 
+조건은 모두 AND로 건다. `transactionId`·`batchId`·`year`·`runId`가 하나도 없으면 오류 없이 본인 전체의 현재 Judgment를 반환한다.
+
+다른 사용자의 `transactionId`·`batchId`·`runId`를 넘기면 404가 아니라 빈 목록이다.
+
 ### batchId / year
 
 ```
@@ -1536,7 +1541,7 @@ GET /api/v1/judgments?batchId=B1
 
 활성 JudgmentOverride가 있으면 해당 Override revision이 현재 Judgment다. 활성 Override가 없으면 latest non-override revision이 현재 Judgment다.
 
-사용자가 현재 `EXCLUDED`한 Transaction은 제외한다.
+사용자가 현재 `EXCLUDED`한 Transaction과 분류 확인이 끝나지 않은 Transaction은 제외한다(§5).
 
 ```
 GET /api/v1/judgments?year=2026
@@ -1552,6 +1557,10 @@ GET /api/v1/judgments?transactionId=T1&latestOnly=false
 
 해당 Transaction의 전체 revision 이력을 조회할 수 있다.
 
+`latestOnly=true`면 그 Transaction의 현재 Judgment다. 이때는 제외했거나 분류 확인 전인 Transaction이어도 현재 Judgment가 있으면 반환한다.
+
+`latestOnly=false`는 `transactionId` 없이도 쓸 수 있다. 그러면 다른 조건에 맞는 모든 revision을 반환한다.
+
 ### runId
 
 ```
@@ -1562,7 +1571,7 @@ R1이 직접 생성했던 Judgment만 반환한다.
 
 R1 이후 QuestionResponse나 Override로 생성된 revision은 포함하지 않는다.
 
-`runId`와 `latestOnly`는 함께 사용하지 않는다.
+`runId`와 `latestOnly`는 함께 사용하지 않는다. 함께 보내면 `latestOnly`는 무시한다.
 
 정렬:
 
@@ -1647,6 +1656,12 @@ GET /api/v1/judgments/summary?runId=R1
 }
 ```
 
+`byVerdict`는 세 verdict를 늘 담는다. 판정이 없는 verdict는 `count`·`finalAmount`가 0이다. `finalAmount`가 아직 없는 Judgment(금액 계산 전)는 0으로 더한다.
+
+`byAccount`는 `AVAILABLE`이면서 `account`가 있는 Judgment만 모은다. 정렬은 `finalAmount DESC`이고, 같으면 `account` 이름순이다.
+
+다른 사용자의 `batchId`·`runId`를 넘기면 404가 아니라 빈 집계(`totalCount` 0)다.
+
 ---
 
 ## `GET /api/v1/judgments/{judgmentId}`
@@ -1729,7 +1744,7 @@ GET /api/v1/judgments/summary?runId=R1
 | appliedRuleIds | 적용된 전체 RuleCard ID |
 | rulesCommitSha | 사용된 Rules revision |
 | userContextVersion | 판정에 사용된 Context 버전 |
-| explanation | RuleCard의 reason |
+| explanation | 판정 설명 문장. RuleCard에 설명 필드가 없어 지금은 늘 `null`이다 |
 | citations | 근거 법령 |
 
 ### Judgment `state` 제거
