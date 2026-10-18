@@ -58,6 +58,13 @@ export function Admin() {
   const forbidden = listQ.error instanceof ApiRequestError && listQ.error.status === 403;
   const items = listQ.data?.items ?? [];
 
+  // 취소하면 모달 안의 실패 문구도 지운다. 남기면 모달 밖 문구로 옮겨 붙는다
+  const closeModal = () => {
+    if (busy) return;
+    setPending(null);
+    setError(null);
+  };
+
   const decide = async () => {
     if (!pending || busy) return;
     const { candidate, decision } = pending;
@@ -162,13 +169,14 @@ export function Admin() {
           </ul>
         }
 
-        {listQ.data && listQ.data.page.totalPages > 1 &&
+        {/* 목록을 못 읽었으면 전에 읽은 쪽 번호를 띄우지 않는다 */}
+        {!listQ.error && listQ.data && listQ.data.page.totalPages > 1 &&
         <Pagination page={listQ.data.page} onChange={setPage} />
         }
 
         <Modal
           open={pending !== null}
-          onClose={() => !busy && setPending(null)}
+          onClose={closeModal}
           tone={pending?.decision === 'reject' ? 'danger' : 'neutral'}
           title={
           pending ?
@@ -179,7 +187,7 @@ export function Admin() {
           description="처리한 후보는 다시 대기로 돌릴 수 없습니다."
           footer={
           <>
-              <Button variant="secondary" size="md" disabled={busy} onClick={() => setPending(null)}>
+              <Button variant="secondary" size="md" disabled={busy} onClick={closeModal}>
                 취소
               </Button>
               <Button
