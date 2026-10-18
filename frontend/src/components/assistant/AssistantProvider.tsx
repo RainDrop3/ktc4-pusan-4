@@ -6,13 +6,16 @@ import { useSession } from '../../contexts/SessionContext';
 import { AssistantContext } from './context';
 import type { AssistantValue, ChatEntry, Nudge, ProposalEntry } from './context';
 import { HELP_TOPICS } from './help';
-import { applyErrorText, applyProposal, chatErrorText, MESSAGE_CHARS, routeName, trimHistory } from './logic';
+import { applyErrorText, applyProposal, chatErrorText, historyOf, MESSAGE_CHARS, routeName } from './logic';
 
 const entryId = () => crypto.randomUUID();
 
+/** 귀속연도. 서비스는 2026 귀속만 다룬다(머리글의 「귀속 2026년」). 비서의 연간 요약이 이 값으로 범위를 잡는다 */
+const TAX_YEAR = 2026;
+
 /**
- * 비서 Really 의 대화 상태. 로그인 뒤 레이아웃에 한 번만 올려 두어, 화면을 옮겨도 대화가 이어진다(FR-1).
- * 로그아웃하면 레이아웃이 내려가며 대화도 사라진다. 서버는 대화를 저장하지 않는다(C-12)
+ * 비서 Really 의 대화 상태. 라우트 바깥에 한 번만 올려 두어, 화면을 옮기거나 랜딩에 다녀와도 대화가 이어진다(FR-1).
+ * 계정이 바뀌면 다시 올라가 대화가 사라진다(App 의 key). 서버는 대화를 저장하지 않는다(C-12)
  */
 export function AssistantProvider({ children }: {children: React.ReactNode;}) {
   const { pathname } = useLocation();
@@ -37,7 +40,7 @@ export function AssistantProvider({ children }: {children: React.ReactNode;}) {
   const send = useCallback(async (text: string) => {
     const message = text.trim().slice(0, MESSAGE_CHARS);
     if (!message || pending) return;
-    const history = trimHistory(entriesRef.current.map(({ role, content }) => ({ role, content })));
+    const history = historyOf(entriesRef.current);
     const mine: ChatEntry = { id: entryId(), role: 'user', content: message, proposals: [] };
     setEntries((prev) => [...prev, mine]);
     setPending(true);
@@ -47,7 +50,7 @@ export function AssistantProvider({ children }: {children: React.ReactNode;}) {
       const reply = await api.assistant.chat({
         message,
         history,
-        context: { screen: pathname, batchId, transactionId: subject, year: null },
+        context: { screen: pathname, batchId, transactionId: subject, year: TAX_YEAR },
         sessionId: sessionId.current
       });
       setEntries((prev) => [
@@ -64,61 +67,50 @@ export function AssistantProvider({ children }: {children: React.ReactNode;}) {
     }
   }, [pending, pathname, batchId, subject]);
 
+  // 비서의 답을 기다리는 동안에는 받지 않는다. 그사이 넣은 문답이 먼저 붙어 질문과 답이 엇갈린다
   const showHelp = useCallback((topicId: string) => {
     const topic = HELP_TOPICS.find((item) => item.id === topicId);
-    if (!topic) return;
+    if (!topic || pending) return;
     setEntries((prev) => [
     ...prev,
-    { id: entryId(), role: 'user', content: topic.label, proposals: [] },
-    { id: entryId(), role: 'assistant', content: topic.text, proposals: [] }]
+    { id: entryId(), role: 'user', content: topic.label, proposals: [], local: true },
+    { id: entryId(), role: 'assistant', content: topic.text, proposals: [], local: true }]
     );
-  }, []);
+  }, [pending]);
 
   const showNext = useCallback(async () => {
-    const ask: ChatEntry = { id: entryId(), role: 'user', content: '다음에 할 일', proposals: [] };
+    if (pending) return;
+    // 묻는 말을 먼저 붙이고, 진행 상황을 읽는 동안은 다른 말을 받지 않는다
+    setEntries((prev) => [...prev, { id: entryId(), role: 'user', content: '다음에 할 일', proposals: [], local: true }]);
+    const answer = (entry: Omit<ChatEntry, 'id' | 'role' | 'local'>) =>
+    setEntries((prev) => [...prev, { id: entryId(), role: 'assistant', local: true, ...entry }]);
     if (!batchId) {
-      setEntries((prev) => [
-      ...prev,
-      ask,
-      {
-        id: entryId(),
-        role: 'assistant',
+      answer({
         content: '카드내역을 먼저 올려 주세요. 올리면 분류 확인부터 차례로 안내합니다.',
         proposals: toEntries([{ kind: 'navigation', route: '/upload', card: '카드내역 화면으로 이동' }])
-      }]
-      );
+      });
       return;
     }
+    setPending(true);
     try {
       const { next } = await api.progress.get(batchId);
-      setEntries((prev) => [
-      ...prev,
-      ask,
-      next ?
-      {
-        id: entryId(),
-        role: 'assistant',
-        content: `다음 할 일은 「${next.label}」입니다.`,
-        proposals: toEntries([
-        { kind: 'navigation', route: next.route, card: `${routeName(next.route) ?? next.label} 화면으로 이동` }]
-        )
-      } :
-      { id: entryId(), role: 'assistant', content: '지금 할 일이 남아 있지 않습니다.', proposals: [] }]
+      answer(
+        next ?
+        {
+          content: `다음 할 일은 「${next.label}」입니다.`,
+          proposals: toEntries([
+          { kind: 'navigation', route: next.route, card: `${routeName(next.route) ?? next.label} 화면으로 이동` }]
+          )
+        } :
+        { content: '지금 할 일이 남아 있지 않습니다.', proposals: [] }
       );
     } catch {
       const flow = HELP_TOPICS.find((topic) => topic.id === 'flow');
-      setEntries((prev) => [
-      ...prev,
-      ask,
-      {
-        id: entryId(),
-        role: 'assistant',
-        content: `진행 상황을 불러오지 못했습니다. ${flow?.text ?? ''}`,
-        proposals: []
-      }]
-      );
+      answer({ content: `진행 상황을 불러오지 못했습니다. ${flow?.text ?? ''}`, proposals: [] });
+    } finally {
+      setPending(false);
     }
-  }, [batchId]);
+  }, [pending, batchId]);
 
   const updateProposal = (id: string, index: number, patch: Partial<ProposalEntry>) =>
   setEntries((prev) =>

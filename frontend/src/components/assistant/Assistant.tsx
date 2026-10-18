@@ -7,6 +7,11 @@ import type { ChatEntry } from './context';
 import { HELP_TOPICS } from './help';
 import { blockedReason, MESSAGE_CHARS, PROPOSAL_LABEL } from './logic';
 
+/** 패널 자리(right-5 + w-[25rem])에 화면과의 사이 1.5rem 을 더한 폭 */
+const PANEL_SPACE = '27.75rem';
+/** 패널을 비켜도 화면이 남는 폭. 이보다 좁으면 패널이 화면 위에 뜬다 */
+const WIDE = '(min-width: 1024px)';
+
 /**
  * 비서 Really. 로그인 뒤 모든 화면 오른쪽 아래의 버튼과 대화 패널 (FR-1).
  * 비서는 제안 카드만 만들고, 바꾸는 일은 사용자가 [적용]을 눌러야 기존 API 로 일어난다.
@@ -22,6 +27,22 @@ export function Assistant() {
   useEffect(() => {
     if (wasOpen.current && !open) button.current?.focus();
     wasOpen.current = open;
+  }, [open]);
+
+  // 넓은 화면에서 패널을 열면 오른쪽에 패널 폭만큼 여백을 준다. 가운데 놓인 화면이 왼쪽으로 비켜,
+  // 열어 둔 채로 답할 선택지를 가리지 않는다
+  useEffect(() => {
+    if (!open) return;
+    const wide = window.matchMedia(WIDE);
+    const place = () => {
+      document.body.style.paddingRight = wide.matches ? PANEL_SPACE : '';
+    };
+    place();
+    wide.addEventListener('change', place);
+    return () => {
+      wide.removeEventListener('change', place);
+      document.body.style.paddingRight = '';
+    };
   }, [open]);
 
   if (open) return <Panel onClose={() => setOpen(false)} />;
@@ -73,6 +94,9 @@ export function Assistant() {
 
 }
 
+const TOPIC_CLASS =
+'rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink hover:bg-canvas disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-surface';
+
 function Panel({ onClose }: {onClose: () => void;}) {
   const { entries, pending, error, draft, setDraft, send, showHelp, showNext } = useAssistant();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -98,12 +122,14 @@ function Panel({ onClose }: {onClose: () => void;}) {
     void send(draft);
   };
 
+  // 답을 기다리는 동안에는 막는다. 그사이 붙은 문답이 기다리던 답보다 먼저 와 질문과 답이 엇갈린다
   const topics =
   <div className="flex flex-wrap gap-1.5">
       <button
       type="button"
+      disabled={pending}
       onClick={() => void showNext()}
-      className="rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink hover:bg-canvas">
+      className={TOPIC_CLASS}>
 
         다음에 할 일
       </button>
@@ -111,8 +137,9 @@ function Panel({ onClose }: {onClose: () => void;}) {
     <button
       key={topic.id}
       type="button"
+      disabled={pending}
       onClick={() => showHelp(topic.id)}
-      className="rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink hover:bg-canvas">
+      className={TOPIC_CLASS}>
 
           {topic.label}
         </button>

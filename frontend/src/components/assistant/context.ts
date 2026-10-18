@@ -15,6 +15,8 @@ export interface ChatEntry {
   role: 'user' | 'assistant';
   content: string;
   proposals: ProposalEntry[];
+  /** 비서를 거치지 않고 화면이 답한 문답(도움말·다음 할 일). 비서에게 보내는 대화에서 뺀다 */
+  local?: boolean;
 }
 
 /** 먼저 말 걸기. 한 번에 하나만, 닫을 수 있게 (FR-3·4) */
@@ -28,7 +30,7 @@ export interface AssistantValue {
   open: boolean;
   setOpen: (open: boolean) => void;
   entries: ChatEntry[];
-  /** 답을 기다리는 중 */
+  /** 답을 기다리는 중. 다음 할 일을 읽는 동안도 그렇다 — 그사이 다른 말을 넣으면 문답 순서가 섞인다 */
   pending: boolean;
   error: string | null;
   /** 입력 중인 글. 패널을 닫았다 열어도, 보내다 실패해도 남는다 */

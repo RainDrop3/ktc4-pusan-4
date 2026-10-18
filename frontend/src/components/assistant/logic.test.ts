@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '../../api/contract';
 import type { Api } from '../../api/contract';
 import type { AssistantProposal, QuestionGroup, QuestionSuggestion } from '../../types/domain';
-import { applyProposal, blockedReason, chatErrorText, previousAnswer, trimHistory } from './logic';
+import { applyProposal, blockedReason, chatErrorText, historyOf, previousAnswer, trimHistory } from './logic';
 
 const fakeApi = () => {
   const api = {
@@ -64,10 +64,28 @@ describe('applyProposal', () => {
   });
 });
 
+describe('historyOf', () => {
+  it('화면이 혼자 답한 문답은 빼고, 남은 말에서 최근 20개를 보낸다', () => {
+    const real = Array.from({ length: 20 }, (_, i) => ({ role: i % 2 ? 'assistant' as const : 'user' as const, content: `말 ${i}` }));
+    const help = [
+    { role: 'user' as const, content: '확인 필요', local: true },
+    { role: 'assistant' as const, content: '확인 필요는 실패가 아닙니다.', local: true }];
+
+    const history = historyOf([...real.slice(0, 10), ...help, ...real.slice(10), ...help]);
+    expect(history).toEqual(real);
+  });
+});
+
 describe('chatErrorText', () => {
   it('429 는 Retry-After 초를 알려 준다', () => {
     expect(chatErrorText(new ApiRequestError(429, 'ASSISTANT_BUSY', 'x', '', 5))).toBe('5초 뒤에 다시 물어봐 주세요.');
     expect(chatErrorText(new ApiRequestError(429, 'LIMIT', 'x', '', 3600))).toContain('잠시 뒤');
+  });
+
+  it('Retry-After 가 0 이면 「0초 뒤」로 적지 않는다', () => {
+    expect(chatErrorText(new ApiRequestError(429, 'ASSISTANT_BUSY', 'x', '', 0))).toBe(
+      '지금은 더 받을 수 없습니다. 잠시 뒤 다시 물어봐 주세요.'
+    );
   });
 
   it('서버 문장을 그대로 띄우지 않는다', () => {

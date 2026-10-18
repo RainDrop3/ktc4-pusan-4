@@ -18,6 +18,13 @@ export const trimHistory = (messages: AssistantMessage[]): AssistantMessage[] =>
 messages.slice(-HISTORY_LIMIT).map((m) => ({ role: m.role, content: m.content.slice(0, HISTORY_CHARS) }));
 
 /**
+ * 비서에게 보낼 대화. 화면이 혼자 답한 문답(도움말·다음 할 일)은 뺀다 — 비서가 하지 않은 말을 비서의 말로
+ * 넘기지 않고, 긴 도움말 문구가 20개 한도를 차지하지 않게 한다
+ */
+export const historyOf = (entries: {role: AssistantMessage['role'];content: string;local?: boolean;}[]): AssistantMessage[] =>
+trimHistory(entries.filter((entry) => !entry.local).map(({ role, content }) => ({ role, content })));
+
+/**
  * 비서가 이동을 제안할 수 있는 화면과 그 이름 (ai/assistant/tools.py ROUTES 와 같다).
  * 판정 실행(/run)은 판정 전 확인을 건너뛰므로 뺀다. 목록 밖의 경로는 따라가지 않는다
  */
@@ -111,7 +118,8 @@ export const chatErrorText = (caught: unknown): string => {
   const status = caught instanceof ApiRequestError ? caught.status : -1;
   if (status === 429) {
     const seconds = caught instanceof ApiRequestError ? caught.retryAfter : undefined;
-    return seconds !== undefined && seconds <= 60 ?
+    // 0 초는 「0초 뒤」로 읽혀 기다릴 것이 없는 것처럼 보인다. 기다릴 시간을 모를 때와 같게 적는다
+    return seconds !== undefined && seconds > 0 && seconds <= 60 ?
     `${formatNumber(seconds)}초 뒤에 다시 물어봐 주세요.` :
     '지금은 더 받을 수 없습니다. 잠시 뒤 다시 물어봐 주세요.';
   }
