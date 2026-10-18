@@ -26,7 +26,7 @@ export const seedSession: {
 
 /** 목업 로그인 비밀번호. 목업일 때만 값이 있다. 로그인 화면의 목업 전용 버튼과 안내가 쓴다 */
 export const mockPassword: string | null = useHttp ? null : MOCK_PASSWORD;
-export { useApi } from './hooks';
+export { invalidateAll, useApi } from './hooks';
 
 // mockControls 는 여기서 다시 내보내지 않는다. 내보내면 실제 서버 빌드에서도
 // 목업 모듈 전체가 번들에 남는다. 쓰는 쪽(검증 하네스)은 './mock' 에서 직접 가져온다.

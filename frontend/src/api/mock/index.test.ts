@@ -5,12 +5,14 @@ import type { Api } from '../contract';
 // 목업 상태는 모듈 안에 있다. 테스트마다 모듈을 새로 읽어 시드 상태에서 시작한다
 let api: Api;
 let batchId: string;
+let controls: typeof import('./index').mockControls;
 
 beforeEach(async () => {
   vi.resetModules();
   const mock = await import('./index');
   api = mock.mockApi;
   batchId = mock.mockSeedSession.batchId;
+  controls = mock.mockControls;
 });
 
 /** 시드: 1016 은 소명 대기(자동 판정 불가인데 「용도」 질문이 남음), 1005 는 카페 「용도」 질문 */
@@ -209,6 +211,55 @@ describe('문진·판정 실행', () => {
     });
     const run = await api.runs.create({ batchId, contextId: seed.id });
     expect(run.contextVersion).toBe(seed.version);
+  });
+
+  it('실패를 예약할 때 실패 코드를 고를 수 있다 (3.6)', async () => {
+    const seed = await api.contexts.current();
+    if (!seed) throw new Error('시드 문진이 없다');
+    controls.failNextRun(1, 'RUN_START_FAILED');
+    const run = await api.runs.create({ batchId, contextId: seed.id });
+    expect((await api.runs.failures(run.id)).items.map((f) => f.errorCode)).toEqual(['RUN_START_FAILED']);
+
+    const next = await api.runs.create({ batchId, contextId: seed.id });
+    expect((await api.runs.failures(next.id)).items).toHaveLength(0);
+  });
+});
+
+describe('비서 (목업)', () => {
+  const context = (screen: string, transactionId: string | null = null) => ({ screen, batchId, transactionId, year: null });
+  const chat = (message: string, screen: string, transactionId: string | null = null) =>
+  api.assistant.chat({ message, history: [], context: context(screen, transactionId), sessionId: 's1' });
+
+  it('지난번 답은 지금 PENDING 그룹에만 주고, 진행 상황은 채울 수 있는 질문 수를 센다', async () => {
+    const { items } = await api.questions.suggestions(batchId);
+    expect(items.map((s) => s.tier).sort()).toEqual(['A', 'A', 'B', 'B', 'C']);
+    const progress = await api.progress.get(batchId);
+    expect(progress.questions.fillableFromPrevious).toBe(2);
+    expect(progress.next?.route).toBe('/preview');
+
+    const sk = (await pendingGroups()).items.find((g) => g.groupKey === 'merchant:SK텔레콤');
+    if (!sk) throw new Error('SK텔레콤 그룹이 없다');
+    await api.questions.respond({ questionIds: sk.questionIds, answer: { value: '전용' }, source: 'PREVIOUS_ANSWER' });
+    expect((await api.questions.suggestions(batchId)).items.some((s) => s.groupKey === 'merchant:SK텔레콤')).toBe(false);
+    expect((await api.progress.get(batchId)).questions.fillableFromPrevious).toBe(1);
+  });
+
+  it('화면과 말로 제안 카드를 만든다', async () => {
+    const answer = await chat('SK텔레콤은 전용 회선이야', '/questions');
+    expect(answer.proposals[0]).toMatchObject({ kind: 'answer', value: '전용', source: 'ASSISTANT' });
+
+    const override = await chat('이건 확인 필요로 바꿔 줘', '/results', tx('1005'));
+    expect(override.proposals[0]).toMatchObject({ kind: 'override', toVerdict: 'NEEDS_REVIEW' });
+
+    const note = await chat('안분 비율은 세무사에게 물어볼래', '/summary');
+    expect(note.proposals[0]).toMatchObject({ kind: 'handoff_note', text: '안분 비율은 세무사에게 물어볼래' });
+    expect(note.traceId).toEqual(expect.any(String));
+  });
+
+  it('세무대리인 질문을 저장하고 모아 준다', async () => {
+    await api.handoffNotes.create({ text: '  안분 비율은?  ', transactionIds: [] });
+    expect((await api.handoffNotes.list()).map((n) => n.text)).toEqual(['안분 비율은?']);
+    await expect(api.handoffNotes.create({ text: ' ', transactionIds: [] })).rejects.toMatchObject({ status: 400 });
   });
 });
 
