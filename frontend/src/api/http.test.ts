@@ -34,4 +34,11 @@ describe('httpApi', () => {
     expect(headers['Idempotency-Key']).toBe('key-1');
     expect(JSON.parse(init.body as string)).toEqual({ toVerdict: 'AVAILABLE', reason: '업무' });
   });
+
+  it('세무대리인 질문 저장 API 가 없으면(404) 저장한 질문이 없는 것으로 읽는다', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'NOT_FOUND' }), { status: 404 }));
+    await expect(httpApi.handoffNotes.list()).resolves.toEqual([]);
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'INTERNAL_ERROR' }), { status: 500 }));
+    await expect(httpApi.handoffNotes.list()).rejects.toMatchObject({ status: 500 });
+  });
 });
