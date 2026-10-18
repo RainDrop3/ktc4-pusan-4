@@ -312,7 +312,8 @@ export function Results() {
               답할 질문 {formatNumber(unresolved.count)}개 · {formatWon(unresolved.amount)}
             </span>
             <span className="mt-0.5 block text-small text-ink2">
-              같은 사유끼리 묶은 질문 {formatNumber(questionGroups)}개가 남았습니다. 답하면 묶인
+              {/* questionGroups 는 그룹 수다. 「질문 N개」로 또 적으면 위 질문 수와 다른 수가 같은 말로 읽힌다 */}
+              같은 사유끼리 {formatNumber(questionGroups)}묶음으로 모았습니다. 답하면 묶인
               거래를 바로 다시 판정합니다.
             </span>
           </span>
