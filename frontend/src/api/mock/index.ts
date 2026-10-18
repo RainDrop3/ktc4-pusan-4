@@ -15,6 +15,7 @@ import type {
   Question,
   QuestionGroup,
   QuestionPage,
+  RuleCandidate,
   StoredBusinessContext,
   UnresolvedPage,
   Transaction,
@@ -35,6 +36,7 @@ import {
   QUESTION_GROUPS,
   QUESTION_SUGGESTIONS,
   QUESTION_TRANSACTIONS,
+  RULE_CANDIDATES,
   TRANSACTIONS,
   UPLOAD_BATCH } from
 './data';
@@ -146,10 +148,22 @@ const store = {
   failures: new Map<string, JudgmentRunFailure[]>(),
   /** 다음 업로드를 이 오류로 실패시킨다 (개발용) */
   failUpload: null as ApiRequestError | null,
+  /** 로그인한 이메일. 로그아웃하면 null 이고, 그때 users.me 는 401 이다 */
+  email: null as string | null,
+  ruleCandidates: RULE_CANDIDATES.map((c) => ({ ...c })) as RuleCandidate[],
   /** 다음 비서 요청을 이 오류로 실패시킨다 (개발용) */
   failAssistant: null as ApiRequestError | null,
   handoffNotes: [] as HandoffNote[]
 };
+
+/**
+ * 목업 비밀번호. 이메일은 무엇이든 받고 비밀번호만 본다. 실서버 로컬 프로필의 고정 사용자 비밀번호와 같다(#155).
+ * 로그인 화면의 목업 전용 버튼과 안내도 이 값을 쓴다(Login.tsx)
+ */
+export const MOCK_PASSWORD = 'demo1234';
+
+/** 목업에서 관리자 화면을 보려면 admin@… 으로 로그인한다 */
+const isAdminEmail = (email: string | null) => email?.split('@')[0] === 'admin';
 
 const latestOf = (transactionId: string) =>
 store.judgments.
@@ -434,6 +448,20 @@ transactionId?: string)
 const notFound = (code: string, message: string) =>
 Promise.reject(new ApiRequestError(404, code, message));
 
+/** 승인·기각. 검토한 사람과 시각을 남긴다. 이미 처리한 후보는 다시 바꾸지 않는다 */
+const reviewCandidate = (id: number, status: RuleCandidate['status']) => {
+  if (!isAdminEmail(store.email))
+  return Promise.reject(new ApiRequestError(403, 'FORBIDDEN', '관리자만 할 수 있습니다.'));
+  const candidate = store.ruleCandidates.find((c) => c.id === id);
+  if (!candidate) return notFound('RULE_CANDIDATE_NOT_FOUND', '규칙 후보를 찾을 수 없습니다.');
+  if (candidate.status.code === 'APPROVED' || candidate.status.code === 'REJECTED')
+  return Promise.reject(new ApiRequestError(409, 'CONFLICT', '이미 처리한 후보입니다.'));
+  candidate.status = status;
+  candidate.reviewedBy = store.email;
+  candidate.reviewedAt = now();
+  return delay({ ...candidate });
+};
+
 /** 지금 PENDING 그룹에 맞는 지난번 답. 다른 배치·답한 그룹의 것은 주지 않는다 */
 const suggestionsIn = (batchId: string) => {
   const pending = pendingGroups('PENDING', batchId).map(groupOut);
@@ -575,9 +603,35 @@ const mockChat = async ({ message, context }: AssistantChatRequest): Promise<Ass
 // ── 구현 ────────────────────────────────────────────
 
 export const mockApi: Api = {
+  auth: {
+    login: ({ email, password }) => {
+      if (password !== MOCK_PASSWORD)
+      return Promise.reject(
+        new ApiRequestError(401, 'INVALID_CREDENTIALS', '이메일 또는 비밀번호가 올바르지 않습니다.')
+      );
+      store.email = email;
+      return delay(undefined);
+    },
+    // 목업은 새로고침하면 상태가 사라지므로 이어 갈 로그인이 없다
+    restore: () => delay(false),
+    logout: () => {
+      store.email = null;
+      return delay(undefined);
+    },
+    // 목업은 토큰이 만료되지 않는다
+    onLost: () => () => undefined
+  },
+
   users: {
     me: () =>
-    delay({ id: USER_ID, email: 'dev@example.com', createdAt: '2026-09-01T10:00:00+09:00' }),
+    store.email === null ?
+    Promise.reject(new ApiRequestError(401, 'UNAUTHORIZED', '로그인이 필요합니다.')) :
+    delay({
+      id: USER_ID,
+      email: store.email,
+      createdAt: '2026-09-01T10:00:00+09:00',
+      role: isAdminEmail(store.email) ? 'ADMIN' as const : 'USER' as const
+    }),
     remove: () => delay(undefined)
   },
 
@@ -1119,6 +1173,21 @@ export const mockApi: Api = {
         merchantCategory,
         judgedCount: hasCompletedRun ? rows.length : 0
       });
+    }
+  },
+
+  admin: {
+    ruleCandidates: {
+      list: (q) => {
+        if (!isAdminEmail(store.email))
+        return Promise.reject(new ApiRequestError(403, 'FORBIDDEN', '관리자만 볼 수 있습니다.'));
+        const items = store.ruleCandidates.
+        filter((c) => !q?.status || c.status.code === q.status).
+        sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id);
+        return delay(paginate(items, q?.page, q?.size ?? 20));
+      },
+      approve: (id) => reviewCandidate(id, { code: 'APPROVED', label: '승인' }),
+      reject: (id) => reviewCandidate(id, { code: 'REJECTED', label: '기각' })
     }
   },
 
