@@ -40,10 +40,17 @@ const NO_BEARER = new Set(['/auth/login', '/auth/refresh']);
 /** 이 경로의 401 은 재발급으로 풀리지 않는다 */
 const isAuthPath = (path: string) => path.startsWith('/auth/');
 
+/**
+ * 로그인·로그아웃·풀림마다 올린다. 그 전에 시작한 재발급·재시도의 결과는 지금 세션에 쓰지 않는다 —
+ * 늦게 온 재발급이 로그아웃한 토큰을 되살리거나 다른 계정의 토큰을 덮고, 지난 세션의 401 이 새 로그인을 풀 수 있다
+ */
+let generation = 0;
+
 /** 로그인이 풀렸다. 토큰이 있던 경우에만 한 번 알린다 — 동시에 실패한 요청이 여러 번 알리지 않게 */
 const lose = () => {
   if (accessToken === null) return;
   accessToken = null;
+  generation += 1;
   lostListeners.forEach((listener) => listener());
 };
 
@@ -53,15 +60,24 @@ let refreshing: Promise<void> | null = null;
  * 실패하면 그 오류로 거절한다. 401 이 아닌 실패(5xx·연결 끊김)는 리프레시 쿠키가 멀쩡할 수 있다
  */
 const refresh = () => {
-  refreshing ??= request<{ accessToken: string }>('POST', '/auth/refresh').
-  then((result) => {
-    accessToken = result.accessToken;
-  }).
-  finally(() => {
-    refreshing = null;
-  });
+  if (!refreshing) {
+    const startedAt = generation;
+    refreshing = request<{ accessToken: string }>('POST', '/auth/refresh').
+    then((result) => {
+      if (generation === startedAt) accessToken = result.accessToken;
+    }).
+    finally(() => {
+      refreshing = null;
+    });
+  }
   return refreshing;
 };
+
+/**
+ * 진행 중인 재발급이 끝날 때까지 기다린다. 재발급 응답의 Set-Cookie 가 로그인·로그아웃 응답보다
+ * 늦게 오면 지난 세션의 리프레시 쿠키가 남아, 새로고침하면 그 세션으로 돌아간다
+ */
+const settled = () => refreshing?.then(() => undefined, () => undefined);
 
 /**
  * 1.3 에러 응답(`{code, message, traceId}`)을 그대로 ApiRequestError 로 올린다.
@@ -77,7 +93,9 @@ retried = false)
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
-  if (accessToken && !NO_BEARER.has(path)) headers.Authorization = `Bearer ${accessToken}`;
+  const sentToken = NO_BEARER.has(path) ? null : accessToken;
+  const sentAt = generation;
+  if (sentToken) headers.Authorization = `Bearer ${sentToken}`;
 
   let response: Response;
   try {
@@ -101,8 +119,12 @@ retried = false)
     }
   }
 
-  if (response.status === 401 && !retried && !isAuthPath(path) && accessToken !== null) {
-    const refreshed = await refresh().then(
+  // 그사이 로그인·로그아웃했으면 지난 세션의 요청이다. 다시 보내지도, 지금 로그인을 풀지도 않고 그 401 을 올린다
+  if (response.status === 401 && !retried && !isAuthPath(path) && sentToken !== null && generation === sentAt) {
+    // 다른 요청이 이미 재발급했으면 새 토큰으로 다시 보내기만 한다
+    const refreshed =
+    accessToken !== sentToken ||
+    await refresh().then(
       () => true,
       (caught: unknown) => {
         // 재발급도 401 이면 로그인이 풀렸다. 그 밖의 실패는 토큰을 두고 그 오류를 올린다 — 다음 요청이 다시 재발급한다
@@ -110,8 +132,10 @@ retried = false)
         return false;
       }
     );
-    if (refreshed) return request<T>(method, path, options, true);
-    lose();
+    if (generation === sentAt) {
+      if (refreshed) return request<T>(method, path, options, true);
+      lose();
+    }
   }
 
   if (!response.ok) {
@@ -142,12 +166,26 @@ export const httpApi: Api = {
     login: async (body) => {
       // 다른 계정으로 로그인하다 실패해도 앞 사람의 토큰이 남지 않게 먼저 버린다
       accessToken = null;
+      generation += 1;
+      await settled();
+      const startedAt = generation;
       const result = await post<{ accessToken: string }>('/auth/login', body);
-      accessToken = result.accessToken;
+      // 그사이 로그아웃했거나 다시 로그인했으면 이 토큰은 쓰지 않는다
+      if (generation === startedAt) accessToken = result.accessToken;
     },
     // 아직 로그인 전이라 잃을 것이 없다. 어떤 이유로든 못 이어 가면 로그인 화면이다
-    restore: () => refresh().then(() => true, () => false),
-    logout: () => {
+    restore: () => {
+      const startedAt = generation;
+      return refresh().then(() => generation === startedAt, () => false);
+    },
+    logout: async () => {
+      generation += 1;
+      if (refreshing) {
+        // 재발급이 끝난 뒤에 보낸다(settled). 토큰은 싣지 않는다 — /auth/* 는 토큰을 보지 않고 쿠키만 지운다
+        accessToken = null;
+        await settled();
+        return post<void>('/auth/logout');
+      }
       // 헤더는 부르는 순간 만들어지므로 토큰을 실은 채로 보내고, 기다리지 않고 바로 지운다
       const sent = post<void>('/auth/logout');
       accessToken = null;
