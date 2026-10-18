@@ -94,9 +94,6 @@ export function Assistant() {
 
 }
 
-const TOPIC_CLASS =
-'rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink hover:bg-canvas disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-surface';
-
 function Panel({ onClose }: {onClose: () => void;}) {
   const { entries, pending, error, draft, setDraft, send, showHelp, showNext } = useAssistant();
   const [helpOpen, setHelpOpen] = useState(false);
@@ -124,12 +121,12 @@ function Panel({ onClose }: {onClose: () => void;}) {
 
   // 답을 기다리는 동안에는 막는다. 그사이 붙은 문답이 기다리던 답보다 먼저 와 질문과 답이 엇갈린다
   const topics =
-  <div className="flex flex-wrap gap-1.5">
+  <div className="flex flex-wrap gap-1.5 [&>button:disabled]:cursor-not-allowed [&>button:disabled]:opacity-50">
       <button
       type="button"
       disabled={pending}
       onClick={() => void showNext()}
-      className={TOPIC_CLASS}>
+      className="rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink hover:bg-canvas">
 
         다음에 할 일
       </button>
@@ -139,7 +136,7 @@ function Panel({ onClose }: {onClose: () => void;}) {
       type="button"
       disabled={pending}
       onClick={() => showHelp(topic.id)}
-      className={TOPIC_CLASS}>
+      className="rounded-full border border-line bg-surface px-3 py-1.5 text-caption font-semibold text-ink hover:bg-canvas">
 
           {topic.label}
         </button>
