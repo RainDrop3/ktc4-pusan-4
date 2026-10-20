@@ -25,7 +25,7 @@ class HolidaySyncTest {
 
     private final HolidayApiClient client = mock(HolidayApiClient.class);
     private final HolidayCalendar calendar = mock(HolidayCalendar.class);
-    private final HolidaySync sync = new HolidaySync(client, calendar, NEW_YEAR_KST);
+    private final HolidaySync sync = new HolidaySync(client, calendar, mock(HolidaySeed.class), NEW_YEAR_KST);
 
     @Test
     void save_failure_does_not_propagate_and_the_other_years_still_sync() {
