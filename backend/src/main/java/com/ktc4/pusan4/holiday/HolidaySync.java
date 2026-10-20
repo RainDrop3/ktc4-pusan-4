@@ -74,17 +74,15 @@ class HolidaySync {
         log.info("{}년 공휴일 {}건을 반영했다", year, holidays.size());
     }
 
+    // 시드를 읽거나 저장하다 실패해도 기동을 막지 않는다(syncYear 의 저장 실패와 같은 이유).
     private void fillFromSeed(int year) {
-        List<PublicHoliday> seeded = seed.holidays(year);
-        if (seeded.isEmpty()) {
-            return;
-        }
         try {
-            if (calendar.fillYearIfEmpty(year, seeded)) {
+            List<PublicHoliday> seeded = seed.holidays(year);
+            if (!seeded.isEmpty() && calendar.fillYearIfEmpty(year, seeded)) {
                 log.info("{}년 공휴일이 표에 없어 시드 {}건을 넣었다", year, seeded.size());
             }
         } catch (RuntimeException e) {
-            log.warn("{}년 공휴일 시드를 저장하지 못했다", year, e);
+            log.warn("{}년 공휴일 시드를 넣지 못했다", year, e);
         }
     }
 }
