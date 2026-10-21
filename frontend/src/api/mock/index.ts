@@ -25,7 +25,7 @@ import type {
   UserInclusion,
   Verdict } from
 '../../types/domain';
-import { MERCHANT_CATEGORIES } from '../../types/domain';
+import { MERCHANT_CATEGORIES, UNCLASSIFIED } from '../../types/domain';
 import type { JudgmentSeed, QuestionGroupSeed } from './data';
 import {
   CLASSIFICATION_REVIEWS,
@@ -65,6 +65,61 @@ const effectiveOf = (t: Transaction): EffectiveStatus => {
   if (t.userInclusion === 'EXCLUDED') return 'EXCLUDED';
   if (t.userInclusion === 'INCLUDED') return 'JUDGEABLE';
   return t.sourceStatus.code;
+};
+
+/**
+ * 가맹점 이름 → 업종. 서버는 PG·개인 사전·전역 사전·키워드룰을 차례로 보지만(#124),
+ * 목업은 키워드 몇 개만 본다. 못 맞히면 분류 확인으로 넘긴다 — 그래야 업로드한 뒤
+ * 「분류하지 못한 거래」 흐름이 목업에서도 그대로 이어진다
+ */
+const MERCHANT_KEYWORDS: [RegExp, string, string][] = [
+[/AWS|AMAZON WEB/i, 'Amazon Web Services', '해외SaaS'],
+[/GITHUB/i, 'GitHub', '해외SaaS'],
+[/NOTION|FIGMA|SLACK|OPENAI|ANTHROPIC/i, '해외 SaaS', '해외SaaS'],
+[/NETFLIX|넷플릭스/i, 'Netflix', '구독서비스'],
+[/쿠팡|COUPANG|11번가|지마켓/i, '쿠팡', '온라인쇼핑'],
+[/지하철|버스|택시/, '대중교통', '여비교통'],
+[/하이마트|전자랜드|애플스토어/i, '하이마트', '전자기기'],
+[/스타벅스|STARBUCKS|이디야|투썸/i, '카페', '카페'],
+[/GS25|CU|세븐일레븐|이마트24/i, '편의점', '편의점'],
+[/KTX|코레일|한국철도/i, '한국철도공사', '여비교통'],
+[/SK에너지|GS칼텍스|현대오일|주유/i, '주유소', '차량'],
+[/KT|SKT|LG유플러스|통신/i, '통신사', '통신'],
+[/교보문고|YES24|알라딘|서점/i, '서점', '도서']];
+
+
+/** 시드 판정이 쓴 규칙 커밋. 새로 만드는 판정도 같은 값을 쓴다 */
+const RULES_SHA = JUDGMENTS[0]?.rulesCommitSha ?? '';
+
+/** 분류 확인 화면이 먼저 보여줄 선택지. 서버는 후보를 계산하지만 목업은 고정이다 */
+const SUGGESTED_CATEGORIES = ['해외SaaS', '사무용품', '기타'] as const;
+
+/** 못 맞히면 category 가 null 이다 */
+const guessMerchant = (raw: string) => {
+  const hit = MERCHANT_KEYWORDS.find(([pattern]) => pattern.test(raw));
+  return hit ?
+  { merchantNorm: hit[1], category: hit[2] } :
+  { merchantNorm: raw.trim(), category: null };
+};
+
+/**
+ * 분류를 확인한 거래의 판정. 목업은 규칙 엔진을 돌릴 수 없어 업종으로 가른다.
+ * 목록에 없는 업종은 단정하지 않고 확인 필요로 둔다
+ */
+const VERDICT_BY_CATEGORY: Record<string, Verdict> = {
+  해외SaaS: 'AVAILABLE',
+  국내SW: 'AVAILABLE',
+  통신: 'AVAILABLE',
+  사무용품: 'AVAILABLE',
+  여비교통: 'AVAILABLE',
+  광고: 'AVAILABLE',
+  전문가수수료: 'AVAILABLE',
+  임차료: 'AVAILABLE',
+  지자체_과태료: 'UNAVAILABLE',
+  경찰청_범칙금: 'UNAVAILABLE',
+  조세: 'UNAVAILABLE',
+  의료: 'UNAVAILABLE',
+  미용: 'UNAVAILABLE'
 };
 
 /** include·exclude 응답은 바뀐 상태만 담는다 (3.4) */
@@ -669,7 +724,51 @@ export const mockApi: Api = {
         createdAt: now()
       };
       store.batches.unshift(batch);
-      // 201 응답은 다섯 필드뿐이다 (api.md 3.3). 목업은 올린 거래를 저장하지 않아 분류 확인 대기도 0 이다
+
+      // 파서가 준 거래를 실제로 저장한다. 저장하지 않으면 업로드 이력은 N건인데
+      // 거래 목록은 비고, 판정도 0건으로 돌아 화면끼리 숫자가 어긋난다
+      const rows = body.transactions.map((parsed) => {
+        const guess = guessMerchant(parsed.merchantRaw);
+        const transaction: Transaction = {
+          id: nextId('0199c8f2'),
+          batchId: batch.id,
+          approvedAt: parsed.approvedAt,
+          merchantRaw: parsed.merchantRaw,
+          merchantNorm: guess.merchantNorm,
+          merchantCategory: guess.category ?? UNCLASSIFIED,
+          classificationStatus: guess.category ?
+          { code: 'CLASSIFIED', label: '분류 완료' } :
+          { code: 'NEEDS_REVIEW', label: '확인 필요' },
+          amount: parsed.amount,
+          installmentMonths: parsed.installmentMonths ?? 0,
+          sourceStatus: { code: parsed.status, label: STATUS_LABEL[parsed.status] },
+          userInclusion: 'AUTO',
+          effectiveStatus: { code: parsed.status, label: STATUS_LABEL[parsed.status] }
+        };
+        const effective = effectiveOf(transaction);
+        transaction.effectiveStatus = { code: effective, label: STATUS_LABEL[effective] };
+        return { transaction, unclassified: guess.category === null };
+      });
+      store.transactions.push(...rows.map((r) => r.transaction));
+
+      // 분류하지 못한 거래는 업로드를 막지 않고 분류 확인으로 남긴다.
+      // 취소상계·대상제외는 판정 대상이 아니라 분류 확인을 만들지 않는다 (#124)
+      const reviews: ClassificationReview[] = rows.
+      filter((r) => r.unclassified && r.transaction.effectiveStatus.code === 'JUDGEABLE').
+      map((r) => ({
+        id: nextId('0199d7e4'),
+        batchId: batch.id,
+        transactionId: r.transaction.id,
+        merchantRaw: r.transaction.merchantRaw,
+        merchantNorm: r.transaction.merchantNorm,
+        status: { code: 'PENDING', label: '대기' },
+        suggestedCategories: [...SUGGESTED_CATEGORIES],
+        createdAt: batch.createdAt,
+        resolvedAt: null
+      }));
+      store.reviews.push(...reviews);
+      batch.classificationPendingCount = reviews.length;
+      // 201 응답은 다섯 필드뿐이다 (api.md 3.3)
       return delay({
         id: batch.id,
         transactionCount: batch.transactionCount,
@@ -1166,12 +1265,43 @@ export const mockApi: Api = {
           t.classificationStatus = { code: 'CLASSIFIED', label: '분류 완료' };
         }
       });
-      // 완료된 Run 이 있으면 해결된 거래만 재판정한다 (origin = CLASSIFICATION_REVIEW)
-      const hasCompletedRun = [...store.runs.values()].some((r) => r.status.code === 'COMPLETED');
+      // 완료된 Run 이 있으면 해결된 거래를 판정한다 (api.md 3.5, origin = CLASSIFICATION_REVIEW).
+      // 세기만 하고 판정을 만들지 않으면 Run 은 「N건 완료」인데 결과·요약 합계가 모자란다
+      const completedRun = [...store.runs.values()].find((r) => r.status.code === 'COMPLETED');
+      const judged = completedRun ?
+      rows.flatMap((r) => {
+        const t = transactionOf(r.transactionId);
+        if (!t || t.effectiveStatus.code !== 'JUDGEABLE') return [];
+        const verdict = VERDICT_BY_CATEGORY[merchantCategory] ?? 'NEEDS_REVIEW';
+        store.judgments.push({
+          id: nextId('0199f1c3'),
+          transactionId: t.id,
+          revision: (latestOf(t.id)?.revision ?? 0) + 1,
+          origin: { type: 'CLASSIFICATION_REVIEW', id: r.id },
+          verdict: { code: verdict, label: LABEL[verdict] },
+          outOfScope: false,
+          blockedAtGate: null,
+          account: verdict === 'AVAILABLE' ? '지급수수료' : null,
+          finalAmount: verdict === 'AVAILABLE' ? t.amount : null,
+          isInference: false,
+          unmatchedReason: null,
+          attributes: { merchantCategory },
+          ruleCardId: null,
+          ruleCardVersion: null,
+          appliedRuleIds: [],
+          rulesCommitSha: RULES_SHA,
+          userContextVersion: completedRun.contextVersion,
+          explanation: `가맹점 업종을 「${merchantCategory}」로 확인한 뒤 다시 판정했습니다.`,
+          computedAt: now(),
+          citations: []
+        });
+        return [t.id];
+      }) :
+      [];
       return delay({
         resolvedCount: rows.length,
         merchantCategory,
-        judgedCount: hasCompletedRun ? rows.length : 0
+        judgedCount: judged.length
       });
     }
   },
