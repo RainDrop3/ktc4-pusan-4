@@ -110,6 +110,92 @@ describe('분류 확인 (3.5)', () => {
   });
 });
 
+describe('업로드 (3.3) — 올린 거래가 실제로 남는가', () => {
+  /** 파서가 주는 모양. AWS 는 키워드로 맞히고, 나머지 둘은 못 맞혀 분류 확인으로 간다 */
+  const request = {
+    sourceType: '승인내역' as const,
+    cardIssuer: '국민' as const,
+    periodStart: '2026-02-01',
+    periodEnd: '2026-02-28',
+    fileHash: 'hash-upload-test',
+    transactions: [
+    { approvedAt: '2026-02-03', merchantRaw: 'AWS APN1', amount: 141_000, naturalKey: 'k1', status: 'JUDGEABLE' as const },
+    { approvedAt: '2026-02-04', merchantRaw: '넷플릭스', amount: 13_500, naturalKey: 'k4', status: 'JUDGEABLE' as const },
+    { approvedAt: '2026-02-05', merchantRaw: '알수없는가맹점', amount: 33_000, naturalKey: 'k2', status: 'JUDGEABLE' as const },
+    { approvedAt: '2026-02-07', merchantRaw: '취소된가맹점', amount: 9_000, naturalKey: 'k3', status: 'CANCELED_OFFSET' as const }]
+
+  };
+
+  it('업로드한 건수만큼 거래가 생기고 거래 목록에서 보인다', async () => {
+    const created = await api.uploads.create(request, 'idem-1');
+    expect(created.transactionCount).toBe(4);
+
+    const listed = await api.transactions.list({ batchId: created.id, size: 50 });
+    expect(listed.page.totalElements).toBe(4);
+    expect(listed.items.map((t) => t.merchantRaw).sort()).toEqual(
+      ['AWS APN1', '넷플릭스', '알수없는가맹점', '취소된가맹점']
+    );
+    // 업로드 이력이 말하는 수와 실제 거래 수가 같아야 한다
+    expect((await api.uploads.get(created.id)).transactionCount).toBe(listed.page.totalElements);
+  });
+
+  it('맞힌 가맹점은 분류 완료, 못 맞힌 판정대상만 분류 확인으로 남는다', async () => {
+    const created = await api.uploads.create(request, 'idem-2');
+    expect(created.classificationPendingCount).toBe(1);
+
+    const listed = await api.transactions.list({ batchId: created.id, size: 50 });
+    const aws = listed.items.find((t) => t.merchantRaw === 'AWS APN1');
+    expect(aws?.classificationStatus.code).toBe('CLASSIFIED');
+    expect(aws?.merchantCategory).toBe('해외SaaS');
+
+    // 한글 가맹점도 맞힌다. 영문만 보면 「넷플릭스」가 분류 확인으로 샌다
+    const netflix = listed.items.find((t) => t.merchantRaw === '넷플릭스');
+    expect(netflix?.merchantCategory).toBe('구독서비스');
+
+    const unknown = listed.items.find((t) => t.merchantRaw === '알수없는가맹점');
+    expect(unknown?.classificationStatus.code).toBe('NEEDS_REVIEW');
+
+    // 취소상계는 판정 대상이 아니라 분류 확인을 만들지 않는다
+    const reviews = await api.classificationReviews.list({ batchId: created.id });
+    expect(reviews.items.map((r) => r.merchantRaw)).toEqual(['알수없는가맹점']);
+  });
+
+  it('지운 배치의 거래는 함께 사라진다', async () => {
+    const created = await api.uploads.create(request, 'idem-3');
+    await api.uploads.remove(created.id);
+    expect((await api.transactions.list({ batchId: created.id })).page.totalElements).toBe(0);
+  });
+});
+
+describe('분류 확인 (3.5) — 답하면 판정이 생기는가', () => {
+  it('답한 거래에 CLASSIFICATION_REVIEW 판정이 쌓이고 요약 합계가 는다', async () => {
+    const before = await api.judgments.summary({ batchId });
+    const group = (await api.classificationReviews.grouped({ batchId, status: 'PENDING' })).items[0];
+
+    const result = await api.classificationReviews.respond({
+      reviewIds: group.reviewIds,
+      merchantCategory: '해외SaaS'
+    });
+    expect(result.judgedCount).toBe(group.count);
+
+    // 세기만 하고 판정을 안 만들면 여기서 합계가 그대로다
+    const after = await api.judgments.summary({ batchId });
+    expect(after.totalCount).toBe(before.totalCount + group.count);
+
+    const judged = await currentOf(group.transactions[0].transactionId);
+    expect(judged.origin.type).toBe('CLASSIFICATION_REVIEW');
+    expect(judged.verdict.code).toBe('AVAILABLE');
+  });
+
+  it('모르는 업종은 단정하지 않고 확인 필요로 둔다', async () => {
+    const group = (await api.classificationReviews.grouped({ batchId, status: 'PENDING' })).items[0];
+    await api.classificationReviews.respond({ reviewIds: group.reviewIds, merchantCategory: '기타' });
+    const judged = await currentOf(group.transactions[0].transactionId);
+    expect(judged.verdict.code).toBe('NEEDS_REVIEW');
+    expect(judged.finalAmount).toBeNull();
+  });
+});
+
 describe('질문 (3.9, #134)', () => {
   it('그룹은 상태·답·거래 줄을 담고, 건수 → 금액 순이다', async () => {
     const { items } = await pendingGroups();
