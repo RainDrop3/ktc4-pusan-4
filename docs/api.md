@@ -811,7 +811,7 @@ size
 createdAt DESC, id DESC
 ```
 
-`transactionCount`와 `classificationPendingCount`는 조회 시점 값이다. 사용자가 분류 확인에 답하면 `classificationPendingCount`가 줄어든다. `skippedDuplicateCount`는 업로드할 때 센 값이다.
+`transactionCount`와 `classificationPendingCount`는 조회 시점 값이다. `classificationPendingCount`는 지금 판정 대상(effectiveStatus = JUDGEABLE)인 거래의 PENDING 분류 검토 수다. 사용자가 분류 확인에 답하거나 거래를 제외하면 줄고, 다시 포함하면 돌아온다. `skippedDuplicateCount`는 업로드할 때 센 값이다.
 
 응답:
 
