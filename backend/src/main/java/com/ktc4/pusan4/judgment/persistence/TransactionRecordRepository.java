@@ -15,6 +15,8 @@ public interface TransactionRecordRepository extends Repository<TransactionRecor
 
     Optional<TransactionRecordEntity> findById(UUID transactionId);
 
+    List<TransactionRecordEntity> findByIdIn(Collection<UUID> transactionIds);
+
     // run 대상: effectiveStatus = JUDGEABLE 이고 classificationStatus = CLASSIFIED (api.md 3.6).
     // effectiveStatus 는 저장하지 않고 sourceStatus·userInclusion 으로 계산한다(api.md 2.3).
     // 판정대상은 사용자가 제외하지 않은 JUDGEABLE, 또는 사용자가 포함한 EXCLUDED 다. CANCELED_OFFSET 은 늘 빠진다.
