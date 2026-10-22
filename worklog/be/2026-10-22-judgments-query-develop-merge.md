@@ -61,3 +61,20 @@
 ### 확인한 것
 
 - `gradlew -p backend check` 통과(test 339, integrationTest 95).
+
+## 15:59 question-responses(#135) 에 develop 을 merge 한다
+
+- 브랜치: feature/question-responses
+- 커밋: 75e432f (merge 1개)
+
+### 한 일
+
+- #134 를 develop 에 merge(4ef480e)하고 #135 의 base 를 develop 으로 바꾼 뒤, develop 을 이 브랜치에 merge 했다. 충돌은 없었다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 339, integrationTest 100).
+
+### 남은 것 · 아는 문제
+
+- #157(draft, A5)의 base 는 여전히 feature/question-responses 다. #135 가 merge 되면 develop 으로 바꿔야 한다.
