@@ -34,3 +34,17 @@
 ### 남은 것 · 아는 문제
 
 - #133~#135 도 base 를 develop 으로 바꾸면 같은 일이 생길 수 있다. 그때도 develop 을 merge 해 push 한다.
+
+## 15:40 judgments-summary(#133) 에 develop 을 merge 한다
+
+- 브랜치: feature/judgments-summary
+- 커밋: e40bacf (merge 1개)
+
+### 한 일
+
+- #132 를 develop 에 merge(a704c13)하고 #133 의 base 를 develop 으로 바꾼 뒤, develop 을 이 브랜치에 merge 했다. 충돌은 없었다.
+- #132 때처럼 merge base 가 둘이 되어 GitHub 가 충돌로 보는 일을 막으려고 미리 merge 했다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 334, integrationTest 91).
