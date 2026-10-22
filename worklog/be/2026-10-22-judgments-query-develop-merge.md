@@ -48,3 +48,16 @@
 ### 확인한 것
 
 - `gradlew -p backend check` 통과(test 334, integrationTest 91).
+
+## 15:48 questions-query(#134) 에 develop 을 merge 한다
+
+- 브랜치: feature/questions-query
+- 커밋: 9e9149c (merge 1개)
+
+### 한 일
+
+- #133 을 develop 에 merge(4abf10d)하고 #134 의 base 를 develop 으로 바꾼 뒤, develop 을 이 브랜치에 merge 했다. 충돌은 없었다.
+
+### 확인한 것
+
+- `gradlew -p backend check` 통과(test 339, integrationTest 95).
