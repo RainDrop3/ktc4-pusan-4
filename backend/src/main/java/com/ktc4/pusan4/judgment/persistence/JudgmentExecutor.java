@@ -61,6 +61,12 @@ public class JudgmentExecutor {
      */
     @Transactional
     public UUID judge(UUID transactionId, BusinessContext context, JudgmentOrigin origin) {
+        return judge(transactionId, context, origin, references());
+    }
+
+    /** 여러 건을 판정하는 쪽(run, rejudge)이 references 를 한 번 만들어 건마다 넘긴다. */
+    @Transactional
+    UUID judge(UUID transactionId, BusinessContext context, JudgmentOrigin origin, JudgmentReferences references) {
         TransactionRecordEntity transaction = transactionRepository.findById(transactionId)
             .orElseThrow(NoResultException::new);
         if (!transaction.userId().equals(context.userId())) {
@@ -72,7 +78,7 @@ public class JudgmentExecutor {
             new UserContext(context.industryCode(), context.hasEmployee(), context.homeOfficeRatio()),
             facts,
             ruleSet,
-            holidayCalendar.publicHolidays()
+            references.publicHolidays()
         );
 
         LocalDate approvedAt = transaction.approvedAt();
@@ -81,9 +87,13 @@ public class JudgmentExecutor {
             approvedAt.getYear(), approvedAt,
             transaction.merchantCategory(), transaction.merchantRaw(), context.industryCode(),
             facts, judgment
-        ));
+        ), references.statuteVersions());
         questionRepository.cancelPendingOfOtherRevisions(transactionId, judgmentId);
         return judgmentId;
+    }
+
+    JudgmentReferences references() {
+        return new JudgmentReferences(holidayCalendar.publicHolidays(), judgmentService.statuteVersions());
     }
 
     /**
@@ -94,6 +104,7 @@ public class JudgmentExecutor {
     @Transactional
     public void rejudge(UUID userId, List<UUID> transactionIds, JudgmentOrigin origin, int contextVersion) {
         BusinessContext context = contextService.version(userId, contextVersion);
-        transactionIds.forEach(transactionId -> judge(transactionId, context, origin));
+        JudgmentReferences references = references();
+        transactionIds.forEach(transactionId -> judge(transactionId, context, origin, references));
     }
 }

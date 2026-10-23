@@ -43,6 +43,12 @@ public class JudgmentService {
 
     @Transactional
     public UUID save(SaveJudgmentCommand command) {
+        return save(command, statuteVersions());
+    }
+
+    /** 여러 건을 저장하는 쪽은 statuteVersions 를 한 번 만들어 넘겨 조문 버전을 건마다 다시 읽지 않는다. */
+    @Transactional
+    UUID save(SaveJudgmentCommand command, StatuteVersions statuteVersions) {
         Judgment judgment = command.judgment();
         UUID judgmentId = uuidGenerator.generate();
         judgmentRepository.save(new JudgmentEntity(
@@ -51,7 +57,7 @@ public class JudgmentService {
             nextRevision(command.transactionId())
         ));
 
-        saveCitations(judgmentId, judgment.citations(), command.statuteEffectiveDate());
+        saveCitations(judgmentId, judgment.citations(), command.statuteEffectiveDate(), statuteVersions);
         judgment.questions().forEach(question ->
             questionRepository.save(new QuestionQueueEntity(
                 uuidGenerator.generate(), judgmentId, question
@@ -72,21 +78,19 @@ public class JudgmentService {
         return judgmentRepository.findNextRevision(transactionId);
     }
 
-    private void saveCitations(UUID judgmentId, List<Citation> citations, LocalDate effectiveDate) {
+    StatuteVersions statuteVersions() {
+        return new StatuteVersions(statuteVersionRepository);
+    }
+
+    private void saveCitations(
+        UUID judgmentId, List<Citation> citations, LocalDate effectiveDate, StatuteVersions statuteVersions
+    ) {
         List<Long> versionIds = citations.stream()
-            .map(citation -> effectiveVersionId(citation.statuteId(), effectiveDate))
+            .map(citation -> statuteVersions.effectiveVersionId(citation.statuteId(), effectiveDate))
             .toList();
         if (!versionIds.isEmpty()) {
             citationRepository.insertAll(judgmentId, versionIds);
         }
-    }
-
-    private long effectiveVersionId(String statuteId, LocalDate effectiveDate) {
-        List<Long> versionIds = statuteVersionRepository.findEffectiveVersionIds(statuteId, effectiveDate);
-        if (versionIds.size() != 1) {
-            throw new IllegalStateException("Expected one effective statute version for " + statuteId);
-        }
-        return versionIds.getFirst();
     }
 
     private static void requireUnmatchedContext(SaveJudgmentCommand command) {
