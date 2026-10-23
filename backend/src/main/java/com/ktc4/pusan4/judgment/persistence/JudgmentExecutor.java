@@ -72,7 +72,7 @@ public class JudgmentExecutor {
         if (!transaction.userId().equals(context.userId())) {
             throw new IllegalArgumentException("Context belongs to another user: " + context.id());
         }
-        List<UserFact> facts = userFactService.findAllLatest(transaction.userId(), transaction.batchId());
+        List<UserFact> facts = references.userFacts().latest(transaction.userId(), transaction.batchId());
         Judgment judgment = JudgmentEngine.judge(
             transaction.toInput(),
             new UserContext(context.industryCode(), context.hasEmployee(), context.homeOfficeRatio()),
@@ -93,13 +93,16 @@ public class JudgmentExecutor {
     }
 
     JudgmentReferences references() {
-        return new JudgmentReferences(holidayCalendar.publicHolidays(), judgmentService.statuteVersions());
+        return new JudgmentReferences(
+            holidayCalendar.publicHolidays(), judgmentService.statuteVersions(), new BatchUserFacts(userFactService)
+        );
     }
 
     /**
      * 여러 거래를 같은 문진 버전으로 다시 판정한다. 분류 응답(B8)과 질문 응답(A4b)이 부른다.
      * Context 버전은 호출하는 쪽이 api.md 규칙(최근 run 의 버전, 질문이 생긴 판정의 버전)으로 정해 넘긴다.
      * 호출한 쪽 트랜잭션에 묶여, 한 건이라도 실패하면 응답 전체가 롤백된다.
+     * 판정 입력은 여기서 읽으므로, 호출한 쪽이 먼저 저장한 UserFact(질문 응답)가 반영된다.
      */
     @Transactional
     public void rejudge(UUID userId, List<UUID> transactionIds, JudgmentOrigin origin, int contextVersion) {

@@ -1,5 +1,6 @@
 package com.ktc4.pusan4.judgment.persistence;
 
+import com.ktc4.pusan4.judgment.domain.UserFact;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,17 +11,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDate;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 판정일에 유효한 조문 버전을 메모리에서 고른다. effective_from 은 포함, effective_to 는 제외다.
- * 한 번 읽은 조문은 그 StatuteVersions 가 끝날 때까지 다시 읽지 않는다(작업 단위 스냅샷).
+ * 판정 작업 하나 동안 쓰는 입력(JudgmentReferences). 한 번 읽은 값은 그 작업이 끝날 때까지 다시 읽지 않는다.
+ * 조문 버전은 판정일에 유효한 것을 메모리에서 고른다. effective_from 은 포함, effective_to 는 제외다.
  */
 @SpringBootTest
 @Testcontainers
-class StatuteVersionsIntegrationTest {
+class JudgmentReferencesIntegrationTest {
 
     @Container
     @ServiceConnection
@@ -30,13 +33,16 @@ class StatuteVersionsIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private JudgmentService judgmentService;
+    private JudgmentExecutor executor;
+
+    @Autowired
+    private UserFactPersistenceService userFactService;
 
     @Test
-    void picks_the_version_effective_on_the_date() {
+    void picks_the_statute_version_effective_on_the_date() {
         long old = insertVersion("버전경계", "2020-01-01", "2025-07-01");
         long current = insertVersion("버전경계", "2025-07-01", null);
-        StatuteVersions versions = judgmentService.statuteVersions();
+        StatuteVersions versions = executor.references().statuteVersions();
 
         assertThat(versions.effectiveVersionId("버전경계", LocalDate.parse("2020-01-01"))).isEqualTo(old);
         assertThat(versions.effectiveVersionId("버전경계", LocalDate.parse("2025-06-30"))).isEqualTo(old);
@@ -48,9 +54,9 @@ class StatuteVersionsIntegrationTest {
     }
 
     @Test
-    void keeps_the_versions_it_read_until_the_work_ends() {
+    void keeps_the_statute_versions_it_read_until_the_work_ends() {
         long first = insertVersion("동기화중", "2020-01-01", null);
-        StatuteVersions running = judgmentService.statuteVersions();
+        StatuteVersions running = executor.references().statuteVersions();
         assertThat(running.effectiveVersionId("동기화중", LocalDate.parse("2025-08-15"))).isEqualTo(first);
 
         // 작업 도중 법령 동기화가 옛 버전을 닫고 새 버전을 넣었다.
@@ -58,8 +64,30 @@ class StatuteVersionsIntegrationTest {
         long revised = insertVersion("동기화중", "2025-08-01", null);
 
         assertThat(running.effectiveVersionId("동기화중", LocalDate.parse("2025-08-15"))).isEqualTo(first);
-        assertThat(judgmentService.statuteVersions().effectiveVersionId("동기화중", LocalDate.parse("2025-08-15")))
-            .isEqualTo(revised);
+        assertThat(executor.references().statuteVersions()
+            .effectiveVersionId("동기화중", LocalDate.parse("2025-08-15"))).isEqualTo(revised);
+    }
+
+    @Test
+    void keeps_the_user_facts_it_read_until_the_work_ends() {
+        UUID userId = UUID.randomUUID();
+        UUID batchId = UUID.randomUUID();
+        jdbcTemplate.update("insert into app_user(id, email) values (?, ?)", userId, userId + "@example.com");
+        jdbcTemplate.update("""
+            insert into upload_batch(id, user_id, source_type, card_issuer, period_start, period_end, file_hash)
+            values (?, ?, '승인내역', '국민', '2025-01-01', '2025-12-31', ?)
+            """, batchId, userId, batchId.toString());
+        UserFact personal = new UserFact("merchant:스타벅스", "용도", Map.of("value", "개인"));
+        userFactService.save(userId, batchId, personal);
+        BatchUserFacts running = executor.references().userFacts();
+        assertThat(running.latest(userId, batchId)).containsExactly(personal);
+
+        // run 도중 사용자가 같은 질문에 다시 답했다.
+        UserFact business = new UserFact("merchant:스타벅스", "용도", Map.of("value", "업무미팅"));
+        userFactService.save(userId, batchId, business);
+
+        assertThat(running.latest(userId, batchId)).containsExactly(personal);
+        assertThat(executor.references().userFacts().latest(userId, batchId)).containsExactly(business);
     }
 
     private long insertVersion(String statuteId, String effectiveFrom, String effectiveTo) {
