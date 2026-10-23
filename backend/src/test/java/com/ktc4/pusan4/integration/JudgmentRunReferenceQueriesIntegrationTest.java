@@ -5,9 +5,7 @@ import com.ktc4.pusan4.judgment.domain.Gate;
 import com.ktc4.pusan4.judgment.domain.RuleCard;
 import com.ktc4.pusan4.judgment.domain.RuleSet;
 import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
-import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
-import org.hibernate.stat.Statistics;
+import org.hibernate.resource.jdbc.spi.StatementInspector;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,31 +19,40 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 판정 run 이 거래 한 건에 보내는 쿼리 수를 고정한다. 3,000건 run 의 시간은 쿼리 수에 비례했다
- * (같은 Docker 네트워크에서 쿼리 왕복과 DB 대기가 run 시간의 95%).
- * 진행 확인은 JdbcTemplate 으로 해서 Hibernate 통계에 섞이지 않게 한다.
+ * 판정 run 은 공휴일·조문 버전·사용자 사실을 거래마다 다시 읽지 않는다(JudgmentReferences).
+ * 거래 수가 두 배인 run 에서도 이 표들을 읽는 횟수가 같아야 한다.
+ *
+ * <p>run 전체의 쿼리 수는 고정하지 않는다. 판정에 기능이 붙으면 정당하게 늘기 때문이다.
+ * SQL 은 Hibernate 가 실행하는 것만 센다. 진행 확인은 JdbcTemplate 으로 해서 섞이지 않는다.
  */
-@SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
+@SpringBootTest(properties = "spring.jpa.properties.hibernate.session_factory.statement_inspector="
+    + "com.ktc4.pusan4.integration.JudgmentRunReferenceQueriesIntegrationTest$RecordingInspector")
 @Testcontainers
-class JudgmentRunQueryCountIntegrationTest {
+class JudgmentRunReferenceQueriesIntegrationTest {
 
     @Container
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
-    // rules/categories.yaml 의 카테고리마다 한 건. 규칙 카드마다 인용·질문 수가 달라 골고루 돈다.
+    // 조문 버전은 조문마다 한 번 읽으므로, 두 run 이 같은 조문들을 인용하도록 카테고리를 똑같이 돌린다.
     private static final List<String> CATEGORIES = List.of(
         "카페", "음식점", "편의점", "온라인쇼핑", "음식배달", "해외SaaS", "국내SW", "통신", "수도광열",
         "여비교통", "차량", "도서", "교육", "광고", "사무용품", "의료", "금융", "지자체_과태료",
         "경찰청_범칙금", "조세", "PG_미상", "기타", "게임", "구독서비스", "여가", "미용", "생활용품"
     );
+    private static final List<String> REFERENCE_TABLES = List.of("public_holiday", "statute_version", "user_fact");
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -56,27 +63,48 @@ class JudgmentRunQueryCountIntegrationTest {
     @Autowired
     private RuleSet ruleSet;
 
-    @Autowired
-    private EntityManagerFactory entityManagerFactory;
-
     @Test
-    void run_sends_bounded_queries_per_transaction() {
+    void reference_data_reads_do_not_grow_with_run_size() {
         insertCitedStatutes();
+
+        Map<String, Long> single = referenceReads(1);
+        Map<String, Long> doubled = referenceReads(2);
+
+        assertThat(single.values()).allMatch(reads -> reads > 0);
+        assertThat(doubled)
+            .as("거래 %d건과 %d건 run 의 표별 조회 횟수", CATEGORIES.size(), CATEGORIES.size() * 2)
+            .isEqualTo(single);
+    }
+
+    /** 카테고리마다 거래를 repeat 건 넣은 run 을 돌리고, 참조 표를 읽은 SELECT 수를 센다. */
+    private Map<String, Long> referenceReads(int repeat) {
         UUID userId = insertUser();
         UUID batchId = insertBatch(userId);
         UUID contextId = insertContext(userId);
-        for (int i = 0; i < CATEGORIES.size(); i++) {
-            insertTransaction(userId, batchId, CATEGORIES.get(i), i);
+        for (int i = 0; i < CATEGORIES.size() * repeat; i++) {
+            insertTransaction(userId, batchId, CATEGORIES.get(i % CATEGORIES.size()), i);
         }
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        statistics.clear();
+        RecordingInspector.SQL.clear();
 
-        UUID runId = runService.create(userId, batchId, contextId).id();
-        awaitCompleted(runId);
+        awaitCompleted(runService.create(userId, batchId, contextId).id());
 
-        // run 생성·시작·완료를 포함해 27건에 385개(건당 14.3)다. 줄이기 전에는 684개(건당 25.3)였다.
-        // 여유분은 1분마다 도는 정리 작업(interruptStale)이 측정 중에 끼어드는 경우를 위한 것이다.
-        assertThat(statistics.getPrepareStatementCount()).isLessThanOrEqualTo(15L * CATEGORIES.size());
+        // 인용 저장(insert … select … from statute_version)은 판정마다 나가는 쓰기라 빼고 SELECT 만 센다.
+        List<String> selects = RecordingInspector.SQL.stream()
+            .filter(sql -> sql.stripLeading().toLowerCase().startsWith("select"))
+            .toList();
+        return REFERENCE_TABLES.stream().collect(Collectors.toMap(Function.identity(), table ->
+            selects.stream().filter(sql -> sql.contains("from " + table + " ")).count()));
+    }
+
+    public static class RecordingInspector implements StatementInspector {
+
+        static final Queue<String> SQL = new ConcurrentLinkedQueue<>();
+
+        @Override
+        public String inspect(String sql) {
+            SQL.add(sql);
+            return sql;
+        }
     }
 
     private void awaitCompleted(UUID runId) {
@@ -148,7 +176,7 @@ class JudgmentRunQueryCountIntegrationTest {
                 id, batch_id, user_id, approved_at, merchant_raw, merchant_norm, merchant_category,
                 amount, natural_key, source_status, user_inclusion, classification_status
             ) values (?, ?, ?, ?, ?, ?, ?, 33000, ?, 'JUDGEABLE', 'AUTO', 'CLASSIFIED')
-            """, id, batchId, userId, LocalDate.of(2025, 1, 1).plusDays(index * 13L),
+            """, id, batchId, userId, LocalDate.of(2025, 1, 1).plusDays(index * 13L % 365),
             "가맹점" + index, "가맹점" + index, category, id.toString());
     }
 }
