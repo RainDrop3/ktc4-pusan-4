@@ -29,3 +29,27 @@
 - 이미 있는 id 로 새 엔티티를 만들어 `save()` 하면 이제 덮어쓰지 않고 키 중복으로 실패한다. 지금은 세 엔티티 모두 `new` 로 막 만든 객체만 저장한다
 - 거래마다 커밋하는 비용, run·item 장부 쿼리, 거래 이중 조회는 그대로다. 잠금 범위와 트랜잭션 경계가 바뀌어 이번에는 건드리지 않았다
 - 사용자 사실(user_fact)은 거래마다 그대로 읽는다. run 단위로 읽으면 run 도중 들어온 답변이 남은 거래에 반영되지 않는다
+
+## 01:09 사용자 사실도 run 시작 시점 것으로 판정하고, 쿼리 수 테스트를 바꾼다
+
+- 커밋: 55e7c37..6a842d8 (2개)
+
+### 한 일
+
+- `JudgmentReferences` 에 `BatchUserFacts` 를 더했다. batch 의 최신 UserFact 를 batch 마다 처음 판정할 때 한 번 읽고 작업이 끝날 때까지 쓴다 (55e7c37)
+- `StatuteVersionsIntegrationTest` 를 `JudgmentReferencesIntegrationTest` 로 바꾸고, 작업 도중 저장된 UserFact 를 그 작업이 읽지 않는 것을 더했다
+- `docs/architecture.md` 판정 실행(run) 절의 스냅샷 설명에 사용자 사실과, run 도중 들어온 답변이 어떻게 되는지를 적었다
+- `JudgmentRunQueryCountIntegrationTest` 를 `JudgmentRunReferenceQueriesIntegrationTest` 로 바꿨다. 거래 27건과 54건 run 에서 `public_holiday`, `statute_version`, `user_fact` 를 읽는 SELECT 수가 같은지 본다. SQL 은 Hibernate `StatementInspector` 로 센다 (6a842d8)
+- 사용자 사실을 거래마다 읽도록 되돌리면 `user_fact` 27 → 54 로 실패하는 것을 확인했다
+
+### 왜 이렇게 했나
+
+- run 은 문진 버전과 대상 거래를 만들 때 고정하는데 사용자 사실만 거래마다 최신값을 읽어 기준이 섞였다. 앞 기록의 "run 도중 들어온 답변을 반영해야 한다" 는 문서나 코드에 있는 요구가 아니었다. 프론트(`Run.tsx`)는 run 이 끝난 뒤 질문 화면으로 보낸다
+- 질문 응답 재판정은 답을 저장한 뒤 references 를 만들어 그 답이 반영된다
+- run 전체 쿼리 수 상한은 판정에 기능이 붙어 정당하게 쿼리가 늘어도 깨지고, 되살아난 N+1 이 다른 곳 감소에 가려질 수 있었다. 이번 변경이 지키려는 성질(참조 데이터를 거래 수만큼 읽지 않는다)만 검사한다
+- 인용 저장(`insert … select … from statute_version`)은 판정마다 나가는 쓰기라 `select` 로 시작하는 문장만 센다. 조문 버전은 조문마다 한 번 읽으므로 두 run 이 같은 카테고리를 돌게 했다
+
+### 남은 것 · 아는 문제
+
+- run 도중 답변이 들어오면 아직 판정 안 된 같은 그룹 거래에 질문이 다시 생긴다. "지난번 답으로 채우기" 로 채운다
+- save 전 SELECT 제거와 인용 한 문장 저장은 이 테스트가 지키지 않는다
