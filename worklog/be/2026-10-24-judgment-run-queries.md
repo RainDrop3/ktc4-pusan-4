@@ -66,3 +66,22 @@
 
 - 앞 기록(01:09)의 "지난번 답으로 채우기로 채운다" 는 틀렸다. 지난번 답 불러오기(FR-5, `docs/agent-secretary.md`)는 다른 업로드의 답만 가져온다. 같은 업로드 안에서 run 도중 한 답은 대상이 아니다
 - run 도중 답변을 막거나(409) run 이 끝날 때 자동으로 다시 판정하는 방법도 봤다. 정상 흐름에서는 생기지 않고 생겨도 한 번 더 답하면 끝나서 지금 동작을 그대로 두기로 했다(사용자 결정)
+
+## 01:39 조문 버전을 run 시작 때 한 번에 읽는다
+
+- 커밋: 4c381f1 (1개)
+
+### 한 일
+
+- `RuleSet.statuteIds()` 를 더했다. 카드 근거(`RuleCard.citations`)와 질문 선택지 근거(`QuestionSpec.effects → QuestionEffect.citations`)의 조문 ID 를 `RuleSet` 을 만들 때 모은다
+- `StatuteVersions` 는 만들 때 그 목록으로 `statute_id in (...)` 를 한 번 읽어 맵을 채운다. 목록에 없는 조문은 인용할 때 읽는다. `findPeriods` 는 조문 ID 묶음을 받는다
+- run 과 rejudge 는 `ruleSet.statuteIds()` 로 만들고, 한 건만 저장하는 `JudgmentService.save(command)` 는 빈 목록으로 만들어 인용한 조문만 읽는다
+- `JudgmentRunReferenceQueriesIntegrationTest` 를 "거래 27건과 54건 run 모두 표마다 정확히 1번" 으로 바꿨다. 미리 읽기를 끄면 `statute_version` 1 → 14 로 실패하는 것을 확인했다
+- `JudgmentReferencesIntegrationTest` 에 시작할 때 읽은 버전을 쓰는 것과 목록 밖 조문을 인용할 때 읽는 것을 나눠 넣었다. `RuleSetTest` 에 조문 ID 모으기를 더했다
+
+### 왜 이렇게 했나
+
+- 조문마다 처음 인용할 때 읽으면 run 도중 법령 동기화가 돌 때 조문별로 읽는 시점이 달랐다
+- 앞 기록(오늘 첫 기록)의 "질문 응답 effect 에도 인용이 있어 카드 목록만으로는 빠지는 조문이 생긴다" 는 틀렸다. effect 도 카드의 질문 안에 있어 `RuleSet` 에서 모두 뽑을 수 있다
+- 조문 ID 목록은 카드와 같이 기동할 때, 버전 기간은 run 마다 읽는다. 버전까지 기동할 때 읽으면 법령 동기화 뒤에도 다음 배포까지 옛 버전으로 판정한다
+- 목록 밖 조문을 인용할 때 읽는 길은 남겼다. 엔진이 인용을 가져오는 곳이 늘어도 판정은 실패하지 않고, 참조 데이터 조회 테스트가 그 어긋남을 잡는다
