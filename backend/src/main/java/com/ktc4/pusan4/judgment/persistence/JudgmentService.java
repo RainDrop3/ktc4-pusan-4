@@ -73,17 +73,20 @@ public class JudgmentService {
     }
 
     private void saveCitations(UUID judgmentId, List<Citation> citations, LocalDate effectiveDate) {
-        for (Citation citation : citations) {
-            List<Long> versionIds = statuteVersionRepository.findEffectiveVersionIds(
-                citation.statuteId(), effectiveDate
-            );
-            if (versionIds.size() != 1) {
-                throw new IllegalStateException(
-                    "Expected one effective statute version for " + citation.statuteId()
-                );
-            }
-            citationRepository.save(new JudgmentCitationEntity(judgmentId, versionIds.getFirst()));
+        List<Long> versionIds = citations.stream()
+            .map(citation -> effectiveVersionId(citation.statuteId(), effectiveDate))
+            .toList();
+        if (!versionIds.isEmpty()) {
+            citationRepository.insertAll(judgmentId, versionIds);
         }
+    }
+
+    private long effectiveVersionId(String statuteId, LocalDate effectiveDate) {
+        List<Long> versionIds = statuteVersionRepository.findEffectiveVersionIds(statuteId, effectiveDate);
+        if (versionIds.size() != 1) {
+            throw new IllegalStateException("Expected one effective statute version for " + statuteId);
+        }
+        return versionIds.getFirst();
     }
 
     private static void requireUnmatchedContext(SaveJudgmentCommand command) {
