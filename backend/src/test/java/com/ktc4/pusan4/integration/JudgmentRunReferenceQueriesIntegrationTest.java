@@ -1,8 +1,5 @@
 package com.ktc4.pusan4.integration;
 
-import com.ktc4.pusan4.judgment.domain.Citation;
-import com.ktc4.pusan4.judgment.domain.Gate;
-import com.ktc4.pusan4.judgment.domain.RuleCard;
 import com.ktc4.pusan4.judgment.domain.RuleSet;
 import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
 import org.hibernate.resource.jdbc.spi.StatementInspector;
@@ -22,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.Function;
@@ -31,8 +27,9 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 판정 run 은 공휴일·조문 버전·사용자 사실을 거래마다 다시 읽지 않는다(JudgmentReferences).
- * 거래 수가 두 배인 run 에서도 이 표들을 읽는 횟수가 같아야 한다.
+ * 판정 run 은 공휴일·조문 버전·사용자 사실을 run 마다 한 번만 읽는다(JudgmentReferences).
+ * 거래 수가 두 배인 run 에서도 표마다 한 번이어야 한다. 조문 버전이 두 번 이상이면 RuleSet.statuteIds 에 없는
+ * 조문이 인용돼 따로 읽힌 것이다.
  *
  * <p>run 전체의 쿼리 수는 고정하지 않는다. 판정에 기능이 붙으면 정당하게 늘기 때문이다.
  * SQL 은 Hibernate 가 실행하는 것만 센다. 진행 확인은 JdbcTemplate 으로 해서 섞이지 않는다.
@@ -46,7 +43,7 @@ class JudgmentRunReferenceQueriesIntegrationTest {
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
-    // 조문 버전은 조문마다 한 번 읽으므로, 두 run 이 같은 조문들을 인용하도록 카테고리를 똑같이 돌린다.
+    // 규칙 카드마다 인용이 달라 카테고리를 골고루 돌린다.
     private static final List<String> CATEGORIES = List.of(
         "카페", "음식점", "편의점", "온라인쇼핑", "음식배달", "해외SaaS", "국내SW", "통신", "수도광열",
         "여비교통", "차량", "도서", "교육", "광고", "사무용품", "의료", "금융", "지자체_과태료",
@@ -64,16 +61,15 @@ class JudgmentRunReferenceQueriesIntegrationTest {
     private RuleSet ruleSet;
 
     @Test
-    void reference_data_reads_do_not_grow_with_run_size() {
+    void reference_data_is_read_once_per_run_regardless_of_size() {
         insertCitedStatutes();
+        Map<String, Long> once = REFERENCE_TABLES.stream().collect(Collectors.toMap(Function.identity(), table -> 1L));
 
-        Map<String, Long> single = referenceReads(1);
-        Map<String, Long> doubled = referenceReads(2);
-
-        assertThat(single.values()).allMatch(reads -> reads > 0);
-        assertThat(doubled)
-            .as("거래 %d건과 %d건 run 의 표별 조회 횟수", CATEGORIES.size(), CATEGORIES.size() * 2)
-            .isEqualTo(single);
+        for (int repeat : List.of(1, 2)) {
+            assertThat(referenceReads(repeat))
+                .as("거래 %d건 run 의 표별 조회 횟수", CATEGORIES.size() * repeat)
+                .isEqualTo(once);
+        }
     }
 
     /** 카테고리마다 거래를 repeat 건 넣은 run 을 돌리고, 참조 표를 읽은 SELECT 수를 센다. */
@@ -127,13 +123,7 @@ class JudgmentRunReferenceQueriesIntegrationTest {
     }
 
     private void insertCitedStatutes() {
-        Set<String> statuteIds = new TreeSet<>();
-        for (Gate gate : Gate.values()) {
-            for (RuleCard card : ruleSet.get(gate)) {
-                card.citations().stream().map(Citation::statuteId).forEach(statuteIds::add);
-            }
-        }
-        for (String statuteId : statuteIds) {
+        for (String statuteId : ruleSet.statuteIds()) {
             jdbcTemplate.update("""
                 insert into statute_version(
                     statute_id, doc_type, hierarchy, effective_from, body, body_hash,

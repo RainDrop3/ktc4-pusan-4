@@ -94,7 +94,9 @@ public class JudgmentExecutor {
 
     JudgmentReferences references() {
         return new JudgmentReferences(
-            holidayCalendar.publicHolidays(), judgmentService.statuteVersions(), new BatchUserFacts(userFactService)
+            holidayCalendar.publicHolidays(),
+            judgmentService.statuteVersions(ruleSet.statuteIds()),
+            new BatchUserFacts(userFactService)
         );
     }
 
