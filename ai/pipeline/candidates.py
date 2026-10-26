@@ -158,14 +158,20 @@ def main() -> int:
             conn.rollback()
             return 0
 
+        failed = []
         for r in rows:
             params, why = propose(conn, r, meta, today, today)
             if params is None:
+                failed.append(f"{r['merchant_category']}/{r['industry_code']}")
                 print(f"  - {r['merchant_category']} [건너뜀 · 다음 배치에서 다시] {why}")
                 continue
             new_id = conn.execute(_INSERT, params).fetchone()["id"]
             print(f"  #{new_id} {r['merchant_category']} [{params['status']}] {why}")
         conn.commit()
+
+    # 실패한 조합은 적재되지 않아 관리자 화면에 안 보인다. 계속 실패하는 걸 여기서 알아챈다
+    if failed:
+        print(f"실패 {len(failed)}건 ({', '.join(failed)})")
 
     return 0
 
