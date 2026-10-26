@@ -130,7 +130,7 @@ systemctl list-timers ktc4-corpus.timer
 
 ## 8. Redis
 
-리프레시 토큰 저장소다(B9c). `redis:7.4-alpine`을 compose 내부망에서만 쓰고 포트는 열지 않는다. 백엔드는 `SPRING_DATA_REDIS_HOST=redis`로 붙고, Redis가 healthy가 된 뒤에 뜬다. 백엔드 `/actuator/health`는 Redis 연결도 보므로 Redis가 내려가면 백엔드도 unhealthy가 된다.
+리프레시 토큰 저장소다(B9c). `redis:7.4-alpine`을 compose 내부망에서만 쓰고 포트는 열지 않는다. 백엔드는 `SPRING_DATA_REDIS_HOST=redis`로 붙고, Redis가 healthy가 된 뒤에 뜬다. 백엔드 `/actuator/health`는 Redis를 보지 않는다. Redis가 내려가도 백엔드는 healthy로 남고, 로그인·토큰 재발급·로그아웃만 실패한다(이미 받은 액세스 토큰으로 부르는 API는 15분 동안 그대로 된다).
 
 - `--appendonly yes`로 AOF를 켜서 재시작해도 로그인이 유지된다. 데이터는 `redis-data` 볼륨에 남는다.
 - `--maxmemory 128mb --maxmemory-policy volatile-lru`다. 토큰은 모두 TTL이 있어 메모리가 차면 오래 안 쓴 토큰부터 지워지고, 그 사용자는 다시 로그인한다. 컨테이너는 `mem_limit: 192m`이다.
