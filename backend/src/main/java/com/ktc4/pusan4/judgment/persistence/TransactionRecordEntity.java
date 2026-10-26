@@ -1,5 +1,6 @@
 package com.ktc4.pusan4.judgment.persistence;
 
+import com.ktc4.pusan4.judgment.domain.JudgmentRevision.JudgedTransaction;
 import com.ktc4.pusan4.judgment.domain.TransactionInput;
 import com.ktc4.pusan4.transaction.api.ClassificationStatus;
 import com.ktc4.pusan4.transaction.api.SourceStatus;
@@ -189,6 +190,12 @@ public class TransactionRecordEntity {
 
     String merchantRaw() {
         return merchantRaw;
+    }
+
+    JudgedTransaction toJudged() {
+        return new JudgedTransaction(
+            approvedAt, merchantRaw, merchantNorm, merchantCategory, amount, installmentMonths
+        );
     }
 
     TransactionInput toInput() {
