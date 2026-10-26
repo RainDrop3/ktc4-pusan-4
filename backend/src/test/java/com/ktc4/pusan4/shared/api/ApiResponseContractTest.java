@@ -24,6 +24,8 @@ import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
 import com.ktc4.pusan4.shared.auth.TemporaryCurrentUserProvider;
 import com.ktc4.pusan4.transaction.api.TransactionMockData;
+import com.ktc4.pusan4.transaction.domain.UploadResult;
+import com.ktc4.pusan4.transaction.persistence.UploadService;
 import com.ktc4.pusan4.user.domain.AppUser;
 import com.ktc4.pusan4.user.domain.BookkeepingDuty;
 import com.ktc4.pusan4.user.domain.BusinessContext;
@@ -104,6 +106,9 @@ class ApiResponseContractTest {
     @MockitoBean
     private StatuteService statuteService;
 
+    @MockitoBean
+    private UploadService uploadService;
+
     @BeforeEach
     void stubServices() {
         given(userService.get(any())).willReturn(new AppUser(
@@ -147,6 +152,9 @@ class ApiResponseContractTest {
 
         given(statuteService.get(anyLong())).willReturn(new StatuteVersion(1523, "소득세법시행령-67-4",
             "소득세법 시행령 제67조 제4항", "시행령", LocalDate.parse("2026-01-01"), null, "https://www.law.go.kr/", "..."));
+
+        given(uploadService.upload(any(), any(), any())).willReturn(new UploadResult(UUID.fromString(ID), 1, 0, 0,
+            OffsetDateTime.parse("2026-09-18T01:10:00+09:00")));
     }
 
     static Stream<Arguments> endpoints() {
