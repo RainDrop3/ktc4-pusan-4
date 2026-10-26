@@ -1,5 +1,8 @@
 """적재 직전에 값을 만드는 부분. SQL 과 모델 호출은 여기서 검증하지 않는다."""
 
+from datetime import date
+
+from pipeline import candidates
 from pipeline.candidates import docs, hold_reasons, top_tier
 from pipeline.search import Hit
 from pipeline.select import Evidence, StatuteRef
@@ -61,6 +64,18 @@ def test_확인필요는_근거_부족으로_보류하지_않는다():
     # 인용이 하나도 없으면 확인필요여도 보류한다
     empty = ev().model_copy(update={"sufficient": False, "direction": "확인필요"})
     assert hold_reasons(현행(), empty, BY_TIER) == ["근거 부족"]
+
+
+def test_에이전트가_실패하면_적재할_행이_없다(monkeypatch):
+    # 빈 보류 행을 넣으면 집계가 그 조합을 건너뛰어 다시는 만들지 않는다(#94)
+    def boom(*_):
+        raise ValueError("근거 선택 검증 실패")
+
+    monkeypatch.setattr(candidates, "rewrite", boom)
+    row = {"merchant_category": "보험", "industry_code": "940909", "distinct_users": 2, "occurrence_count": 3}
+    params, why = candidates.propose(None, row, {}, date(2026, 10, 26), date(2026, 10, 26))
+    assert params is None
+    assert "근거 선택 검증 실패" in why
 
 
 def test_suggested_docs_에_위계가_붙는다():
