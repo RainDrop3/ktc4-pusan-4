@@ -36,3 +36,25 @@
 - 관리자 화면 문구("초안을 만들지 못했습니다", `frontend/src/pages/Admin.tsx`)와 목 데이터는 예전 행 때문에 그대로 뒀다
 - 보류 사유 칼럼은 없다. 정상 보류(근거 부족 등)의 사유도 콘솔에만 남는다. 필요하면 Flyway 마이그레이션과 BE · FE 수정이 함께 필요하다
 - 실패 사유는 배치 로그와 Langfuse 에만 남는다. 배치 트리거(cron)가 아직 없다
+
+## 17:57 PR #175 리뷰 반영 — 실패 요약 로그 · 기본 모델 Luna
+
+- 커밋: 2bcae09..75cbb7d (2개)
+
+한 일:
+- 배치 끝에 `실패 N건 (카테고리/업종, ...)` 한 줄을 찍는다. 실패가 없으면 찍지 않는다 (2bcae09)
+- 코드 기본값을 `agent_model=openai/gpt-6-luna` · `agent_reasoning_effort=none` 으로 바꿨다.
+  `.env.example` · `deploy/production.env.example` · `docs/rag-eval.md` 의 "비우면 gpt-4o-mini" 설명도 고쳤다 (75cbb7d)
+
+검증:
+- 배치 요약 줄 테스트 1건 추가, ai pytest 206건 · ruff 통과
+- env 없이 `Settings` 를 만들어 `structured()` 가 `model=openai/gpt-6-luna` · `reasoning_effort=none` · `temperature=0` 을 보내는 것을 가짜 API 로 확인했다
+
+왜:
+- 실패한 조합은 적재되지 않아 관리자 화면에 안 보인다. 계속 실패하는 걸 알아챌 곳이 배치 로그뿐이다
+- 운영 엔드포인트는 10/9 에 Luna 로 바뀌었다. env 가 빠지면 gpt-4o-mini 이름이 Luna 엔드포인트로 가서 400 이 났다
+- 모델만 바꾸면 Luna 가 추론을 켜고 temperature=0 을 400 으로 거절한다. 그래서 추론 강도도 같이 기본값으로 뒀다
+
+남은 것:
+- 추론을 받지 않는 모델(gpt-4o-mini 등)은 env 만으로 고를 수 없다. 빈 값은 기본값 `none` 으로 읽혀 `reasoning_effort` 가 같이 간다. 쓰려면 `config.py` 를 고친다
+- 로컬 `.env` 의 `AGENT_BASE_URL` 이 gpt-4o-mini 엔드포인트이고 `AGENT_MODEL` 줄이 없으면 400 이 난다. Luna 엔드포인트로 바꿔야 한다
