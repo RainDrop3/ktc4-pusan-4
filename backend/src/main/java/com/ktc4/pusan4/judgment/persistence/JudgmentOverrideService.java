@@ -72,8 +72,12 @@ public class JudgmentOverrideService {
         UUID revisionId = uuidGenerator.generate();
         judgmentRepository.save(source.overriddenAs(
             revisionId, judgmentRepository.findNextRevision(transaction.id()), toVerdict, overrideId));
-        citationRepository.findRows(List.of(judgmentId)).forEach(citation ->
-            citationRepository.save(new JudgmentCitationEntity(revisionId, citation.statuteVersionId())));
+        List<Long> versionIds = citationRepository.findRows(List.of(judgmentId)).stream()
+            .map(JudgmentCitationRepository.CitationRow::statuteVersionId)
+            .toList();
+        if (!versionIds.isEmpty()) {
+            citationRepository.insertAll(revisionId, versionIds);
+        }
         return revisionId;
     }
 
