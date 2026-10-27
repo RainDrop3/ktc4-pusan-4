@@ -172,8 +172,9 @@ class ApiResponseContractTest {
         given(questionQueryService.find(any(), any(), any())).willReturn(List.of(new Question(UUID.fromString(ID),
             UUID.fromString(ID), UUID.fromString(ID), "merchant:스타벅스", "용도", "용도가 무엇인가요?",
             List.of("사업", "개인", "혼용"), QuestionStatus.PENDING, null, null,
-            OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false)));
-        given(questionAnswerService.answer(any(), any(), any()))
+            OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false,
+            "CAFE_PURPOSE")));
+        given(questionAnswerService.answer(any(), any(), any(), any()))
             .willReturn(new QuestionAnswerResult(1, UUID.fromString(ID), 1));
 
         given(statuteService.get(anyLong())).willReturn(new StatuteVersion(1523, "소득세법시행령-67-4",
@@ -286,8 +287,8 @@ class ApiResponseContractTest {
         "ruleCardId", "ruleCardVersion", "appliedRuleIds", "rulesCommitSha", "userContextVersion", "explanation",
         "computedAt", "citations");
     private static final Set<String> QUESTION_KEYS = Set.of("id", "batchId", "transactionId", "groupKey", "factType",
-        "questionText", "options", "status", "answeredFactId", "answer", "createdAt", "answeredAt");
-    private static final Set<String> QUESTION_GROUP_KEYS = Set.of("groupKey", "factType", "status", "questionIds",
+        "code", "questionText", "options", "status", "answeredFactId", "answer", "createdAt", "answeredAt");
+    private static final Set<String> QUESTION_GROUP_KEYS = Set.of("groupKey", "factType", "code", "status", "questionIds",
         "count", "totalAmount", "questionText", "options", "answer", "bulkAnswerable", "transactions");
     private static final Set<String> QUESTION_GROUP_TRANSACTION_KEYS =
         withTransactionSummary("questionId", "transactionId", "overridden");

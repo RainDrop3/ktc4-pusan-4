@@ -2042,7 +2042,7 @@ Question 개별 항목을 반환한다. `unresolved` 집계는 grouped 여부와
 
 `answer`는 답한 값이다. 3.10 요청의 `answer`와 같은 모양(`{ "value": "개인" }`)이고, `ANSWERED`가 아니면 `null`이다. 정정했으면 마지막 답이다.
 
-`code`는 질문을 만든 규칙 카드의 질문 코드(`question.code`)다. 다른 업로드의 같은 질문을 찾는 데 쓴다(3.14 지난번 답). 같은 `factType`이라도 카드마다 선택지가 달라서 `factType`이 아니라 `code`로 맞춘다. 이 필드가 생기기 전에 만든 질문은 `null`이다. `grouped=true` 그룹에도 같은 값이 붙는다.
+`code`는 질문을 만든 규칙 카드의 질문 코드(`question.code`)다. 다른 업로드의 같은 질문을 찾는 데 쓴다(3.14 지난번 답). 같은 `factType`이라도 카드마다 선택지가 달라서 `factType`이 아니라 `code`로 맞춘다. 저장 값은 `question_queue.reason_code`다. `grouped=true` 그룹에도 같은 값이 붙는다.
 
 ### grouped=true
 
@@ -2547,7 +2547,6 @@ A 의 `value`는 아래면 `null`이고 `history`로 사정을 보여 준다.
 - 지난 답이 없다
 
 지금 질문의 `options`에 없는 지난 답은 없는 것으로 본다. `sourceLabel`은 `시작월~끝월 업로드(카드사)`이고 한 달이면 `9월 업로드(국민)`이다.
-`code`가 `null`인 질문(이 필드 이전에 만든 질문)은 C 다.
 
 없거나 다른 사용자의 Batch 면 `404 BATCH_NOT_FOUND`.
 
@@ -2948,11 +2947,7 @@ answered_at
 
 `status=CANCELED`는 시스템만 설정한다.
 
-질문 코드(3.9 `code`):
-
-```
-code  규칙 카드 question.code. 이전에 만든 질문은 null
-```
+`reason_code`는 규칙 카드의 질문 코드(`question.code`)이고, 3.9 응답의 `code`로 나간다.
 
 ---
 

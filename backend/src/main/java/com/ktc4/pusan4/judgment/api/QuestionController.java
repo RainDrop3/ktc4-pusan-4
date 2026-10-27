@@ -1,5 +1,6 @@
 package com.ktc4.pusan4.judgment.api;
 
+import com.ktc4.pusan4.judgment.domain.AnswerSource;
 import com.ktc4.pusan4.judgment.domain.PendingTotal;
 import com.ktc4.pusan4.judgment.domain.Question;
 import com.ktc4.pusan4.judgment.domain.QuestionGroup;
@@ -101,7 +102,8 @@ public class QuestionController {
     @PostMapping("/question-responses")
     public QuestionAnswerResponse answer(CurrentUser currentUser, @Valid @RequestBody QuestionAnswerRequest request) {
         return QuestionAnswerResponse.from(
-            answerService.answer(currentUser.id(), request.questionIds(), request.answer().value())
+            answerService.answer(currentUser.id(), request.questionIds(), request.answer().value(),
+                request.source() == null ? AnswerSource.USER : request.source())
         );
     }
 
