@@ -112,6 +112,37 @@ class ClassificationReviewIntegrationTest {
             .containsExactly(idOf(userId, "k-2"));
     }
 
+    @Test
+    void excluded_transaction_reviews_are_hidden_until_included_again() {
+        // given: 미분류 3건 중 하나를 사용자가 제외했다
+        UUID userId = newUser();
+        UUID batchId = upload(userId, "hash-excluded",
+            tx("k-1", "2026-01-05", "성진이네 본점", 10_000L),
+            tx("k-2", "2026-01-03", "ZQXW TRADING", 20_000L),
+            tx("k-3", "2026-01-01", "성진이네 본점", 30_000L));
+        setInclusion(userId, "k-2", "EXCLUDED");
+
+        // when
+        ClassificationReviewResult<ClassificationReviewItem> inBatch = reviewService.list(userId, batchId, null, 0, 20);
+        ClassificationReviewResult<ClassificationReviewItem> allBatches = reviewService.list(userId, null, null, 0, 20);
+
+        // then: 목록과 미해소 집계 모두에서 빠진다. 검토 행은 지우지 않는다
+        assertThat(inBatch.page().getContent()).extracting(ClassificationReviewItem::transactionId)
+            .containsExactly(idOf(userId, "k-1"), idOf(userId, "k-3"));
+        assertThat(inBatch.unresolvedCount()).isEqualTo(2);
+        assertThat(inBatch.unresolvedAmount()).isEqualTo(40_000L);
+        assertThat(allBatches.page().getTotalElements()).isEqualTo(2);
+        assertThat(allBatches.unresolvedCount()).isEqualTo(2);
+
+        // 다시 포함하면 돌아온다
+        setInclusion(userId, "k-2", "INCLUDED");
+        assertThat(reviewService.list(userId, batchId, null, 0, 20).unresolvedCount()).isEqualTo(3);
+    }
+
+    private void setInclusion(UUID userId, String naturalKey, String inclusion) {
+        jdbcTemplate.update("update transaction set user_inclusion = ? where id = ?", inclusion, idOf(userId, naturalKey));
+    }
+
     private void resolve(UUID userId, String naturalKey) {
         jdbcTemplate.update("""
             update classification_review

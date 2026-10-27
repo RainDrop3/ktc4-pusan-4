@@ -1141,6 +1141,8 @@ size
 createdAt ASC, id ASC
 ```
 
+지금 판정 대상(effectiveStatus = JUDGEABLE)인 거래의 Review만 반환하고 집계한다. 사용자가 거래를 제외하면 그 Review는 목록과 미해소 집계에서 빠지고, 다시 포함하면 돌아온다. Review 자체는 지우지 않는다. 업로드 배치의 `classificationPendingCount`와 같은 기준이다.
+
 ### grouped=false (기본)
 
 Review 개별 항목을 반환한다. `unresolved` 집계는 grouped 여부와 무관하게 항상 최상위에 포함한다(아래 "미해소 집계" 참고).
