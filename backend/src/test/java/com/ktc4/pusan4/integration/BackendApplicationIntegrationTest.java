@@ -43,6 +43,7 @@ class BackendApplicationIntegrationTest {
 
     @Test
     void health_endpoint_reports_application_up() throws Exception {
+        // Redis 컨테이너 없이 UP 이어야 한다. Redis 는 health 에서 뺐다(application.yml management.health.redis)
         mockMvc.perform(get("/actuator/health"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.status").value("UP"));
