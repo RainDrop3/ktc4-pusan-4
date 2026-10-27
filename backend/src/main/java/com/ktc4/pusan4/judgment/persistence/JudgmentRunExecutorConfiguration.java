@@ -3,6 +3,7 @@ package com.ktc4.pusan4.judgment.persistence;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.time.Duration;
@@ -15,11 +16,13 @@ import java.time.Duration;
  *
  * <p>서버가 종료될 때(배포) 새 run 은 받지 않고, 돌던 run 과 대기열의 run 을 await-termination 까지 마저 처리한다.
  * 그 안에 못 끝낸 run 은 남고, 다음 서버의 멈춘 run 정리(JudgmentRunService.interruptStale)가 RUN_INTERRUPTED 로 끝낸다.
+ * 빈은 만든 역순으로 닫히므로, entityManagerFactory 뒤에 만들어 run 을 기다리는 동안 DB 커넥션 풀이 열려 있게 한다.
  */
 @Configuration
 class JudgmentRunExecutorConfiguration {
 
     @Bean
+    @DependsOn("entityManagerFactory")
     ThreadPoolTaskExecutor judgmentRunExecutor(
         @Value("${app.judgment-run.workers}") int workers,
         @Value("${app.judgment-run.queue-capacity}") int queueCapacity,
