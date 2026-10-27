@@ -28,3 +28,9 @@
 - `BackendApplicationIntegrationTest`: `entityManagerFactory` 의 의존 빈에 `judgmentRunExecutor` 가 있는지 본다. `@DependsOn` 없이 실패하는 것을 먼저 확인했다.
 - `deploy/compose.yaml` `stop_grace_period` 90s -> 100s. 웹 요청 종료 대기(최대 30s) 뒤에 run 대기(60s)가 이어져 합이 딱 90s 였다. `docs/deployment.md` 4절의 값도 고쳤다. 배포 명령 제한(aws-release.yml executionTimeout 1200s)과는 여유가 있다.
 - `gradlew -p backend check` 통과(test 349, integrationTest 145, 스킵 0).
+
+## 18:46 #155 머지 뒤 develop 을 다시 merge 한다
+
+- 커밋: f7d66bb (merge)
+- `application.yml`: #155 가 `auth` 위 주석을 고정 사용자·demo-password 설명으로 바꾸고 키를 더한 자리와 이 브랜치의 `await-termination` 이 겹쳤다. `await-termination` 은 남기고 주석·키는 develop 것을 썼다. 자동 병합된 `compose.yaml`·`deployment.md` 에 `stop_grace_period` 100s 가 그대로인 것을 확인했다.
+- `gradlew -p backend check` 통과(test 360, integrationTest 150, 스킵 0).
