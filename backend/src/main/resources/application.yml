@@ -34,12 +34,21 @@ app:
     workers: 2
     queue-capacity: 50
     await-termination: 60s
+  # 인증 (api.md 1.1). jwt-secret 이 비면 기동할 때마다 임시 키를 만든다(재기동하면 로그인이 풀린다).
+  # 넣는다면 32바이트 이상.
+  auth:
+    jwt-secret: ${APP_AUTH_JWT_SECRET:}
+    access-token-ttl: 15m
 
 management:
   endpoints:
     web:
       exposure:
         include: health
+  # Redis 는 리프레시 토큰만 맡는다. Redis 가 내려가도 백엔드 전체를 unhealthy 로 만들어 배포를 멈추지 않게 health 에서 뺀다.
+  health:
+    redis:
+      enabled: false
 
 # 스웨거는 기본으로 닫는다. 로컬(application-local.yml)에서만 연다.
 # 프로필을 빠뜨려도 운영에 노출되지 않는 쪽으로 떨어지게 하기 위해서다.
