@@ -63,6 +63,14 @@ class UserFactEntity {
         return id;
     }
 
+    int version() {
+        return version;
+    }
+
+    AnswerSource source() {
+        return AnswerSource.valueOf(source);
+    }
+
     UserFact toDomain() {
         return new UserFact(scopeKey, factType, value);
     }

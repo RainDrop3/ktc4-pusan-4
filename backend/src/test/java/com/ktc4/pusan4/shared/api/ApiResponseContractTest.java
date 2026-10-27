@@ -22,6 +22,7 @@ import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerResult;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerService;
 import com.ktc4.pusan4.judgment.persistence.QuestionQueryService;
+import com.ktc4.pusan4.judgment.persistence.QuestionSuggestionService;
 import com.ktc4.pusan4.judgment.persistence.StatuteService;
 import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
@@ -117,6 +118,9 @@ class ApiResponseContractTest {
 
     @MockitoBean
     private QuestionAnswerService questionAnswerService;
+
+    @MockitoBean
+    private QuestionSuggestionService questionSuggestionService;
 
     @MockitoBean
     private StatuteService statuteService;
@@ -244,6 +248,7 @@ class ApiResponseContractTest {
             Arguments.of("DELETE", "/api/v1/judgment-overrides/" + ID, null, 204),
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID, null, 200),
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID + "&grouped=true", null, 200),
+            Arguments.of("GET", "/api/v1/questions/suggestions?batchId=" + ID, null, 200),
             Arguments.of("POST", "/api/v1/questions/bulk-answer", """
                 {"batchId": "%s", "factType": "용도", "answer": {"value": "사업"}}
                 """.formatted(ID), 200),

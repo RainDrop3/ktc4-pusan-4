@@ -2519,7 +2519,7 @@ Question을 삭제하지 않고 상태를 남겨 판정 이력을 보존한다.
     { "groupKey": "merchant:SK텔레콤", "factType": "전용여부", "code": "TELECOM_DEDICATION",
       "tier": "A", "value": "전용", "sourceLabel": "8월 업로드(국민)" },
     { "groupKey": "merchant:한국전력", "factType": "공간전용여부", "code": "UTILITY_DEDICATION",
-      "tier": "A", "value": null, "conflict": true,
+      "tier": "A", "conflict": true,
       "history": [
         { "value": "자택 겸용", "sourceLabel": "8월 업로드(국민)", "bulk": false },
         { "value": "사업 전용", "sourceLabel": "7월 업로드(국민)", "bulk": false }
@@ -2540,7 +2540,7 @@ Question을 삭제하지 않고 상태를 남겨 판정 이력을 보존한다.
 | `B` | `history` | 같은 `code`, 같은 가맹점(`merchantNorm`)으로 다른 Batch 에서 답한 값별 질문 수(`historyCounts`). 미리 고르지 않는다 |
 | `C` | 없음 | `reason`만 준다 |
 
-A 의 `value`는 아래면 `null`이고 `history`로 사정을 보여 준다.
+등급에 해당하지 않는 필드는 싣지 않는다. A 의 `value`는 아래면 싣지 않고 `history`로 사정을 보여 준다.
 
 - 최근 두 Batch 의 답이 다르다: `conflict: true`, `history`에 두 답
 - 가장 최근 답이 일괄 응답(3.11, `source=BULK`)이다: `history`에 그 답(`bulk: true`)
