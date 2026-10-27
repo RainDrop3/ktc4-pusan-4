@@ -10,6 +10,7 @@ import com.ktc4.pusan4.judgment.domain.JudgmentOriginType;
 import com.ktc4.pusan4.judgment.domain.JudgmentRevision;
 import com.ktc4.pusan4.judgment.domain.JudgmentRun;
 import com.ktc4.pusan4.judgment.domain.JudgmentSummary;
+import com.ktc4.pusan4.judgment.domain.PendingTotal;
 import com.ktc4.pusan4.judgment.domain.Question;
 import com.ktc4.pusan4.judgment.domain.QuestionStatus;
 import com.ktc4.pusan4.judgment.domain.JudgmentRunFailure;
@@ -23,6 +24,8 @@ import com.ktc4.pusan4.judgment.persistence.QuestionAnswerResult;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerService;
 import com.ktc4.pusan4.judgment.persistence.QuestionQueryService;
 import com.ktc4.pusan4.judgment.persistence.QuestionSuggestionService;
+import com.ktc4.pusan4.progress.domain.NextStep;
+import com.ktc4.pusan4.progress.persistence.ProgressService;
 import com.ktc4.pusan4.judgment.persistence.StatuteService;
 import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.shared.UuidV7Generator;
@@ -123,6 +126,9 @@ class ApiResponseContractTest {
     private QuestionSuggestionService questionSuggestionService;
 
     @MockitoBean
+    private ProgressService progressService;
+
+    @MockitoBean
     private StatuteService statuteService;
 
     @MockitoBean
@@ -178,6 +184,11 @@ class ApiResponseContractTest {
             List.of("사업", "개인", "혼용"), QuestionStatus.PENDING, null, null,
             OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false,
             "CAFE_PURPOSE")));
+        given(progressService.progress(any(), any())).willReturn(new ProgressService.Progress(
+            new ProgressService.Batch(UUID.fromString(ID), "국민",
+                LocalDate.parse("2026-09-01"), LocalDate.parse("2026-09-30"), 18),
+            context, new PendingTotal(2, 97_000), null,
+            new PendingTotal(9, 1_038_100), 2, NextStep.QUESTIONS));
         given(questionAnswerService.answer(any(), any(), any(), any()))
             .willReturn(new QuestionAnswerResult(1, UUID.fromString(ID), 1));
 
@@ -249,6 +260,7 @@ class ApiResponseContractTest {
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID, null, 200),
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID + "&grouped=true", null, 200),
             Arguments.of("GET", "/api/v1/questions/suggestions?batchId=" + ID, null, 200),
+            Arguments.of("GET", "/api/v1/progress?batchId=" + ID, null, 200),
             Arguments.of("POST", "/api/v1/questions/bulk-answer", """
                 {"batchId": "%s", "factType": "용도", "answer": {"value": "사업"}}
                 """.formatted(ID), 200),

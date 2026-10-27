@@ -63,6 +63,7 @@ class ApiContractIntegrationTest {
         "DELETE /api/v1/judgment-overrides/{overrideId}",
         "GET /api/v1/questions",
         "GET /api/v1/questions/suggestions",
+        "GET /api/v1/progress",
         "POST /api/v1/questions/bulk-answer",
         "POST /api/v1/question-responses",
         "GET /api/v1/statutes/{statuteVersionId}"
