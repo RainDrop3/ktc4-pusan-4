@@ -30,3 +30,9 @@
 - `docs/api.md` 3.5 GET 에 이 기준을 적었다.
 - `ClassificationReviewIntegrationTest.excluded_transaction_reviews_are_hidden_until_included_again`: 제외한 거래의 요청이 batch 목록·전체 목록·집계에서 빠지고, 다시 포함하면 집계에 돌아오는지 본다. 조건 없이 실패하는 것을 먼저 확인했다.
 - `gradlew -p backend check` 통과(test 349, integrationTest 147, 스킵 0).
+
+## 18:46 #155 머지 뒤 develop 을 다시 merge 한다
+
+- 커밋: d4ed5ee (merge)
+- `ApiResponseContractTest`: 이 브랜치의 `ClassificationReviewService` 목과 #155 의 `AuthService` 목이 같은 자리에 들어가 충돌했다. 둘 다 남겼다.
+- `gradlew -p backend check` 통과(test 360, integrationTest 152, 스킵 0).
