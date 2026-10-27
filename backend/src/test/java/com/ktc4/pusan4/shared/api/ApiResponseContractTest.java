@@ -24,6 +24,8 @@ import com.ktc4.pusan4.judgment.persistence.QuestionAnswerResult;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerService;
 import com.ktc4.pusan4.judgment.persistence.QuestionQueryService;
 import com.ktc4.pusan4.judgment.persistence.QuestionSuggestionService;
+import com.ktc4.pusan4.assistant.AssistantRelayService;
+import com.ktc4.pusan4.assistant.api.ChatResponse;
 import com.ktc4.pusan4.progress.domain.NextStep;
 import com.ktc4.pusan4.progress.persistence.ProgressService;
 import com.ktc4.pusan4.judgment.persistence.StatuteService;
@@ -129,6 +131,9 @@ class ApiResponseContractTest {
     private ProgressService progressService;
 
     @MockitoBean
+    private AssistantRelayService assistantRelayService;
+
+    @MockitoBean
     private StatuteService statuteService;
 
     @MockitoBean
@@ -184,6 +189,8 @@ class ApiResponseContractTest {
             List.of("사업", "개인", "혼용"), QuestionStatus.PENDING, null, null,
             OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false,
             "CAFE_PURPOSE")));
+        given(assistantRelayService.chat(any(), any(), any()))
+            .willReturn(new ChatResponse("판정 근거를 확인했습니다.", List.of(), "trace-1"));
         given(progressService.progress(any(), any())).willReturn(new ProgressService.Progress(
             new ProgressService.Batch(UUID.fromString(ID), "국민",
                 LocalDate.parse("2026-09-01"), LocalDate.parse("2026-09-30"), 18),
@@ -261,6 +268,9 @@ class ApiResponseContractTest {
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID + "&grouped=true", null, 200),
             Arguments.of("GET", "/api/v1/questions/suggestions?batchId=" + ID, null, 200),
             Arguments.of("GET", "/api/v1/progress?batchId=" + ID, null, 200),
+            Arguments.of("POST", "/api/v1/assistant/chat", """
+                {"message": "이거 왜 불가야?"}
+                """, 200),
             Arguments.of("POST", "/api/v1/questions/bulk-answer", """
                 {"batchId": "%s", "factType": "용도", "answer": {"value": "사업"}}
                 """.formatted(ID), 200),
