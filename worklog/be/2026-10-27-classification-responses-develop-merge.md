@@ -27,3 +27,9 @@
 - 커밋: 26c616b (merge)
 - #156 이 `ClassificationReviewRepository.findRows` 두 개에 effectiveStatus = JUDGEABLE 조건을 걸었다(987afe8). 이 브랜치가 같은 파일 같은 자리에 `findAllForUpdate`·`findLatestCompletedRunContextVersion` 을 더해 충돌했다. 이 브랜치 메서드는 그대로 두고 `findRows` 주석과 조건은 #156 것을 썼다.
 - `gradlew -p backend check` 통과(test 349, integrationTest 152, 스킵 0).
+
+## 18:46 develop 을 다시 받은 #156 을 merge 한다
+
+- 커밋: d376eea (merge)
+- #156 에 #155 머지 뒤 develop 을 merge 한 d4ed5ee 를 받았다. 충돌은 없었다.
+- `gradlew -p backend check` 통과(test 360, integrationTest 157, 스킵 0).
