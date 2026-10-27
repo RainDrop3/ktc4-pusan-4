@@ -20,3 +20,11 @@
 ## 확인한 것
 
 - `gradlew -p backend check` 통과(test 349, integrationTest 144, 스킵 0).
+
+## 18:00 리뷰 반영: 실행기를 DB 보다 먼저 닫히게 고정, stop_grace_period 100초
+
+- 커밋: e60b93c
+- `JudgmentRunExecutorConfiguration`: 실행기 빈에 `@DependsOn("entityManagerFactory")` 를 걸었다. 빈은 만든 역순으로 닫히므로 실행기가 EntityManagerFactory(와 그 아래 DataSource)보다 먼저 닫힌다. 지금까지는 생성 순서가 우연히 맞아서 됐다.
+- `BackendApplicationIntegrationTest`: `entityManagerFactory` 의 의존 빈에 `judgmentRunExecutor` 가 있는지 본다. `@DependsOn` 없이 실패하는 것을 먼저 확인했다.
+- `deploy/compose.yaml` `stop_grace_period` 90s -> 100s. 웹 요청 종료 대기(최대 30s) 뒤에 run 대기(60s)가 이어져 합이 딱 90s 였다. `docs/deployment.md` 4절의 값도 고쳤다. 배포 명령 제한(aws-release.yml executionTimeout 1200s)과는 여유가 있다.
+- `gradlew -p backend check` 통과(test 349, integrationTest 145, 스킵 0).
