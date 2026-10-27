@@ -4,7 +4,7 @@ import { AppShell } from '../components/AppShell';
 import { api, ApiRequestError, useApi } from '../api';
 import { useSession } from '../contexts/SessionContext';
 import { Button, Card, Modal, SectionHeading } from '../components/ui';
-import { formatFullDate } from '../utils/format';
+import { formatFullDate, toKst } from '../utils/format';
 
 /** 가입 이메일과 가입일을 보고, 탈퇴합니다 (FR-02·03). 3.1 */
 export function Account() {
@@ -39,7 +39,7 @@ export function Account() {
   const rows = me ?
   [
   { term: '가입 이메일', value: me.email },
-  { term: '가입일', value: formatFullDate(me.createdAt.slice(0, 10)) }] :
+  { term: '가입일', value: formatFullDate(toKst(me.createdAt).date) }] :
   [];
 
   return (
@@ -74,7 +74,7 @@ export function Account() {
             {rows.map((row) =>
             <div key={row.term} className="flex gap-4 px-5 py-3">
                 <dt className="w-32 shrink-0 text-small text-muted">{row.term}</dt>
-                <dd className="text-small font-medium text-ink">{row.value}</dd>
+                <dd className="text-small font-normal text-ink">{row.value}</dd>
               </div>
             )}
           </dl>
@@ -162,7 +162,7 @@ export function Account() {
               <div className="flex justify-between gap-3">
                 <dt className="text-muted">가입일</dt>
                 <dd className="tabular-nums text-ink">
-                  {formatFullDate(me.createdAt.slice(0, 10))}
+                  {formatFullDate(toKst(me.createdAt).date)}
                 </dd>
               </div>
             </dl>

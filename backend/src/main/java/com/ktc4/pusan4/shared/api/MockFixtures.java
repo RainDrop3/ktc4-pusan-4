@@ -18,8 +18,6 @@ public final class MockFixtures {
     /** 스타벅스 거래. 분류 완료, 용도 질문 대기 중 */
     public static final UUID TRANSACTION_ID = UUID.fromString("0199f1a0-0000-7000-8000-000000001005");
     public static final UUID JUDGMENT_ID = UUID.fromString("0199f1c3-0000-7000-8000-000000001005");
-    public static final UUID OVERRIDE_JUDGMENT_ID = UUID.fromString("0199f1c3-0000-7000-8000-000000002005");
-    public static final UUID OVERRIDE_ID = UUID.fromString("0199f2d4-0000-7000-8000-000000000001");
     public static final UUID QUESTION_ID = UUID.fromString("0199a1b2-0000-7000-8000-000000000001");
     public static final UUID FACT_ID = UUID.fromString("0199b3c4-0000-7000-8000-000000000001");
 

@@ -3,6 +3,7 @@
 > 목표: 10/30까지 업로드부터 질문 응답과 수정까지 실제 서비스에서 동작하도록 한다.
 > 기준은 프론트엔드의 `frontend/src/api/index.ts`를 mock에서 HTTP 호출로 전환할 수 있는 상태다.
 > 10/19~10/23은 중간고사 기간이라 작업하지 않는다. 10/30부터는 발표 기능 개발과 버퍼에 사용한다. v1.0 배포는 11/6, 발표는 11/13이다.
+> 10/22 PoC 발표(산학협력실무 중간고사 대체)에 맞춰 일부 PR을 앞당겼다. 실제 진행은 [PoC 앞당김 현황](#poc-앞당김-현황-1018)을 본다.
 
 ## 한눈에 보기
 
@@ -38,7 +39,7 @@ gantt
     A3b summary                  :a3b, after a3a, 1d
     A4a 질문 조회                :a4a, after a3b, 1d
     A4b 질문 답변·재판정         :a4b, after a4a, 1d
-    A5 override                  :a5, after a4b, 1d
+    A5 override (#157 앞당김)    :active, a5, after a4b, 1d
     A6a 금액 계산 최소판         :a6a, after a5, 1d
     A6b 한도 집계 연결           :a6b, after a6a, 1d
     A7 bulk-answer               :a7, after a6b, 1d
@@ -53,10 +54,10 @@ gantt
     B5 Idempotency·업로드 공개   :b5, after b4, 1d
     B6 batch 조회·삭제·탈퇴      :b6, after b5, 1d
     B7 거래 조회·제외            :b7, after b6, 1d
-    B8 분류 검토·응답            :b8, after b7, 1d
+    B8 분류 검토·응답 (#156·#158 앞당김) :active, b8, after b7, 1d
     B9a Redis 인프라             :b9a, after b8, 1d
-    B9b 인증·액세스 토큰         :b9b, after b9a, 1d
-    B9c 리프레시 토큰·로그아웃   :b9c, after b9b, 1d
+    B9b 인증·액세스 토큰 (일부 #154·#155) :active, b9b, after b9a, 1d
+    B9c 리프레시 토큰·로그아웃 (일부 #155) :active, b9c, after b9b, 1d
     M1 규칙 후보 관리자 API      :crit, m1, after b9c, 1d
     B10 분류 AI 연동             :b10, after m1, 1d
 
@@ -72,13 +73,13 @@ gantt
     관리자 범위                  :milestone, d2, 2026-10-26, 0d
 ```
 
-빨간 막대(M1)는 발표 기능이다. 일정과 나머지 마일스톤은 [발표 준비](#발표-준비)에 정리한다.
+빨간 막대(M1)는 발표 기능이다. 옅은 색 막대는 10/18에 draft로 앞당긴 PR이다([PoC 앞당김 현황](#poc-앞당김-현황-1018)). 일정과 나머지 마일스톤은 [발표 준비](#발표-준비)에 정리한다.
 
 ### PR 의존 관계
 
 화살표는 선행 PR이 merge된 뒤에 후속 PR을 시작할 수 있음을 나타낸다.
 굵은 화살표는 트랙 간 접점을 나타내고, 육각형은 직접 내려야 하는 의사결정을 뜻한다.
-노드의 날짜는 계획상 merge 날짜다.
+노드의 날짜는 계획상 merge 날짜다. 점선 테두리 노드는 10/18에 draft로 앞당긴 PR이다.
 
 ```mermaid
 flowchart TB
@@ -90,7 +91,7 @@ flowchart TB
         A2a --> A2b["A2b runs API<br/>10/8"]
         A2b --> A3a["A3a judgments 조회<br/>10/13"]
         A3a --> A3b["A3b summary<br/>10/14"]
-        A3a --> A5["A5 override<br/>10/26"]
+        A3a --> A5["A5 override<br/>10/26 → 10/18 #157"]
         A2a --> A4a["A4a 질문 조회<br/>10/15"]
         A4a --> A4b["A4b 질문 답변<br/>10/16"]
         A4b --> A7["A7 bulk-answer<br/>10/29"]
@@ -110,10 +111,10 @@ flowchart TB
         B4 --> B5["B5 Idempotency<br/>10/14"]
         B5 --> B6["B6 batch 조회·삭제<br/>10/15"]
         B4 --> B7["B7 거래<br/>10/16"]
-        B4 --> B8["B8 분류 검토<br/>10/26"]
-        B9a["B9a Redis 인프라<br/>10/27"] --> B9b["B9b 인증<br/>10/28"]
+        B4 --> B8["B8 분류 검토<br/>10/26 → 10/18 #156·#158"]
+        B9a["B9a Redis 인프라<br/>10/27"] --> B9b["B9b 인증<br/>10/28, 일부 #154·#155"]
         B1a --> B9b
-        B9b --> B9c["B9c 리프레시 토큰<br/>10/29"]
+        B9b --> B9c["B9c 리프레시 토큰<br/>10/29, 일부 #155"]
         B3b --> B10["B10 분류 AI<br/>11/2"]
         D1{{"인증 방식·API 계약"}} -.-> B9b
         D3{{"분류 API 계약"}} -.-> B10
@@ -130,6 +131,8 @@ flowchart TB
     class A0,A1a,A1b,A2a,A2b,A3a,A3b,A4a,A4b,A5,A6a,A6b,A7 trackA
     class B1a,B1b,B2,B3a,B3b,B4,B5,B6,B7,B8,B9a,B9b,B9c,B10 trackB
     class D1,D2,D3,D4 decision
+    classDef pulled stroke-dasharray:5 3,stroke-width:3px
+    class A5,B8,B9b,B9c pulled
 ```
 
 ### 완성 후 요청 흐름
@@ -156,6 +159,34 @@ flowchart LR
     T -.-> U
 ```
 
+## PoC 앞당김 현황 (10/18)
+
+위 일정표는 원래 계획 그대로 두고, 앞당기거나 새로 생긴 PR은 이 표로 관리한다. 모두 draft이며 머지 전이다.
+
+| PR | 계획 항목 | 원래 날짜 | 내용 |
+| --- | --- | --- | --- |
+| #157 | A5 | 10/26 | override 생성·해제. 오류 응답은 프론트 목업을 따랐다(#62) |
+| #156 | B8 | 10/26 | `GET /classification-reviews` |
+| #158 | B8 | 10/26 | `POST /classification-responses`. 최근 완료 run의 문진 버전은 `judgment_run`을 직접 읽는다. 두 스택이 머지되면 `JudgmentRunRepository`로 옮긴다 |
+| #154·#155 | B9b 일부 | 10/28 | 고정 사용자 JWT 로그인. Redis 없음. B9b·B9c는 `CredentialVerifier`·`RefreshTokenStore` 구현체만 바꾼다 |
+| #152 | 신규 | - | 문진 업종 62010(KSIC) → 940909(국세청 업종코드). 규칙 카드가 940909만 매칭한다 |
+| #153 | 신규 | - | 조문 과거 시행판 백필. 배포 DB에 한 번 실행한다(`deployment.md` §6) |
+
+머지 순서:
+
+1. 트랙 A: #127 → #128 → #132 → #133 → #134 → #135 → #157
+2. 트랙 B: #124 → #129 → #130 → #147 → #148 → #156 → #158
+3. FE: #138 → #140 → #142 → #152
+4. #153은 순서와 무관하다.
+5. #154 → #155는 마지막에 머지하고, FE #142와 같은 배포에 넣는다. 한쪽만 배포되면 로그인할 수 없다.
+
+머지할 때 주의할 점:
+
+- A와 B 중 나중에 머지하는 쪽에서 `UploadBatchEntity`, `UploadBatchRepository`, `TransactionRecordEntity`, `ApiResponseContractTest`가 충돌한다. 양쪽이 각자 메서드를 추가한 것이라 둘 다 살린다. 계약 테스트는 양쪽 stub이 모두 남았는지 확인한다.
+- #154를 머지하기 전에 develop을 merge하면, 테스트에서 쓰는 `TemporaryCurrentUserProvider.TEMPORARY_USER_ID`를 `FixedUser.ID`로 바꿔야 한다.
+
+위 PR을 모두 합친 로컬 브랜치에서 `gradlew -p backend check`(단위 359, 통합 149)가 통과했다. 브라우저에서 로그인 → 업로드 → 문진 → 판정 → 결과 → 질문 답변 → override → 요약까지 실제 데이터로 확인했다. 남은 목은 A7 `bulk-answer` 하나다.
+
 ## 공통 규칙
 
 - 진행 방식
@@ -177,7 +208,7 @@ flowchart LR
   - eval 리포트에서 기능 회귀가 없는지 확인
   - `/worklog` 작성
 - 시나리오 통합 테스트는 마지막에 한꺼번에 만들지 않고 누적한다. B5와 A2b가 merge되면 "업로드 → run" 시나리오를 만들고, 이후 각 PR에서 담당 단계를 이어 붙인다.
-- 사용자 식별: B1a에서 `CurrentUser` 리졸버를 작성한다. 모든 서비스는 이를 통해 userId를 전달받는다. 초기에는 고정 임시 사용자를 반환하고, B9b에서 구현체만 Bearer 토큰 검증 방식으로 교체한다.
+- 사용자 식별: B1a에서 `CurrentUser` 리졸버를 작성한다. 모든 서비스는 이를 통해 userId를 전달받는다. 초기에는 고정 임시 사용자를 반환하고, B9b에서 구현체만 Bearer 토큰 검증 방식으로 교체한다. (Bearer 검증으로 교체하는 PR이 올라와 있다: #154·#155, 머지 대기. 아래 B9b 참고)
 
 ## 사전 정리 (10/5 작업 시작 전)
 
@@ -233,14 +264,14 @@ flowchart LR
 
 | PR | 트랙 | 날짜 | 내용 |
 | --- | --- | --- | --- |
-| A5 | A | 10/26 | `POST /judgments/{id}/override`와 `DELETE /judgment-overrides/{id}`를 구현한다. 생성되는 override revision의 origin은 `judgment_override_id`로 지정한다. |
+| A5 | A | 10/26 → 10/18 (#157) | `POST /judgments/{id}/override`와 `DELETE /judgment-overrides/{id}`를 구현한다. 생성되는 override revision의 origin은 `judgment_override_id`로 지정한다. |
 | A6a | A | 10/27 | 금액 계산 최소판을 구현하고 G3 안분 비율을 적용한다. 자산 처리 규칙은 착수 전에 `CONTEXT.md` §14를 기준으로 확정한다. 자산 경계는 100만 원 "초과"이고, 무신고 시 건축물 외 유형자산의 기본 상각방법은 정률법이다. 정액 5년은 맥북 예시일 뿐 일반 규칙이 아니다. 상각방법이나 내용연수를 알 수 없으면 금액을 확정하지 않고 확인 필요로 둔다. |
 | A6b | A | 10/28 | run 실행 순서를 `judge → computeAmount → settleLimits(잠정)`으로 구성하고 `LimitBucketPersistenceService.replaceProvisional`을 연결한다. |
 | A7 | A | 10/29 | `POST /questions/bulk-answer`를 구현한다. 단건 답변 로직을 반복해서 호출하되, 같은 거래는 한 번만 재판정한다. 소명 대기 거래(Override를 뺀 최신 자동 판정이 불가인데 대기 질문이 남은 거래)의 질문은 대상과 `answer.value` 허용 검사에서 빼고 `excludedCount`로 센다(api.md 3.11, #103). |
-| B8 | B | 10/26 | `GET /classification-reviews`와 `POST /classification-responses`를 구현한다. 사용자 응답은 개인 scope의 `merchant_dict`에 저장한다. 해당 batch에 완료된 run이 없으면 분류만 확정하고 `judgedCount=0`으로 응답한다. 완료된 run이 있으면 최근 run의 Context로 `rejudge`한다(api.md "판정 처리" 절). |
+| B8 | B | 10/26 → 10/18 (#156, #158) | `GET /classification-reviews`와 `POST /classification-responses`를 구현한다. 사용자 응답은 개인 scope의 `merchant_dict`에 저장한다. 해당 batch에 완료된 run이 없으면 분류만 확정하고 `judgedCount=0`으로 응답한다. 완료된 run이 있으면 최근 run의 Context로 `rejudge`한다(api.md "판정 처리" 절). |
 | B9a | B | 10/27 | Redis 인프라를 추가한다. 로컬 `compose.yaml`, `deploy/compose.yaml`(`maxmemory` 128MB, AOF 켜기), `deploy/deploy.sh` 헬스체크, `spring-boot-starter-data-redis`, Testcontainers Redis 설정을 포함한다. |
-| B9b | B | 10/28 | 인증을 도입한다. 확정한 인증 API 계약에 따라 로그인과 액세스 토큰(JWT) 발급을 구현한다. `CurrentUser` 리졸버 구현체는 Bearer 토큰 검증 방식으로 교체한다. |
-| B9c | B | 10/29 | 리프레시 토큰 재발급과 로그아웃을 구현한다. 저장 규칙은 [저장소 결정](#저장소-결정)을 따른다. 탈퇴하면 해당 사용자의 토큰을 모두 삭제한다. |
+| B9b | B | 10/28, 일부 10/18 (#154, #155) | 인증을 도입한다. 확정한 인증 API 계약에 따라 로그인과 액세스 토큰(JWT) 발급을 구현한다. `CurrentUser` 리졸버 구현체는 Bearer 토큰 검증 방식으로 교체한다. **중간 발표(10/22) 때문에 일부를 먼저 올렸다(#154, #155, 머지 대기)**: 계약(api.md 1.1), 액세스 토큰, Bearer 검증, 로그인·재발급·로그아웃 API 를 구현했고, 고정 사용자 하나만 로그인한다. 남은 일은 `CredentialVerifier` 를 실제 계정·카카오 구현으로 바꾸고 `FixedUser`·`TemporaryUserSeeder` 를 지우는 것이다. |
+| B9c | B | 10/29, 일부 10/18 (#155) | 리프레시 토큰 재발급과 로그아웃을 구현한다. 저장 규칙은 [저장소 결정](#저장소-결정)을 따른다. 탈퇴하면 해당 사용자의 토큰을 모두 삭제한다. 재발급·로그아웃 API 는 B9b 와 함께 먼저 올렸다(#155, 머지 대기). 지금 `StatelessRefreshTokenStore` 는 서명만 확인해 `revoke`·`revokeAll` 이 아무것도 하지 않는다. 남은 일은 `RefreshTokenStore` 의 Redis 구현(교체 시 이전 토큰 폐기, 로그아웃 폐기, 탈퇴 시 `revokeAll`)을 빈으로 바꿔 끼우는 것이다. |
 | M1 | B | 10/30 | 규칙 후보 관리자 API. [발표 준비](#발표-준비)를 참고한다. B10보다 먼저 진행한다. 버퍼가 줄어서 발표에 필요한 M1을 먼저 확보한다. |
 
 ### 4주차 (11/2~11/5): 발표 기능과 버퍼
@@ -257,7 +288,7 @@ flowchart LR
 | 마감 | 결정 사항 | 대상 PR |
 | --- | --- | --- |
 | 10/6 | 공휴일 목록을 가져오는 방식과 연도 범위. 회의에서는 공휴일을 공공 API로 판단하기로 했다(`worklog/be/2026-09-30-holiday-flag.md`). 판정할 때마다 API를 호출할지, API 결과를 DB나 YAML에 저장해 두고 읽을지, 정적 YAML만 둘지 정한다. 판정할 때마다 호출하면 임시공휴일이 추가된 뒤 재판정 결과가 달라질 수 있고, API 장애가 판정 실패로 이어진다. | A2a |
-| 10/16 | 인증 방식(카카오 OAuth, 자체 JWT 등)과 인증 API 계약. 로그인·재발급·로그아웃 엔드포인트, 토큰 전달 위치(헤더 또는 쿠키), 액세스·리프레시 토큰 만료 기간, 로그아웃 범위를 api.md에 먼저 작성한다. 리프레시 토큰 저장소는 Redis로 확정했다. | B9b, B9c |
+| 10/16 | 인증 방식(카카오 OAuth, 자체 JWT 등)과 인증 API 계약. 로그인·재발급·로그아웃 엔드포인트, 토큰 전달 위치(헤더 또는 쿠키), 액세스·리프레시 토큰 만료 기간, 로그아웃 범위를 api.md에 먼저 작성한다. 리프레시 토큰 저장소는 Redis로 확정했다. **결정(10/18)**: 자체 JWT. 액세스 토큰은 `Authorization` 헤더(15분), 리프레시 토큰은 httpOnly 쿠키(14일, `Path=/api/v1/auth`). 프론트 #142 의 가정(#139)과 같다. 카카오 로그인은 B9b 에서 `CredentialVerifier` 구현으로 붙인다. | B9b, B9c |
 | 10/16 | 분류 단계 배치, 담당, 분류 API 계약(분류 실험 담당·AI 담당과 협의). 어느 분류 단계부터 AI 서버로 넘길지 먼저 정한다. `CONTEXT.md` §12는 분류를 AI 서버에 두지만, 단계별로 나눈 기록은 없고 서비스 구현도 아직 없다. 사전과 `keyword_rules.yaml`은 백엔드(B3b)에서 처리하고, 모델과 웹 검색만 AI 서버에 두는 것을 추천한다. 해외 SaaS 사전(PR #73)과 상권정보 매칭(PR #61)을 어느 쪽에 둘지, 분류 API를 누가 구현할지도 함께 정한다. AI 서버에 두는 경우 배치 요청 `[{ merchantNorm, merchantRaw, bizNo? }]`, 응답 `[{ category 또는 null, confidence }]` 형태를 제안한다. cutoff 미만이면 `null`이다. stub은 10/30까지 필요하다. | B10 |
 | 10/16 | 금액 계산 규칙. 안분과 부가세 중 무엇을 먼저 적용할지(`CONTEXT.md` 미결정 #6), 자산 판단과 상각방법 기본값을 정한다. | A6a |
 | 10/16 | 휴일 소명 질문의 bulk-answer 처리. **결정(10/7, #103)**: fact_type은 그대로 두고, 휴일 카드(R-311~314)와 생활용품(R-207)을 포함한 소명 대기 거래의 질문을 일괄 응답 대상에서 뺀다. 뺀 수는 `skippedCount`와 별도인 `excludedCount`로 센다(api.md 3.11). 별도 fact_type 안은 그 fact_type으로 일괄 응답하면 같은 문제가 남고 R-207을 놓쳐 쓰지 않았다. | A7 |
