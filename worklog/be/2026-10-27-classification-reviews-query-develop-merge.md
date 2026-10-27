@@ -21,3 +21,12 @@
 ## 확인한 것
 
 - `gradlew -p backend check` 통과(test 349, integrationTest 146, 스킵 0).
+
+## 18:08 리뷰 반영: 판정 대상이 아닌 거래의 분류 확인 요청을 뺀다
+
+- 커밋: 263120f
+- `ClassificationReviewRepository` 의 두 `findRows` 에 effectiveStatus = JUDGEABLE 조건을 걸었다. 식은 `UploadBatchCountRepository` 의 분류 대기 수와 같다(JUDGEABLE 이고 제외 안 함, 또는 EXCLUDED 인데 사용자가 포함). 목록·그룹·미해소 집계가 모두 이 행을 쓰므로 함께 맞는다.
+- #147 에서 정한 대로 검토 행은 지우지 않는다. 다시 포함하면 돌아온다.
+- `docs/api.md` 3.5 GET 에 이 기준을 적었다.
+- `ClassificationReviewIntegrationTest.excluded_transaction_reviews_are_hidden_until_included_again`: 제외한 거래의 요청이 batch 목록·전체 목록·집계에서 빠지고, 다시 포함하면 집계에 돌아오는지 본다. 조건 없이 실패하는 것을 먼저 확인했다.
+- `gradlew -p backend check` 통과(test 349, integrationTest 147, 스킵 0).
