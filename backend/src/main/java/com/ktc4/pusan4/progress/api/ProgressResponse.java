@@ -41,7 +41,7 @@ public record ProgressResponse(
     }
 
     public record Next(
-        @Schema(allowableValues = {"CLASSIFY", "INTERVIEW", "CONFIRM", "RUN", "QUESTIONS", "RESULTS"}) String step,
+        @Schema(allowableValues = {"CLASSIFY", "INTERVIEW", "CONFIRM", "QUESTIONS", "RESULTS"}) String step,
         String route,
         String label
     ) {
