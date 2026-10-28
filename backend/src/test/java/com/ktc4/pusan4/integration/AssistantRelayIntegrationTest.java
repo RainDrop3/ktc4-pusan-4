@@ -109,6 +109,15 @@ class AssistantRelayIntegrationTest {
     }
 
     @Test
+    void a_turn_without_history_or_context_reaches_the_ai_server_without_nulls() throws Exception {
+        chat(null, "{\"message\": \"안녕\"}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.answer").value("확인했습니다."));
+
+        assertThat(AI_BODY.get()).isEqualTo("{\"message\":\"안녕\"}");
+    }
+
+    @Test
     void another_users_upload_or_transaction_is_not_relayed() throws Exception {
         UUID otherUser = UUID.randomUUID();
         jdbcTemplate.update("insert into app_user(id, email) values (?, ?)", otherUser, otherUser + "@example.com");
@@ -186,20 +195,22 @@ class AssistantRelayIntegrationTest {
                 AI_CALLS.incrementAndGet();
                 AI_AUTHORIZATION.set(exchange.getRequestHeaders().getFirst("Authorization"));
                 AI_BODY.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                // AI 서버(pydantic)는 history·context 가 null 이면 422 로 거절한다(ai/app/main.py ChatRequest)
+                int status = AI_BODY.get().matches("(?s).*\"(history|context)\"\\s*:\\s*null.*") ? 422 : AI_STATUS.get();
                 try {
                     Thread.sleep(AI_DELAY_MS.get());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
-                byte[] body = (AI_STATUS.get() == 200
+                byte[] body = (status == 200
                     ? "{\"answer\": \"확인했습니다.\", \"proposals\": [{\"kind\": \"answer\", \"card\": \"…\"}], "
                         + "\"traceId\": \"trace-1\"}"
                     : "{\"detail\": \"ASSISTANT_BUSY\"}").getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().add("Content-Type", "application/json");
-                if (AI_STATUS.get() == 429) {
+                if (status == 429) {
                     exchange.getResponseHeaders().add("Retry-After", "5");
                 }
-                exchange.sendResponseHeaders(AI_STATUS.get(), body.length);
+                exchange.sendResponseHeaders(status, body.length);
                 exchange.getResponseBody().write(body);
                 exchange.close();
             });
