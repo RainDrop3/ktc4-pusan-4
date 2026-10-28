@@ -50,7 +50,10 @@ public class AssistantRateLimiter {
         void close();
     }
 
-    /** 한도를 넘으면 429 ASSISTANT_RATE_LIMITED, Redis 에 닿지 못하면 503 ASSISTANT_UNAVAILABLE. */
+    /**
+     * 한도를 넘으면 429 ASSISTANT_RATE_LIMITED, Redis 에 닿지 못하면 503 ASSISTANT_UNAVAILABLE.
+     * 돌려준 자리는 close 해도 예외를 던지지 않는다. 지우지 못한 자리는 TTL 이 지나면 풀린다.
+     */
     public Lease acquire(UUID userId) {
         try {
             return acquireOrThrow(userId);
@@ -66,19 +69,37 @@ public class AssistantRateLimiter {
         if (!Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(runningKey, token, RUNNING_TTL))) {
             throw limited(BUSY_RETRY_SECONDS);
         }
-        Lease lease = () -> redis.execute(RELEASE, List.of(runningKey), token);
+        Lease lease = () -> release(runningKey, token);
+        try {
+            checkCounts(userId, now);
+        } catch (RuntimeException e) {
+            // 한도에 걸렸거나 세다 Redis 오류가 나면 자리를 돌려준다. Redis 오류 때 그대로 두면 Redis 가 돌아와도
+            // TTL 동안 동시 실행으로 막힌다.
+            lease.close();
+            throw e;
+        }
+        return lease;
+    }
+
+    private void checkCounts(UUID userId, Instant now) {
         // 동시 실행에 막힌 요청은 세지 않도록 자리를 잡은 뒤에 센다.
         ZonedDateTime kst = now.atZone(KST);
         if (count("assistant:minute:" + userId + ":" + now.getEpochSecond() / 60, Duration.ofMinutes(2)) > PER_MINUTE) {
-            lease.close();
             throw limited(60 - now.getEpochSecond() % 60);
         }
         if (count("assistant:day:" + userId + ":" + kst.toLocalDate(), Duration.ofDays(2)) > PER_DAY) {
-            lease.close();
             LocalDate tomorrow = kst.toLocalDate().plusDays(1);
             throw limited(Duration.between(now, tomorrow.atStartOfDay(KST).toInstant()).toSeconds());
         }
-        return lease;
+    }
+
+    // 받은 답을 Redis 오류로 버리지 않는다. 지우지 못한 자리는 TTL 이 지나면 풀린다.
+    private void release(String runningKey, String token) {
+        try {
+            redis.execute(RELEASE, List.of(runningKey), token);
+        } catch (DataAccessException e) {
+            // 무시한다
+        }
     }
 
     private long count(String key, Duration ttl) {
