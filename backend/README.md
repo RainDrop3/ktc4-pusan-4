@@ -38,6 +38,8 @@ bash ./backend/gradlew -p backend bootRun --args='--spring.profiles.active=local
 
 로컬 프로필을 사용하지 않는 환경에서는 Spring 표준 환경 변수인 `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`를 주입합니다.
 
+`HOLIDAY_API_KEY` 없이 실행하면 공휴일 동기화를 건너뛰고 시드도 넣지 않아, 새 DB의 `public_holiday` 표가 비어 있습니다. 이때는 공휴일 거래가 평일로 판정됩니다. 공휴일 판정을 확인하거나 데모 데이터를 만들 때는 공공데이터포털 「한국천문연구원_특일 정보」의 Decoding 키를 `HOLIDAY_API_KEY` 환경 변수로 넣고 실행합니다(`docs/deployment.md` 7절).
+
 ## 테스트
 
 모든 테스트는 Gradle 표준 경로인 `src/test/java`에 둡니다. 실행 속도와 외부 인프라 의존성을 기준으로 실행 명령만 분리합니다.
