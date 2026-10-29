@@ -10,6 +10,7 @@ import com.ktc4.pusan4.judgment.domain.JudgmentOriginType;
 import com.ktc4.pusan4.judgment.domain.JudgmentRevision;
 import com.ktc4.pusan4.judgment.domain.JudgmentRun;
 import com.ktc4.pusan4.judgment.domain.JudgmentSummary;
+import com.ktc4.pusan4.judgment.domain.PendingTotal;
 import com.ktc4.pusan4.judgment.domain.Question;
 import com.ktc4.pusan4.judgment.domain.QuestionStatus;
 import com.ktc4.pusan4.judgment.domain.JudgmentRunFailure;
@@ -22,6 +23,11 @@ import com.ktc4.pusan4.judgment.persistence.JudgmentRunService;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerResult;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerService;
 import com.ktc4.pusan4.judgment.persistence.QuestionQueryService;
+import com.ktc4.pusan4.judgment.persistence.QuestionSuggestionService;
+import com.ktc4.pusan4.assistant.AssistantRelayService;
+import com.ktc4.pusan4.assistant.api.ChatResponse;
+import com.ktc4.pusan4.progress.domain.NextStep;
+import com.ktc4.pusan4.progress.persistence.ProgressService;
 import com.ktc4.pusan4.judgment.persistence.StatuteService;
 import com.ktc4.pusan4.merchant.api.ClassificationReviewStatus;
 import com.ktc4.pusan4.shared.UuidV7Generator;
@@ -124,6 +130,15 @@ class ApiResponseContractTest {
     private QuestionAnswerService questionAnswerService;
 
     @MockitoBean
+    private QuestionSuggestionService questionSuggestionService;
+
+    @MockitoBean
+    private ProgressService progressService;
+
+    @MockitoBean
+    private AssistantRelayService assistantRelayService;
+
+    @MockitoBean
     private StatuteService statuteService;
 
     @MockitoBean
@@ -190,8 +205,16 @@ class ApiResponseContractTest {
         given(questionQueryService.find(any(), any(), any())).willReturn(List.of(new Question(UUID.fromString(ID),
             UUID.fromString(ID), UUID.fromString(ID), "merchant:스타벅스", "용도", "용도가 무엇인가요?",
             List.of("사업", "개인", "혼용"), QuestionStatus.PENDING, null, null,
-            OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false)));
-        given(questionAnswerService.answer(any(), any(), any()))
+            OffsetDateTime.parse("2026-09-12T14:05:30+09:00"), null, judgment.transaction(), false, false,
+            "CAFE_PURPOSE")));
+        given(assistantRelayService.chat(any(), any(), any()))
+            .willReturn(new ChatResponse("판정 근거를 확인했습니다.", List.of(), "trace-1"));
+        given(progressService.progress(any(), any())).willReturn(new ProgressService.Progress(
+            new ProgressService.Batch(UUID.fromString(ID), "국민",
+                LocalDate.parse("2026-09-01"), LocalDate.parse("2026-09-30"), 18),
+            context, new PendingTotal(2, 97_000), null,
+            new PendingTotal(9, 1_038_100), 2, NextStep.QUESTIONS));
+        given(questionAnswerService.answer(any(), any(), any(), any()))
             .willReturn(new QuestionAnswerResult(1, UUID.fromString(ID), 1));
 
         given(statuteService.get(anyLong())).willReturn(new StatuteVersion(1523, "소득세법시행령-67-4",
@@ -261,6 +284,11 @@ class ApiResponseContractTest {
             Arguments.of("DELETE", "/api/v1/judgment-overrides/" + ID, null, 204),
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID, null, 200),
             Arguments.of("GET", "/api/v1/questions?batchId=" + ID + "&grouped=true", null, 200),
+            Arguments.of("GET", "/api/v1/questions/suggestions?batchId=" + ID, null, 200),
+            Arguments.of("GET", "/api/v1/progress?batchId=" + ID, null, 200),
+            Arguments.of("POST", "/api/v1/assistant/chat", """
+                {"message": "이거 왜 불가야?"}
+                """, 200),
             Arguments.of("POST", "/api/v1/questions/bulk-answer", """
                 {"batchId": "%s", "factType": "용도", "answer": {"value": "사업"}}
                 """.formatted(ID), 200),
@@ -304,8 +332,8 @@ class ApiResponseContractTest {
         "ruleCardId", "ruleCardVersion", "appliedRuleIds", "rulesCommitSha", "userContextVersion", "explanation",
         "computedAt", "citations");
     private static final Set<String> QUESTION_KEYS = Set.of("id", "batchId", "transactionId", "groupKey", "factType",
-        "questionText", "options", "status", "answeredFactId", "answer", "createdAt", "answeredAt");
-    private static final Set<String> QUESTION_GROUP_KEYS = Set.of("groupKey", "factType", "status", "questionIds",
+        "code", "questionText", "options", "status", "answeredFactId", "answer", "createdAt", "answeredAt");
+    private static final Set<String> QUESTION_GROUP_KEYS = Set.of("groupKey", "factType", "code", "status", "questionIds",
         "count", "totalAmount", "questionText", "options", "answer", "bulkAnswerable", "transactions");
     private static final Set<String> QUESTION_GROUP_TRANSACTION_KEYS =
         withTransactionSummary("questionId", "transactionId", "overridden");
