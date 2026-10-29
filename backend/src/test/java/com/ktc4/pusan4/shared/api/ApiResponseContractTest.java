@@ -29,7 +29,7 @@ import com.ktc4.pusan4.assistant.api.ChatResponse;
 import com.ktc4.pusan4.progress.domain.NextStep;
 import com.ktc4.pusan4.progress.persistence.ProgressService;
 import com.ktc4.pusan4.judgment.persistence.StatuteService;
-import com.ktc4.pusan4.merchant.api.ClassificationMockData;
+import com.ktc4.pusan4.merchant.api.ClassificationReviewStatus;
 import com.ktc4.pusan4.shared.UuidV7Generator;
 import com.ktc4.pusan4.shared.auth.FixedUser;
 import com.ktc4.pusan4.transaction.api.CardIssuer;
@@ -37,9 +37,14 @@ import com.ktc4.pusan4.transaction.api.ClassificationStatus;
 import com.ktc4.pusan4.transaction.api.SourceStatus;
 import com.ktc4.pusan4.transaction.api.SourceType;
 import com.ktc4.pusan4.transaction.api.UserInclusion;
+import com.ktc4.pusan4.transaction.domain.ClassificationAnswer;
+import com.ktc4.pusan4.transaction.domain.ClassificationReviewGroup;
+import com.ktc4.pusan4.transaction.domain.ClassificationReviewItem;
+import com.ktc4.pusan4.transaction.domain.ClassificationReviewResult;
 import com.ktc4.pusan4.transaction.domain.TransactionDetail;
 import com.ktc4.pusan4.transaction.domain.UploadBatchSummary;
 import com.ktc4.pusan4.transaction.domain.UploadResult;
+import com.ktc4.pusan4.transaction.persistence.ClassificationReviewService;
 import com.ktc4.pusan4.transaction.persistence.TransactionService;
 import com.ktc4.pusan4.transaction.persistence.UploadBatchService;
 import com.ktc4.pusan4.transaction.persistence.UploadService;
@@ -91,7 +96,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest
 @Import({ApiExceptionHandler.class, UuidV7Generator.class, TestAuthentication.class,
-    ClassificationMockData.class, JudgmentMockData.class})
+    JudgmentMockData.class})
 class ApiResponseContractTest {
 
     private static final String ID = "0199c8f2-0000-7000-8000-000000000001";
@@ -145,12 +150,25 @@ class ApiResponseContractTest {
     @MockitoBean
     private TransactionService transactionService;
 
+    @MockitoBean
+    private ClassificationReviewService reviewService;
+
     /** 인증 API 의 동작은 AuthIntegrationTest 가 본다. 여기서는 컨텍스트에 컨트롤러가 뜨도록 자리만 채운다. */
     @MockitoBean
     private AuthService authService;
 
     @BeforeEach
     void stubServices() {
+        ClassificationReviewItem review = new ClassificationReviewItem(UUID.fromString(ID), UUID.fromString(ID),
+            UUID.fromString(ID), ClassificationReviewStatus.PENDING, OffsetDateTime.parse("2026-09-18T01:10:00+09:00"),
+            null, LocalDate.parse("2026-01-03"), "XYZ PAYMENTS", "XYZ PAYMENTS", "미분류", 47_000L, 0);
+        given(reviewService.list(any(), any(), any(), anyInt(), anyInt())).willReturn(new ClassificationReviewResult<>(
+            new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1), 1, 47_000L));
+        given(reviewService.groups(any(), any(), any(), anyInt(), anyInt())).willReturn(new ClassificationReviewResult<>(
+            new PageImpl<>(List.of(new ClassificationReviewGroup("merchant:XYZ PAYMENTS", "XYZ PAYMENTS",
+                List.of(review))), PageRequest.of(0, 20), 1), 1, 47_000L));
+        given(reviewService.answer(any(), any(), any())).willReturn(new ClassificationAnswer(1, "해외SaaS", 1));
+
         given(userService.get(any())).willReturn(new AppUser(
             FixedUser.ID, "demo@example.com",
             OffsetDateTime.parse("2026-09-01T10:00:00+09:00")));

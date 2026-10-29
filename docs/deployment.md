@@ -63,6 +63,8 @@ curl -I "https://<도메인>/"
 
 Compose는 기존 백엔드를 내린 뒤 새 백엔드를 띄우고, 새 백엔드가 부팅하면서 Flyway를 실행한다. 마이그레이션이 실패하면 그 시점부터 서비스가 멈추므로 5절의 롤백 명령으로 이전 SHA를 다시 배포한다. 마이그레이션 작성 규칙은 `db/README.md`를 따른다.
 
+기존 백엔드는 내려가기 전에 새 요청을 받지 않고, 돌던 판정 run과 대기열의 run을 최대 60초(`app.judgment-run.await-termination`)까지 마저 처리한다. 그래서 판정이 도는 중에 배포하면 백엔드가 멈춰 있는 시간이 그만큼 길어진다. Compose의 `stop_grace_period`(100초)가 이보다 짧으면 그 전에 강제로 꺼진다. 60초 안에 못 끝낸 run은 새 백엔드의 멈춘 run 정리가 5분 뒤 `RUN_INTERRUPTED`로 끝내고, 사용자가 다시 실행한다.
+
 ### PostgreSQL이 다시 시작되는 변경
 
 DB는 평소 배포에서 그대로 유지된다. 아래 변경이 포함된 배포에서만 postgres 컨테이너가 다시 만들어지며, 재시작하는 동안 백엔드와 AI가 DB에 접속하지 못한다. 데이터는 `postgres-data` 볼륨에 남는다. 이런 PR은 본문에 DB 재시작을 적고 리뷰한다.
@@ -148,6 +150,7 @@ docker compose --env-file /etc/ktc4/production.env -f "$repo/deploy/compose.yaml
 
 - `/etc/ktc4/production.env`의 `HOLIDAY_API_KEY`에는 포털의 **Decoding** 키를 넣는다. Encoding 키를 넣으면 한 번 더 인코딩되어 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`가 난다.
 - 키가 없거나 호출이 실패하면 그 해는 기존 행을 그대로 둔다. 발표 전이라 빈 응답이 온 해도 마찬가지다. 판정은 표에 있는 값으로 계속 돈다.
+- 호출이 실패했거나 빈 응답이 왔는데 표에 그 해 행이 하나도 없으면 `backend/src/main/resources/holiday/seed/{연도}.json`(2025~2027)으로 채운다. 이 파일은 같은 API 응답을 그대로 저장한 것이라 API 로 받을 때와 같은 규칙으로 읽는다. 이미 행이 있는 해는 시드가 덮지 않고, 다음에 API 로 받으면 시드 행도 API 응답으로 교체된다. 키가 없을 때는 시드도 넣지 않는다. 동기화 범위(올해 앞뒤 1년)가 2027년을 넘기 전에 다음 해 응답을 받아 `seed/{연도}.json` 으로 저장한다.
 - 반영 결과는 백엔드 로그의 `년 공휴일 N건을 반영했다`로 확인한다.
 
 ## 8. Redis
