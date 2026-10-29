@@ -23,7 +23,6 @@ import com.ktc4.pusan4.judgment.persistence.QuestionAnswerResult;
 import com.ktc4.pusan4.judgment.persistence.QuestionAnswerService;
 import com.ktc4.pusan4.judgment.persistence.QuestionQueryService;
 import com.ktc4.pusan4.judgment.persistence.StatuteService;
-import com.ktc4.pusan4.merchant.api.ClassificationMockData;
 import com.ktc4.pusan4.merchant.api.ClassificationReviewStatus;
 import com.ktc4.pusan4.shared.UuidV7Generator;
 import com.ktc4.pusan4.shared.auth.FixedUser;
@@ -32,6 +31,7 @@ import com.ktc4.pusan4.transaction.api.ClassificationStatus;
 import com.ktc4.pusan4.transaction.api.SourceStatus;
 import com.ktc4.pusan4.transaction.api.SourceType;
 import com.ktc4.pusan4.transaction.api.UserInclusion;
+import com.ktc4.pusan4.transaction.domain.ClassificationAnswer;
 import com.ktc4.pusan4.transaction.domain.ClassificationReviewGroup;
 import com.ktc4.pusan4.transaction.domain.ClassificationReviewItem;
 import com.ktc4.pusan4.transaction.domain.ClassificationReviewResult;
@@ -90,7 +90,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest
 @Import({ApiExceptionHandler.class, UuidV7Generator.class, TestAuthentication.class,
-    ClassificationMockData.class, JudgmentMockData.class})
+    JudgmentMockData.class})
 class ApiResponseContractTest {
 
     private static final String ID = "0199c8f2-0000-7000-8000-000000000001";
@@ -152,6 +152,7 @@ class ApiResponseContractTest {
         given(reviewService.groups(any(), any(), any(), anyInt(), anyInt())).willReturn(new ClassificationReviewResult<>(
             new PageImpl<>(List.of(new ClassificationReviewGroup("merchant:XYZ PAYMENTS", "XYZ PAYMENTS",
                 List.of(review))), PageRequest.of(0, 20), 1), 1, 47_000L));
+        given(reviewService.answer(any(), any(), any())).willReturn(new ClassificationAnswer(1, "해외SaaS", 1));
 
         given(userService.get(any())).willReturn(new AppUser(
             FixedUser.ID, "demo@example.com",
