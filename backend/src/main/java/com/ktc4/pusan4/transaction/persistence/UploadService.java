@@ -162,15 +162,15 @@ public class UploadService {
             ClassificationResult result = results.get(i);
             // 모델을 부른 뒤 사전이 바뀌었으면 규칙이 이긴다
             ModelDecision decision = result.classified() ? null : decisions.get(result.merchantNorm());
-            Optional<String> confirmed = decision == null
-                ? Optional.empty()
-                : autoConfirmPolicy.confirmedCategory(decision);
-            ClassificationStatus status = result.classified() || confirmed.isPresent()
-                ? ClassificationStatus.CLASSIFIED
-                : ClassificationStatus.NEEDS_REVIEW;
+            Optional<String> confirmed = Optional.ofNullable(decision).flatMap(autoConfirmPolicy::confirmedCategory);
+            String category = confirmed.orElse(result.merchantCategory());
+            // 미분류면 분류 확인 필요다(api.md 2.4, V8 CHECK)
+            ClassificationStatus status = ClassificationResult.UNCLASSIFIED.equals(category)
+                ? ClassificationStatus.NEEDS_REVIEW
+                : ClassificationStatus.CLASSIFIED;
             TransactionRecordEntity transaction = new TransactionRecordEntity(
                 uuidGenerator.generate(), batch.id(), userId, fresh.get(i),
-                result.merchantNorm(), confirmed.orElse(result.merchantCategory()), status, now);
+                result.merchantNorm(), category, status, now);
             entityManager.persist(transaction);
             if (decision != null) {
                 entityManager.persist(new MerchantModelDecisionEntity(transaction.id(), decision, confirmed.isPresent(), now));
