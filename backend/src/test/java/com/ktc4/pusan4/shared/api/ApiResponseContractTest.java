@@ -161,7 +161,8 @@ class ApiResponseContractTest {
     void stubServices() {
         ClassificationReviewItem review = new ClassificationReviewItem(UUID.fromString(ID), UUID.fromString(ID),
             UUID.fromString(ID), ClassificationReviewStatus.PENDING, OffsetDateTime.parse("2026-09-18T01:10:00+09:00"),
-            null, LocalDate.parse("2026-01-03"), "XYZ PAYMENTS", "XYZ PAYMENTS", "미분류", 47_000L, 0);
+            null, LocalDate.parse("2026-01-03"), "XYZ PAYMENTS", "XYZ PAYMENTS", "미분류", 47_000L, 0,
+            List.of("해외SaaS"));
         given(reviewService.list(any(), any(), any(), anyInt(), anyInt())).willReturn(new ClassificationReviewResult<>(
             new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1), 1, 47_000L));
         given(reviewService.groups(any(), any(), any(), anyInt(), anyInt())).willReturn(new ClassificationReviewResult<>(
