@@ -29,7 +29,7 @@ flowchart TD
     subgraph SERVER["서버 (분류)"]
         S1{"PG 블록리스트?"}
         S2["merchant_dict 조회 (개인 먼저, 없으면 전역)"]
-        S3["키워드 룰 → 분류 모델(AI 서버) → 확실하면 확정, 아니면 미분류 + 분류 확인(후보 3개)"]
+        S3["키워드 룰 → 분류 모델(AI 서버) → 미분류 + 분류 확인(모델 후보 3개)"]
         S4["natural_key 중복차단 upsert"]
         S1 -->|"PG 해당"| ASKC["되묻기: 이 지출이 무엇인지"]
         S1 -->|"통과"| S2 --> S3 --> S4
@@ -181,8 +181,8 @@ flowchart TD
 여기서도 못 잡은 가맹점만 모아 AI 서버 `POST /classify/merchants`에 한 번 묻고, AI 서버는 GPT-6 Luna의 `/decisions`로 답한다.
 모델 호출은 DB 트랜잭션 밖에서 하고, 시간 초과·실패·기능 꺼짐이면 모델 없이 업로드한다.
 
-- **확정**: `known ≥ 0.99`이고 `confidence ≥ 0.995`(응답이 소수 둘째 자리라 1.00)이며 top-1이 허용 어휘 안이고 `기타`·`PG_미상`이 아니면 그 카테고리로 분류를 끝낸다. 분류 확인은 만들지 않는다.
-- **분류 확인**: 그 밖에는 지금처럼 `미분류` + 분류 확인이고, 모델 후보를 최대 3개 `suggestedCategories`로 보여 준다(`api.md` §3.5).
+- **분류 확인**: 모델이 답한 가맹점도 지금처럼 `미분류` + 분류 확인이고, 모델 후보를 최대 3개 `suggestedCategories`로 보여 준다(`api.md` §3.5).
+- **확정하지 않는다**: 가장 엄격한 기준에서도 실험 정밀도가 91%라 서비스 신뢰 기준에 못 미친다. 카테고리는 항상 사용자가 고른다.
 - 모델 답은 `merchant_dict`에 쓰지 않고 `merchant_model_decision`에만 남긴다. 사전은 사용자가 분류 확인에 답할 때만 바뀐다.
 
 기준을 정한 실험은 `docs/category_decision_eval.md`, 결정 기록은 `docs/backend_api_plan.md` B10에 있다.

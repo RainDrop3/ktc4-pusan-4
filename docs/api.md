@@ -1206,7 +1206,7 @@ createdAt ASC, id ASC
 
 지금 판정 대상(effectiveStatus = JUDGEABLE)인 거래의 Review만 반환하고 집계한다. 사용자가 거래를 제외하면 그 Review는 목록과 미해소 집계에서 빠지고, 다시 포함하면 돌아온다. Review 자체는 지우지 않는다. 업로드 배치의 `classificationPendingCount`와 같은 기준이다.
 
-`suggestedCategories`는 분류 모델이 고른 후보 카테고리다. 최대 3개이고 가맹점 카테고리(2.12) 안의 값만 담으며 `기타`·`PG_미상`은 넣지 않는다. 모델이 꺼져 있거나 실패·시간 초과했거나 답을 거절하면 빈 배열이다. 후보는 거래마다 남으므로 포함(3.4)으로 나중에 생긴 Review도 같은 후보를 받는다. 모델이 확실하다고 답한 거래는 업로드할 때 그 카테고리로 분류가 끝나 Review가 생기지 않는다(기준은 `docs/backend_api_plan.md` B10).
+`suggestedCategories`는 분류 모델이 고른 후보 카테고리다. 최대 3개이고 가맹점 카테고리(2.12) 안의 값만 담으며 `기타`·`PG_미상`은 넣지 않는다. 모델이 꺼져 있거나 실패·시간 초과했거나 답을 거절하면 빈 배열이다. 후보는 거래마다 남으므로 포함(3.4)으로 나중에 생긴 Review도 같은 후보를 받는다. 모델 답으로 분류를 확정하지는 않는다. 모델이 확실하다고 답해도 Review가 생기고 사용자가 고른다(`docs/backend_api_plan.md` B10).
 
 ### grouped=false (기본)
 
