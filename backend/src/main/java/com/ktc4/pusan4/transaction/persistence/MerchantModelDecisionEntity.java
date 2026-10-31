@@ -36,9 +36,6 @@ class MerchantModelDecisionEntity {
     @Column(nullable = false)
     private boolean refused;
 
-    @Column(name = "auto_confirmed", nullable = false)
-    private boolean autoConfirmed;
-
     @Column(nullable = false)
     private String model;
 
@@ -48,14 +45,13 @@ class MerchantModelDecisionEntity {
     protected MerchantModelDecisionEntity() {
     }
 
-    MerchantModelDecisionEntity(UUID transactionId, ModelDecision decision, boolean autoConfirmed, OffsetDateTime now) {
+    MerchantModelDecisionEntity(UUID transactionId, ModelDecision decision, OffsetDateTime now) {
         this.transactionId = transactionId;
         this.category = decision.category();
         this.confidence = decision.confidence();
         this.known = decision.known();
         this.suggestions = decision.suggestions();
         this.refused = decision.refused();
-        this.autoConfirmed = autoConfirmed;
         this.model = decision.model();
         this.createdAt = now;
     }

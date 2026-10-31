@@ -8,8 +8,8 @@ import com.ktc4.pusan4.judgment.persistence.TransactionRecordRepository;
 import com.ktc4.pusan4.merchant.MerchantCategoryVocabulary;
 import com.ktc4.pusan4.merchant.MerchantDictionaryRepository;
 import com.ktc4.pusan4.merchant.api.ClassificationReviewStatus;
-import com.ktc4.pusan4.merchant.classify.AutoConfirmPolicy;
 import com.ktc4.pusan4.merchant.classify.ClassificationResult;
+import com.ktc4.pusan4.merchant.classify.SuggestionPolicy;
 import com.ktc4.pusan4.shared.api.ApiException;
 import com.ktc4.pusan4.transaction.api.SourceStatus;
 import com.ktc4.pusan4.transaction.domain.ClassificationAnswer;
@@ -59,7 +59,7 @@ public class ClassificationReviewService {
 
     private final ClassificationReviewRepository reviewRepository;
     private final MerchantModelDecisionRepository decisionRepository;
-    private final AutoConfirmPolicy autoConfirmPolicy;
+    private final SuggestionPolicy suggestionPolicy;
     private final TransactionRecordRepository transactionRepository;
     private final MerchantDictionaryRepository dictionaryRepository;
     private final MerchantCategoryVocabulary vocabulary;
@@ -70,7 +70,7 @@ public class ClassificationReviewService {
     public ClassificationReviewService(
         ClassificationReviewRepository reviewRepository,
         MerchantModelDecisionRepository decisionRepository,
-        AutoConfirmPolicy autoConfirmPolicy,
+        SuggestionPolicy suggestionPolicy,
         TransactionRecordRepository transactionRepository,
         MerchantDictionaryRepository dictionaryRepository,
         MerchantCategoryVocabulary vocabulary,
@@ -80,7 +80,7 @@ public class ClassificationReviewService {
     ) {
         this.reviewRepository = reviewRepository;
         this.decisionRepository = decisionRepository;
-        this.autoConfirmPolicy = autoConfirmPolicy;
+        this.suggestionPolicy = suggestionPolicy;
         this.transactionRepository = transactionRepository;
         this.dictionaryRepository = dictionaryRepository;
         this.vocabulary = vocabulary;
@@ -194,7 +194,7 @@ public class ClassificationReviewService {
         Map<UUID, List<String>> suggestions = new HashMap<>();
         decisionRepository.findByTransactionIdIn(rows.stream().map(ReviewRow::transactionId).toList())
             .forEach(decision -> suggestions.put(decision.transactionId(),
-                autoConfirmPolicy.suggestions(decision.refused(), decision.suggestions())));
+                suggestionPolicy.suggestions(decision.refused(), decision.suggestions())));
         return rows.stream()
             .map(row -> toItem(row, suggestions.getOrDefault(row.transactionId(), List.of())))
             .toList();

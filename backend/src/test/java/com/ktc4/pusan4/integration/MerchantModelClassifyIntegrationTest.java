@@ -100,31 +100,28 @@ class MerchantModelClassifyIntegrationTest {
     }
 
     @Test
-    void unsure_answer_goes_to_review_with_three_suggestions_and_canceled_only_merchant_is_not_sent() throws Exception {
+    void model_answer_goes_to_review_with_three_suggestions_and_canceled_only_merchant_is_not_sent() throws Exception {
         String batchId = upload(unique(), body(tx("성진이네 본점", "JUDGEABLE"), tx("ZQXW TRADING", "CANCELED_OFFSET")));
 
         mockMvc.perform(get("/api/v1/classification-reviews").param("batchId", batchId).param("grouped", "true"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].suggestedCategories").value(contains("해외SaaS", "온라인쇼핑", "국내SW")));
         assertThat(AI_BODY.get()).contains("성진이네").doesNotContain("ZQXW");
-        assertThat(autoConfirmed(batchId)).containsExactly(false);
+        assertThat(decidedCategories(batchId)).containsExactly("해외SaaS");
     }
 
     @Test
-    void sure_answer_is_confirmed_without_review_and_not_written_to_the_dictionary() throws Exception {
+    void sure_answer_is_not_confirmed_and_not_written_to_the_dictionary() throws Exception {
         AI_RESULT.set(SURE);
 
         String batchId = upload(unique(), body(tx("성진이네 본점", "JUDGEABLE")));
 
         assertThat(jdbcTemplate.queryForMap(
             "select merchant_category, classification_status from transaction where batch_id = ?::uuid", batchId))
-            .containsEntry("merchant_category", "음식점")
-            .containsEntry("classification_status", "CLASSIFIED");
-        assertThat(jdbcTemplate.queryForObject("""
-            select count(*) from classification_review r join transaction t on t.id = r.transaction_id
-            where t.batch_id = ?::uuid
-            """, Integer.class, batchId)).isZero();
-        assertThat(autoConfirmed(batchId)).containsExactly(true);
+            .containsEntry("merchant_category", "미분류")
+            .containsEntry("classification_status", "NEEDS_REVIEW");
+        mockMvc.perform(get("/api/v1/classification-reviews").param("batchId", batchId).param("grouped", "true"))
+            .andExpect(jsonPath("$.items[0].suggestedCategories").value(contains("음식점", "카페")));
         assertThat(jdbcTemplate.queryForObject(
             "select count(*) from merchant_dict where pattern = '성진이네'", Integer.class)).isZero();
     }
@@ -137,7 +134,7 @@ class MerchantModelClassifyIntegrationTest {
 
         mockMvc.perform(get("/api/v1/classification-reviews").param("batchId", batchId).param("grouped", "true"))
             .andExpect(jsonPath("$.items[0].suggestedCategories").isEmpty());
-        assertThat(autoConfirmed(batchId)).isEmpty();
+        assertThat(decidedCategories(batchId)).isEmpty();
     }
 
     @Test
@@ -187,11 +184,11 @@ class MerchantModelClassifyIntegrationTest {
             .content(body);
     }
 
-    private List<Boolean> autoConfirmed(String batchId) {
+    private List<String> decidedCategories(String batchId) {
         return jdbcTemplate.queryForList("""
-            select d.auto_confirmed from merchant_model_decision d join transaction t on t.id = d.transaction_id
+            select d.category from merchant_model_decision d join transaction t on t.id = d.transaction_id
             where t.batch_id = ?::uuid
-            """, Boolean.class, batchId);
+            """, String.class, batchId);
     }
 
     private UUID transactionOf(String batchId) {

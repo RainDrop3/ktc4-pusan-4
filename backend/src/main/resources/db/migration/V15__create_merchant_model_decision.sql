@@ -9,13 +9,12 @@ CREATE TABLE merchant_model_decision (
     transaction_id uuid PRIMARY KEY REFERENCES transaction(id) ON DELETE CASCADE,
     -- top-1. 거절했으면 NULL
     category text,
+    -- confidence·known 은 화면에 쓰지 않는다. 자동 확정 기준을 실데이터로 다시 잴 때 본다(docs/category_decision_eval.md)
     confidence double precision,
     known double precision,
     -- 모델이 준 후보 그대로. 화면에 보일 때 허용 어휘로 거른다
     suggestions jsonb NOT NULL DEFAULT '[]',
     refused boolean NOT NULL DEFAULT false,
-    -- true 면 분류 확인 없이 category 로 확정했다
-    auto_confirmed boolean NOT NULL,
     model text NOT NULL,
     created_at timestamptz NOT NULL
 );

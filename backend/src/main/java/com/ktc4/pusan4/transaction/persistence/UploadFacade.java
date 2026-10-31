@@ -1,7 +1,6 @@
 package com.ktc4.pusan4.transaction.persistence;
 
 import com.ktc4.pusan4.judgment.persistence.UploadBatchRepository;
-import com.ktc4.pusan4.merchant.classify.AutoConfirmPolicy;
 import com.ktc4.pusan4.merchant.classify.ClassificationInput;
 import com.ktc4.pusan4.merchant.classify.ClassificationResult;
 import com.ktc4.pusan4.merchant.classify.MerchantClassifier;
@@ -43,7 +42,6 @@ public class UploadFacade {
     private final UploadBatchRepository batchRepository;
     private final MerchantClassifier merchantClassifier;
     private final ModelClassifier modelClassifier;
-    private final AutoConfirmPolicy autoConfirmPolicy;
     private final Clock clock;
 
     public UploadFacade(
@@ -54,7 +52,6 @@ public class UploadFacade {
         UploadBatchRepository batchRepository,
         MerchantClassifier merchantClassifier,
         ModelClassifier modelClassifier,
-        AutoConfirmPolicy autoConfirmPolicy,
         Clock clock
     ) {
         this.enabled = enabled;
@@ -64,7 +61,6 @@ public class UploadFacade {
         this.batchRepository = batchRepository;
         this.merchantClassifier = merchantClassifier;
         this.modelClassifier = modelClassifier;
-        this.autoConfirmPolicy = autoConfirmPolicy;
         this.clock = clock;
     }
 
@@ -106,15 +102,7 @@ public class UploadFacade {
         }
 
         Map<String, ModelDecision> decisions = modelClassifier.classify(new ArrayList<>(merchants.values()));
-        long confirmed = decisions.values().stream()
-            .filter(decision -> autoConfirmPolicy.confirmedCategory(decision).isPresent())
-            .count();
-        long suggested = decisions.values().stream()
-            .filter(decision -> autoConfirmPolicy.confirmedCategory(decision).isEmpty()
-                && !autoConfirmPolicy.suggestions(decision.refused(), decision.suggestions()).isEmpty())
-            .count();
-        log.info("분류 모델: 가맹점 {}개 보냄, 자동 확정 {}, 후보 제시 {}, 실패 {}",
-            merchants.size(), confirmed, suggested, merchants.size() - decisions.size());
+        log.info("분류 모델: 가맹점 {}개 보냄, 실패 {}", merchants.size(), merchants.size() - decisions.size());
         return decisions;
     }
 }

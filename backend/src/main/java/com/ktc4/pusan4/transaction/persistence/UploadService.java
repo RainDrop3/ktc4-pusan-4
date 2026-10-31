@@ -6,7 +6,6 @@ import com.ktc4.pusan4.judgment.persistence.TransactionRecordEntity;
 import com.ktc4.pusan4.judgment.persistence.TransactionRecordRepository;
 import com.ktc4.pusan4.judgment.persistence.UploadBatchEntity;
 import com.ktc4.pusan4.judgment.persistence.UploadBatchRepository;
-import com.ktc4.pusan4.merchant.classify.AutoConfirmPolicy;
 import com.ktc4.pusan4.merchant.classify.ClassificationInput;
 import com.ktc4.pusan4.merchant.classify.ClassificationResult;
 import com.ktc4.pusan4.merchant.classify.MerchantClassifier;
@@ -36,7 +35,6 @@ import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -48,8 +46,8 @@ import java.util.UUID;
  * 분류 실패는 업로드를 실패시키지 않고 미분류 + 분류 검토로 남긴다.
  * 판정에 들어가지 않는 거래(CANCELED_OFFSET·EXCLUDED)는 미분류여도 분류 검토를 만들지 않는다.
  * 사용자가 나중에 포함(B7)하면 그때 만든다.
- * 규칙으로 미분류인 거래에 분류 모델 답({@link UploadFacade} 가 트랜잭션 밖에서 받아 온다)이 있으면 그 답을 남기고,
- * {@link AutoConfirmPolicy} 가 확정하면 분류 검토 없이 그 카테고리로 저장한다.
+ * 규칙으로 미분류인 거래에 분류 모델 답({@link UploadFacade} 가 트랜잭션 밖에서 받아 온다)이 있으면 그 답을 남긴다.
+ * 모델 답은 분류 검토의 후보로만 쓰고 카테고리는 바꾸지 않는다.
  */
 @Service
 public class UploadService {
@@ -68,7 +66,6 @@ public class UploadService {
     private final UuidGenerator uuidGenerator;
     private final Clock clock;
     private final UserWriteLock userWriteLock;
-    private final AutoConfirmPolicy autoConfirmPolicy;
 
     public UploadService(
         EntityManager entityManager,
@@ -79,8 +76,7 @@ public class UploadService {
         ObjectMapper objectMapper,
         UuidGenerator uuidGenerator,
         Clock clock,
-        UserWriteLock userWriteLock,
-        AutoConfirmPolicy autoConfirmPolicy
+        UserWriteLock userWriteLock
     ) {
         this.entityManager = entityManager;
         this.batchRepository = batchRepository;
@@ -91,7 +87,6 @@ public class UploadService {
         this.uuidGenerator = uuidGenerator;
         this.clock = clock;
         this.userWriteLock = userWriteLock;
-        this.autoConfirmPolicy = autoConfirmPolicy;
     }
 
     /** 분류 모델 없이 업로드한다. */
@@ -160,20 +155,17 @@ public class UploadService {
         int pending = 0;
         for (int i = 0; i < fresh.size(); i++) {
             ClassificationResult result = results.get(i);
-            // 모델을 부른 뒤 사전이 바뀌었으면 규칙이 이긴다
-            ModelDecision decision = result.classified() ? null : decisions.get(result.merchantNorm());
-            Optional<String> confirmed = Optional.ofNullable(decision).flatMap(autoConfirmPolicy::confirmedCategory);
-            String category = confirmed.orElse(result.merchantCategory());
-            // 미분류면 분류 확인 필요다(api.md 2.4, V8 CHECK)
-            ClassificationStatus status = ClassificationResult.UNCLASSIFIED.equals(category)
-                ? ClassificationStatus.NEEDS_REVIEW
-                : ClassificationStatus.CLASSIFIED;
+            ClassificationStatus status = result.classified()
+                ? ClassificationStatus.CLASSIFIED
+                : ClassificationStatus.NEEDS_REVIEW;
             TransactionRecordEntity transaction = new TransactionRecordEntity(
                 uuidGenerator.generate(), batch.id(), userId, fresh.get(i),
-                result.merchantNorm(), category, status, now);
+                result.merchantNorm(), result.merchantCategory(), status, now);
             entityManager.persist(transaction);
+            // 모델을 부른 뒤 사전이 바뀌어 규칙으로 분류됐으면 모델 답은 남기지 않는다
+            ModelDecision decision = result.classified() ? null : decisions.get(result.merchantNorm());
             if (decision != null) {
-                entityManager.persist(new MerchantModelDecisionEntity(transaction.id(), decision, confirmed.isPresent(), now));
+                entityManager.persist(new MerchantModelDecisionEntity(transaction.id(), decision, now));
             }
             if (status == ClassificationStatus.NEEDS_REVIEW && fresh.get(i).status() == SourceStatus.JUDGEABLE) {
                 entityManager.persist(ClassificationReviewEntity.pending(uuidGenerator.generate(), transaction.id(), now));
